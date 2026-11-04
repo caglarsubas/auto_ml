@@ -184,6 +184,9 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
     """Publish fresh, input-bound native evidence without inspecting final labels."""
     import pickle
     import pandas as pd
+    from execution_jobs.legacy_context import active
+    if active() is not None:
+        adopt = False
     from modeling.calibration_utils import fit_calibrator, save_calibrator
     from modeling.development_assessment import development_metrics, run_development_cv
     from modeling.fit_receipts import verify_candidate_fit

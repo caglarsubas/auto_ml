@@ -1,3 +1,4 @@
+from pathlib import Path
 from access_control.storage import managed_path
 import json
 import math
@@ -684,6 +685,10 @@ class PreprocessingRunView(APIView):
             recipe = save_recipe(out_full, file_id, eligible_raw, options, data_dictionary_payload, preserve_cols,
                 {'strategy': split_meta_built['strategy'], 'split_config': split or {'strategy': 'random'},
                  'train_idx': train_idx_sv.tolist(), 'test_idx': test_idx_sv.tolist()}, eligible_source_rows)
+            # Bind generated raw/replay evidence at the governed API boundary;
+            # recipe serialization itself remains a pure filesystem operation.
+            register_artifact(os.path.join(settings.MEDIA_ROOT, recipe['raw_input']['path']), file_id=int(file_id))
+            register_artifact(Path(out_full).with_suffix('.purifier.json'), file_id=int(file_id))
             print(f"[PreprocessingRun] saved processed csv in {time.monotonic()-t_save_start:.3f}s -> {out_rel}")
 
             # Compute AFTER-preprocessing per-feature descriptive stats

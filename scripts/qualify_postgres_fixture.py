@@ -273,7 +273,25 @@ def main():
                 arguments, values=None, *, succeed=True, report=None, rejection=None
             ):
                 current = {**env, **(values or {})}
-                if args.runner_image:
+                if arguments[:2] == ["-m", "pytest"] and args.private_api_image and not args.runner_image:
+                    from private_native_suite import prepare
+
+                    prefix, native_receipt = prepare(
+                        args.private_api_image, root=ROOT, fixture=fixture,
+                        name=runner, environment=current,
+                    )
+                    # The controller retains the original 900-second child cap.
+                    # Every selected case, branch measurement, fit and fold runs
+                    # under the application's exact native interpreter image.
+                    native_dependencies = command(
+                        [*prefix, str(ROOT / "scripts/verify_private_dependency_profile.py")],
+                        timeout=60,
+                    )
+                    (reports / "native-suite-dependency-profile.json").write_bytes(native_dependencies)
+                    (reports / "native-suite-runtime.json").write_text(json.dumps(native_receipt, indent=2) + "\n")
+                    argv = [*prefix, *arguments]
+                    cwd = ROOT
+                elif args.runner_image:
                     env_file = fixture / "runner.env"
                     selected = {
                         k: v

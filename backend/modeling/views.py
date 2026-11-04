@@ -13,6 +13,9 @@ import json
 import math
 import warnings
 import pandas as pd
+from execution_jobs.legacy_execution import enabled as durable_legacy_enabled
+from execution_jobs.legacy_context import native_threads, operation_id as native_operation_id
+
 import numpy as np
 from sklearn.model_selection import StratifiedKFold, TimeSeriesSplit
 from sklearn.metrics import (
@@ -109,1158 +112,1173 @@ class ModelingStartView(APIView):
     """
 
     def post(self, request, *args, **kwargs):
-        file_id = request.data.get('file_id')
-        processed_file = request.data.get('processed_file')
-        algorithm = request.data.get('algorithm')  # optional, e.g., 'xgboost', 'lightgbm', 'catboost'
-        excluded_variables = request.data.get('excluded_variables', [])  # Variables with Model_Usage='No'
-        encoding_plan_raw = request.data.get('encoding_plan', [])
-        encoding_use_native = request.data.get('encoding_use_native', True)
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_http import launch
+            return launch(request, "training")
+        return execute_legacy_training(request.data)
 
-        if file_id is None:
-            return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if not processed_file:
-            return Response({'error': 'processed_file is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Resolve alternate (logit/scorecard/anomaly) or boosting algorithm
-        from modeling.alt_pipelines import is_alt_algorithm, normalize_alt_algorithm
-        alt_algo, _alt_err = normalize_alt_algorithm(algorithm)
-        is_alt = alt_algo is not None
-        if is_alt:
-            algorithm = alt_algo
-        else:
-            resolved_algorithm, algo_error = normalize_boosting_algorithm(algorithm)
-            if algo_error:
-                avail = available_boosting_algorithms()
-                return Response({
-                    'error': algo_error,
-                    'supported_algorithms': [k for k, v in avail.items() if v],
-                    'all_algorithms': sorted(avail.keys()),
-                    'alternate_algorithms': sorted([
-                        'logistic_regression', 'scorecard', 'isolation_forest',
-                    ]),
-                }, status=status.HTTP_400_BAD_REQUEST)
-            algorithm = resolved_algorithm
+def execute_legacy_training(data):
+    """Fixed native business entry point; no request dispatch or client lifetime."""
+    file_id = data.get('file_id')
+    processed_file = data.get('processed_file')
+    algorithm = data.get('algorithm')  # optional, e.g., 'xgboost', 'lightgbm', 'catboost'
+    excluded_variables = data.get('excluded_variables', [])  # Variables with Model_Usage='No'
+    encoding_plan_raw = data.get('encoding_plan', [])
+    encoding_use_native = data.get('encoding_use_native', True)
 
-        # Validate declaration exists
+    if file_id is None:
+        return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+    if not processed_file:
+        return Response({'error': 'processed_file is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Resolve alternate (logit/scorecard/anomaly) or boosting algorithm
+    from modeling.alt_pipelines import is_alt_algorithm, normalize_alt_algorithm
+    alt_algo, _alt_err = normalize_alt_algorithm(algorithm)
+    is_alt = alt_algo is not None
+    if is_alt:
+        algorithm = alt_algo
+    else:
+        resolved_algorithm, algo_error = normalize_boosting_algorithm(algorithm)
+        if algo_error:
+            avail = available_boosting_algorithms()
+            return Response({
+                'error': algo_error,
+                'supported_algorithms': [k for k, v in avail.items() if v],
+                'all_algorithms': sorted(avail.keys()),
+                'alternate_algorithms': sorted([
+                    'logistic_regression', 'scorecard', 'isolation_forest',
+                ]),
+            }, status=status.HTTP_400_BAD_REQUEST)
+        algorithm = resolved_algorithm
+
+    # The durable parent has already bound the dataset and its live authority.
+    # Its fixed child has no database connection; compatibility calls retain
+    # the existing synchronous declaration validation.
+    from execution_jobs.legacy_context import active
+    if active() is None:
         try:
             Declaration.objects.get(pk=file_id)
         except Declaration.DoesNotExist:
             return Response({'error': f'Declaration with id {file_id} not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Validate processed file exists under MEDIA_ROOT
-        full_path = managed_path(processed_file, table=True)
-        if not os.path.exists(full_path):
-            return Response({'error': f'processed file not found: {processed_file}'}, status=status.HTTP_404_NOT_FOUND)
-        media_root = os.path.realpath(settings.MEDIA_ROOT)
-        if not os.path.realpath(full_path).startswith(media_root + os.sep):
-            return Response({'error': 'processed_file must be inside managed artifact storage.'}, status=status.HTTP_400_BAD_REQUEST)
-        execution_id, execution_dir, snapshot_path = begin_execution(full_path)
-        original_path = full_path
-        full_path = str(snapshot_path)
-        original_meta = Path(original_path).with_suffix('.meta.json')
-        if original_meta.is_file():
+    # Validate processed file exists under MEDIA_ROOT
+    full_path = managed_path(processed_file, table=True)
+    if not os.path.exists(full_path):
+        return Response({'error': f'processed file not found: {processed_file}'}, status=status.HTTP_404_NOT_FOUND)
+    media_root = os.path.realpath(settings.MEDIA_ROOT)
+    if not os.path.realpath(full_path).startswith(media_root + os.sep):
+        return Response({'error': 'processed_file must be inside managed artifact storage.'}, status=status.HTTP_400_BAD_REQUEST)
+    execution_id, execution_dir, snapshot_path = begin_execution(full_path)
+    original_path = full_path
+    full_path = str(snapshot_path)
+    original_meta = Path(original_path).with_suffix('.meta.json')
+    if original_meta.is_file():
+        import shutil
+        shutil.copyfile(original_meta, snapshot_path.with_suffix('.meta.json'))
+
+    # Minimal synchronous "training" stub: compute simple metrics and write a status file
+    modeling_dir = os.path.join(settings.MEDIA_ROOT, 'modeling')
+    os.makedirs(modeling_dir, exist_ok=True)
+    status_path = os.path.join(modeling_dir, f'{file_id}_status.json')
+
+    # mark running
+    with open(status_path, 'w', encoding='utf-8') as f:
+        json.dump({'status': 'running', 'file_id': file_id, 'processed_file': processed_file, 'algorithm': algorithm}, f)
+    try:
+        print(f"[ModelingStart] Starting training for file_id={file_id}, algo={algorithm}, xgb_version={getattr(xgb, '__version__', 'unknown')}")
+    except Exception:
+        pass
+
+    # do quick metrics and modeling pass (XGBoost classification preferred)
+    model_info = {}
+    encoded_file_rel = None
+    purifier_recipe = purifier_state = None
+    try:
+        df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
+        from preprocessing.replay import load_recipe_input, fit_purifier, apply_purifier
+        _, purifier_recipe = load_recipe_input(original_path, file_id)
+        if purifier_recipe:
             import shutil
-            shutil.copyfile(original_meta, snapshot_path.with_suffix('.meta.json'))
+            from modeling.execution_artifacts import digest_file
+            if digest_file(snapshot_path) != purifier_recipe['processed_input']['sha256']:
+                raise PredictionContractError('Processed input changed while snapshotting the execution. Retry from a complete preprocessing version.')
+            raw_snapshot = execution_dir / 'raw_input.csv'
+            shutil.copyfile(Path(settings.MEDIA_ROOT) / purifier_recipe['raw_input']['path'], raw_snapshot)
+            if digest_file(raw_snapshot) != purifier_recipe['raw_input']['sha256']:
+                raise PredictionContractError('Raw input changed while snapshotting the execution. Retry from a complete preprocessing version.')
+            df = pd.read_csv(raw_snapshot)
+            (execution_dir / 'purifier_recipe.json').write_text(json.dumps(purifier_recipe, indent=2, allow_nan=False))
 
-        # Minimal synchronous "training" stub: compute simple metrics and write a status file
-        modeling_dir = os.path.join(settings.MEDIA_ROOT, 'modeling')
-        os.makedirs(modeling_dir, exist_ok=True)
-        status_path = os.path.join(modeling_dir, f'{file_id}_status.json')
+        # ── Parse encoding plan (if provided by frontend) ──
+        encoding_plan = []
+        if encoding_plan_raw and isinstance(encoding_plan_raw, list):
+            encoding_plan = encoding_plan_raw
+        elif isinstance(encoding_plan_raw, str):
+            try:
+                encoding_plan = json.loads(encoding_plan_raw)
+            except Exception:
+                encoding_plan = []
+        use_native = bool(encoding_use_native) if encoding_use_native is not None else True
+        has_encoding_plan = len(encoding_plan) > 0
+        print(f"[ModelingStart] encoding_plan entries={len(encoding_plan)}, use_native={use_native}")
 
-        # mark running
-        with open(status_path, 'w', encoding='utf-8') as f:
-            json.dump({'status': 'running', 'file_id': file_id, 'processed_file': processed_file, 'algorithm': algorithm}, f)
-        try:
-            print(f"[ModelingStart] Starting training for file_id={file_id}, algo={algorithm}, xgb_version={getattr(xgb, '__version__', 'unknown')}")
-        except Exception:
-            pass
+        # ── Load encoding sidecar metadata (if available) ──
+        # CSV serialization loses pd.Categorical dtype.  The encoding step
+        # saves a `.meta.json` sidecar listing which columns are categorical.
+        meta_cat_cols = set()
+        meta_path = full_path.replace('.csv', '.meta.json') if full_path.lower().endswith('.csv') else None
+        if meta_path and os.path.exists(meta_path):
+            try:
+                with open(meta_path, 'r', encoding='utf-8') as mf:
+                    meta = json.load(mf)
+                for entry in meta.get('categorical_columns', []):
+                    feat = entry.get('feature', '')
+                    if feat and feat in df.columns:
+                        meta_cat_cols.add(feat)
+                print(f"[ModelingStart] Loaded encoding metadata: {len(meta_cat_cols)} categorical cols from sidecar: {sorted(meta_cat_cols)}")
+            except Exception as me:
+                print(f"[ModelingStart] Warning: failed to read encoding metadata: {me}")
+        else:
+            print(f"[ModelingStart] No encoding sidecar metadata found at {meta_path}")
 
-        # do quick metrics and modeling pass (XGBoost classification preferred)
-        model_info = {}
-        encoded_file_rel = None
-        purifier_recipe = purifier_state = None
-        try:
-            df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
-            from preprocessing.replay import load_recipe_input, fit_purifier, apply_purifier
-            _, purifier_recipe = load_recipe_input(original_path, file_id)
-            if purifier_recipe:
-                import shutil
-                from modeling.execution_artifacts import digest_file
-                if digest_file(snapshot_path) != purifier_recipe['processed_input']['sha256']:
-                    raise PredictionContractError('Processed input changed while snapshotting the execution. Retry from a complete preprocessing version.')
-                raw_snapshot = execution_dir / 'raw_input.csv'
-                shutil.copyfile(Path(settings.MEDIA_ROOT) / purifier_recipe['raw_input']['path'], raw_snapshot)
-                if digest_file(raw_snapshot) != purifier_recipe['raw_input']['sha256']:
-                    raise PredictionContractError('Raw input changed while snapshotting the execution. Retry from a complete preprocessing version.')
-                df = pd.read_csv(raw_snapshot)
-                (execution_dir / 'purifier_recipe.json').write_text(json.dumps(purifier_recipe, indent=2, allow_nan=False))
+        # Track excluded variables (Model_Usage='No') but keep them in dataframe
+        # They will be excluded when creating feature matrix X
+        excluded_cols_for_modeling = []
+        if excluded_variables and isinstance(excluded_variables, list):
+            # Exclude Target from the exclusion list (it's needed as label for training)
+            excluded_present = [col for col in excluded_variables if col in df.columns and col != 'Target']
+            if excluded_present:
+                excluded_cols_for_modeling = excluded_present
+                print(f"[ModelingStart] Excluding {len(excluded_present)} variables from model training (kept in dataset): {excluded_present}")
 
-            # ── Parse encoding plan (if provided by frontend) ──
-            encoding_plan = []
-            if encoding_plan_raw and isinstance(encoding_plan_raw, list):
-                encoding_plan = encoding_plan_raw
-            elif isinstance(encoding_plan_raw, str):
-                try:
-                    encoding_plan = json.loads(encoding_plan_raw)
-                except Exception:
-                    encoding_plan = []
-            use_native = bool(encoding_use_native) if encoding_use_native is not None else True
-            has_encoding_plan = len(encoding_plan) > 0
-            print(f"[ModelingStart] encoding_plan entries={len(encoding_plan)}, use_native={use_native}")
+        metrics = {
+            'rows': int(df.shape[0]),
+            'features': int(df.shape[1]),
+            'columns': list(map(str, df.columns[:50]))  # cap to 50 to keep response light
+        }
 
-            # ── Load encoding sidecar metadata (if available) ──
-            # CSV serialization loses pd.Categorical dtype.  The encoding step
-            # saves a `.meta.json` sidecar listing which columns are categorical.
-            meta_cat_cols = set()
-            meta_path = full_path.replace('.csv', '.meta.json') if full_path.lower().endswith('.csv') else None
-            if meta_path and os.path.exists(meta_path):
-                try:
-                    with open(meta_path, 'r', encoding='utf-8') as mf:
-                        meta = json.load(mf)
-                    for entry in meta.get('categorical_columns', []):
-                        feat = entry.get('feature', '')
-                        if feat and feat in df.columns:
-                            meta_cat_cols.add(feat)
-                    print(f"[ModelingStart] Loaded encoding metadata: {len(meta_cat_cols)} categorical cols from sidecar: {sorted(meta_cat_cols)}")
-                except Exception as me:
-                    print(f"[ModelingStart] Warning: failed to read encoding metadata: {me}")
-            else:
-                print(f"[ModelingStart] No encoding sidecar metadata found at {meta_path}")
+        declaration = data.get('business_understanding')
+        run_id = data.get('pipeline_run_id')
+        if run_id is not None:
+            run = PipelineRun.objects.filter(pk=run_id, file_id=file_id).first()
+            if run is None:
+                raise PredictionContractError('The selected pipeline run does not belong to this dataset.')
+            saved = run.state or {}
+            saved_declaration = saved.get('business_understanding') or (saved.get('crisp_dm') or {}).get('business_understanding')
+            if declaration is None:
+                declaration = saved_declaration
+        prediction_contract, encoded_target = resolve_prediction_contract(df, declaration, algorithm)
+        target_col = prediction_contract['target_column']
+        excluded_cols_for_modeling = list(dict.fromkeys(excluded_cols_for_modeling + prediction_contract['forbidden_features']))
 
-            # Track excluded variables (Model_Usage='No') but keep them in dataframe
-            # They will be excluded when creating feature matrix X
-            excluded_cols_for_modeling = []
-            if excluded_variables and isinstance(excluded_variables, list):
-                # Exclude Target from the exclusion list (it's needed as label for training)
-                excluded_present = [col for col in excluded_variables if col in df.columns and col != 'Target']
-                if excluded_present:
-                    excluded_cols_for_modeling = excluded_present
-                    print(f"[ModelingStart] Excluding {len(excluded_present)} variables from model training (kept in dataset): {excluded_present}")
-            
-            metrics = {
-                'rows': int(df.shape[0]),
-                'features': int(df.shape[1]),
-                'columns': list(map(str, df.columns[:50]))  # cap to 50 to keep response light
+        if target_col is not None:
+            # Prepare features/target
+            y = df[target_col]
+            # Keep a raw copy to preserve original NaNs for interactive SHAP visualization
+            # Exclude both target and excluded variables from feature matrix
+            cols_to_exclude = [target_col] + excluded_cols_for_modeling
+            X_raw = df.drop(columns=cols_to_exclude)
+            # Detect categorical columns:
+            #   1) from encoding sidecar metadata (authoritative)
+            #   2) fallback: dtype 'category', 'object', or string (Pandas 3.0+ StringDtype)
+            cat_cols = []
+            for c in X_raw.columns:
+                if c in meta_cat_cols:
+                    cat_cols.append(c)
+                elif hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
+                    cat_cols.append(c)
+                elif X_raw[c].dtype == 'object' or pd.api.types.is_string_dtype(X_raw[c]):
+                    cat_cols.append(c)
+            # Keep numeric + categorical columns; drop anything else
+            keep_cols = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in cat_cols]
+            X_raw = X_raw[keep_cols].copy()
+
+            # Resolve canonical train/valid/test BEFORE encoding/impute so
+            # supervised transforms fit on train only and outer test stays locked.
+            encoding_report = []
+            encoded_file_rel = None
+            split_meta = {}
+            impute_means: dict = {}
+            scale_pos_weight = None
+            X_test = y_test = X_test_raw = None
+
+            is_classification = prediction_contract['task'] != 'regression'
+            # Resolve regression partitions too, before any learned encoding.
+            # Use the full frame so declared date/entity columns remain available
+            # even when excluded from model features.
+            train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
+                df, encoded_target, file_id=int(file_id), task=prediction_contract['task'],
+                split_artifact=purifier_recipe['outer_split'] if purifier_recipe else None,
+            )
+
+            split_columns = [value for key, value in (split_meta.get('split_config') or {}).items() if key in ('date_column', 'group_column', 'label_end_column') and value in X_raw.columns]
+            excluded_cols_for_modeling = list(dict.fromkeys(excluded_cols_for_modeling + split_columns))
+            X_raw = X_raw.drop(columns=split_columns)
+            cat_cols = [column for column in cat_cols if column in X_raw.columns]
+            validation_context = {
+                'frame': df.loc[train_idx.append(valid_idx)].copy(), 'labels': encoded_target.loc[train_idx.append(valid_idx)], 'task': prediction_contract['task'],
+                'target_column': target_col, 'excluded_features': excluded_cols_for_modeling,
+                'split_meta': split_meta, 'encoding_plan': encoding_plan, 'use_native': use_native,
+                'purifier_recipe': purifier_recipe, 'prediction_contract': prediction_contract,
+                'class_weight_policy': 'train_label_ratio' if prediction_contract['task'] == 'classification' and len(prediction_contract['class_mapping']) == 2 else None,
             }
+            if purifier_recipe:
+                purifier_state = fit_purifier(X_raw, purifier_recipe, train_idx)
+                X_raw = apply_purifier(X_raw, purifier_state)
+                cat_cols = [column for column in X_raw if not pd.api.types.is_numeric_dtype(X_raw[column])]
+                (execution_dir / 'purifier.json').write_text(json.dumps(purifier_state, indent=2, allow_nan=False))
+            target_encoding = not use_native and any(
+                (entry.get('encoding_method') or entry.get('fallback_strategy')) == 'target_encoding'
+                for entry in encoding_plan)
+            if target_encoding and (split_meta.get('strategy') in ('oot', 'group') or (split_meta.get('split_config') or {}).get('group_column')):
+                raise PredictionContractError('Target encoding with temporal/entity constraints requires partition-aware inner encoding; choose native or unsupervised encoding until that path is qualified.')
+            if target_encoding and len(prediction_contract['class_mapping']) > 2:
+                raise PredictionContractError('Numeric target encoding is not supported for multiclass outcomes. Choose native or unsupervised encoding.')
 
-            declaration = request.data.get('business_understanding')
-            run_id = request.data.get('pipeline_run_id')
-            if run_id is not None:
-                run = PipelineRun.objects.filter(pk=run_id, file_id=file_id).first()
-                if run is None:
-                    raise PredictionContractError('The selected pipeline run does not belong to this dataset.')
-                saved = run.state or {}
-                saved_declaration = saved.get('business_understanding') or (saved.get('crisp_dm') or {}).get('business_understanding')
-                if declaration is None:
-                    declaration = saved_declaration
-            prediction_contract, encoded_target = resolve_prediction_contract(df, declaration, algorithm)
-            target_col = prediction_contract['target_column']
-            excluded_cols_for_modeling = list(dict.fromkeys(excluded_cols_for_modeling + prediction_contract['forbidden_features']))
-
-            if target_col is not None:
-                # Prepare features/target
-                y = df[target_col]
-                # Keep a raw copy to preserve original NaNs for interactive SHAP visualization
-                # Exclude both target and excluded variables from feature matrix
-                cols_to_exclude = [target_col] + excluded_cols_for_modeling
-                X_raw = df.drop(columns=cols_to_exclude)
-                # Detect categorical columns:
-                #   1) from encoding sidecar metadata (authoritative)
-                #   2) fallback: dtype 'category', 'object', or string (Pandas 3.0+ StringDtype)
-                cat_cols = []
-                for c in X_raw.columns:
-                    if c in meta_cat_cols:
-                        cat_cols.append(c)
-                    elif hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
-                        cat_cols.append(c)
-                    elif X_raw[c].dtype == 'object' or pd.api.types.is_string_dtype(X_raw[c]):
-                        cat_cols.append(c)
-                # Keep numeric + categorical columns; drop anything else
-                keep_cols = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in cat_cols]
-                X_raw = X_raw[keep_cols].copy()
-
-                # Resolve canonical train/valid/test BEFORE encoding/impute so
-                # supervised transforms fit on train only and outer test stays locked.
-                encoding_report = []
-                encoded_file_rel = None
-                split_meta = {}
-                impute_means: dict = {}
-                scale_pos_weight = None
-                X_test = y_test = X_test_raw = None
-
-                is_classification = prediction_contract['task'] != 'regression'
-                # Resolve regression partitions too, before any learned encoding.
-                # Use the full frame so declared date/entity columns remain available
-                # even when excluded from model features.
-                train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
-                    df, encoded_target, file_id=int(file_id), task=prediction_contract['task'],
-                    split_artifact=purifier_recipe['outer_split'] if purifier_recipe else None,
+            # ── Apply encoding via plan (if provided) or fallback to native ──
+            if has_encoding_plan:
+                from encoding.encoding_utils import apply_encoding as _apply_enc
+                # Temporarily attach Target for target_encoding, then drop it
+                X_with_target = X_raw.copy()
+                X_with_target[target_col] = encoded_target.values
+                X_with_target, enc_report_list = _apply_enc(
+                    X_with_target, encoding_plan, target_col=target_col,
+                    use_native=use_native, fit_idx=train_idx,
                 )
+                if target_col in X_with_target.columns:
+                    X_with_target = X_with_target.drop(columns=[target_col])
+                X_raw = X_with_target
+                encoding_report = enc_report_list
+                # After apply_encoding, some columns may now be numeric (encoded)
+                # Refresh cat_cols: only those that are still pd.Categorical
+                cat_cols = [c for c in X_raw.columns if hasattr(X_raw[c], 'cat') and X_raw[c].dtype.name == 'category']
+                enable_cat = len(cat_cols) > 0
+                print(f"[ModelingStart] Encoding via plan: {len(enc_report_list)} features encoded, native_cat remaining={len(cat_cols)}")
+                # Save encoded CSV to disk so Feature Card can display the encoded data version
+                # Use the full processed DataFrame and overlay encoded columns so ALL features are preserved
+                try:
+                    encoded_dir = os.path.join(settings.MEDIA_ROOT, 'encoded_files')
+                    os.makedirs(encoded_dir, exist_ok=True)
+                    encoded_filename = f'encoded_{file_id}_{uuid.uuid4().hex}.csv'
+                    encoded_abs = managed_path(os.path.join('encoded_files', encoded_filename), table=True)
+                    encoded_save_df = df.copy()
+                    for col in X_raw.columns:
+                        if col in encoded_save_df.columns:
+                            encoded_save_df[col] = X_raw[col].values
+                    encoded_save_df.to_csv(encoded_abs, index=False, mode='x')
+                    from access_control.projects import register_artifact
+                    register_artifact(encoded_abs, file_id=int(file_id))
+                    encoded_file_rel = os.path.relpath(encoded_abs, settings.MEDIA_ROOT)
+                    print(f"[ModelingStart] Saved encoded CSV ({encoded_save_df.shape[1]} cols): {encoded_file_rel}")
+                except Exception as enc_save_err:
+                    encoded_file_rel = None
+                    print(f"[ModelingStart] Could not save encoded CSV: {enc_save_err}")
+            else:
+                # Default behavior: convert all categorical columns to pd.Categorical for native support
+                enable_cat = len(cat_cols) > 0
+                for c in cat_cols:
+                    if c in X_raw.columns:
+                        levels = pd.Index(X_raw.loc[train_idx, c].dropna().unique())
+                        X_raw[c] = pd.Categorical(X_raw[c], categories=levels)
+                        cats = [str(v) for v in X_raw[c].cat.categories]
+                        encoding_report.append({
+                            'feature': c,
+                            'strategy': 'native_categorical',
+                            'categories': cats,
+                            'nunique': len(cats),
+                        })
+            print(f"[ModelingStart] Categorical features ({len(cat_cols)}): {cat_cols}")
+            print(f"[ModelingStart] enable_categorical={enable_cat}, total features={X_raw.shape[1]}")
+            # Drop columns with all NaNs
+            X_raw = X_raw.drop(columns=X_raw.columns[X_raw.loc[train_idx].isna().all()])
 
-                split_columns = [value for key, value in (split_meta.get('split_config') or {}).items() if key in ('date_column', 'group_column', 'label_end_column') and value in X_raw.columns]
-                excluded_cols_for_modeling = list(dict.fromkeys(excluded_cols_for_modeling + split_columns))
-                X_raw = X_raw.drop(columns=split_columns)
-                cat_cols = [column for column in cat_cols if column in X_raw.columns]
-                validation_context = {
-                    'frame': df.loc[train_idx.append(valid_idx)].copy(), 'labels': encoded_target.loc[train_idx.append(valid_idx)], 'task': prediction_contract['task'],
-                    'target_column': target_col, 'excluded_features': excluded_cols_for_modeling,
-                    'split_meta': split_meta, 'encoding_plan': encoding_plan, 'use_native': use_native,
-                    'purifier_recipe': purifier_recipe, 'prediction_contract': prediction_contract,
-                    'class_weight_policy': 'train_label_ratio' if prediction_contract['task'] == 'classification' and len(prediction_contract['class_mapping']) == 2 else None,
-                }
-                if purifier_recipe:
-                    purifier_state = fit_purifier(X_raw, purifier_recipe, train_idx)
-                    X_raw = apply_purifier(X_raw, purifier_state)
-                    cat_cols = [column for column in X_raw if not pd.api.types.is_numeric_dtype(X_raw[column])]
-                    (execution_dir / 'purifier.json').write_text(json.dumps(purifier_state, indent=2, allow_nan=False))
-                target_encoding = not use_native and any(
-                    (entry.get('encoding_method') or entry.get('fallback_strategy')) == 'target_encoding'
-                    for entry in encoding_plan)
-                if target_encoding and (split_meta.get('strategy') in ('oot', 'group') or (split_meta.get('split_config') or {}).get('group_column')):
-                    raise PredictionContractError('Target encoding with temporal/entity constraints requires partition-aware inner encoding; choose native or unsupervised encoding until that path is qualified.')
-                if target_encoding and len(prediction_contract['class_mapping']) > 2:
-                    raise PredictionContractError('Numeric target encoding is not supported for multiclass outcomes. Choose native or unsupervised encoding.')
+            # If no features remain, skip training
+            if X_raw.shape[1] >= 1 and len(y) >= 5:
+                if is_classification:
+                    y_encoded = encoded_target
+                    y_categories = [entry['label'] for entry in prediction_contract['class_mapping']]
 
-                # ── Apply encoding via plan (if provided) or fallback to native ──
-                if has_encoding_plan:
-                    from encoding.encoding_utils import apply_encoding as _apply_enc
-                    # Temporarily attach Target for target_encoding, then drop it
-                    X_with_target = X_raw.copy()
-                    X_with_target[target_col] = encoded_target.values
-                    X_with_target, enc_report_list = _apply_enc(
-                        X_with_target, encoding_plan, target_col=target_col,
-                        use_native=use_native, fit_idx=train_idx,
+                    # Fit numeric impute on train only; transform all partitions
+                    X_train_raw = X_raw.loc[train_idx]
+                    X_valid_raw = X_raw.loc[valid_idx]
+                    X_test_raw = X_raw.loc[test_idx]
+                    impute_means = fit_numeric_imputer(X_train_raw)
+                    X_train = transform_numeric_impute(X_train_raw, impute_means)
+                    X_valid = transform_numeric_impute(X_valid_raw, impute_means)
+                    X_test = transform_numeric_impute(X_test_raw, impute_means)
+                    y_train = y_encoded.loc[train_idx]
+                    y_valid = y_encoded.loc[valid_idx]
+                    y_test = y_encoded.loc[test_idx]
+                    X = transform_numeric_impute(X_raw, impute_means)
+
+                    num_classes = len(prediction_contract['class_mapping'])
+                    if set(y_train.unique()) != set(range(num_classes)):
+                        raise PredictionContractError('The fit partition does not contain every declared class; adjust the validation design.')
+                    objective = 'binary:logistic' if num_classes == 2 else 'multi:softprob'
+                    eval_metric = 'logloss' if num_classes == 2 else 'mlogloss'
+
+                    # Build params compatible across versions
+                    params = {
+                        'objective': objective,
+                        'tree_method': 'hist',
+                        'eval_metric': eval_metric,
+
+                        'eta': 0.05,
+                        'max_depth': 4,
+                        'min_child_weight': 2,
+                        'gamma': 0.1,
+                        'lambda': 1.5,
+                        'alpha': 0.1,
+
+                        'subsample': 0.8,
+                        'colsample_bytree': 0.7,
+                        'colsample_bylevel': 0.8,
+                        'colsample_bynode': 0.8,
+
+                        'max_bin': 256,
+                        'sampling_method': 'uniform',
+
+                        'verbosity': 0,
+                        'seed': 42,
+                    }
+                    if num_classes > 2:
+                        params['num_class'] = num_classes
+                    elif num_classes == 2:
+                        # Class imbalance: scale_pos_weight = neg/pos on train
+                        pos = float((y_train == 1).sum())
+                        neg = float((y_train == 0).sum())
+                        if pos > 0:
+                            scale_pos_weight = round(neg / pos, 6)
+                            params['scale_pos_weight'] = scale_pos_weight
+
+                    # Leakage heuristics (warnings only — do not block training)
+                    leakage_report = scan_leakage_risks(
+                        X_train, y_train,
+                        feature_names=list(X_train.columns),
+                        excluded=excluded_cols_for_modeling,
                     )
-                    if target_col in X_with_target.columns:
-                        X_with_target = X_with_target.drop(columns=[target_col])
-                    X_raw = X_with_target
-                    encoding_report = enc_report_list
-                    # After apply_encoding, some columns may now be numeric (encoded)
-                    # Refresh cat_cols: only those that are still pd.Categorical
-                    cat_cols = [c for c in X_raw.columns if hasattr(X_raw[c], 'cat') and X_raw[c].dtype.name == 'category']
-                    enable_cat = len(cat_cols) > 0
-                    print(f"[ModelingStart] Encoding via plan: {len(enc_report_list)} features encoded, native_cat remaining={len(cat_cols)}")
-                    # Save encoded CSV to disk so Feature Card can display the encoded data version
-                    # Use the full processed DataFrame and overlay encoded columns so ALL features are preserved
-                    try:
-                        encoded_dir = os.path.join(settings.MEDIA_ROOT, 'encoded_files')
-                        os.makedirs(encoded_dir, exist_ok=True)
-                        encoded_filename = f'encoded_{file_id}_{uuid.uuid4().hex}.csv'
-                        encoded_abs = managed_path(os.path.join('encoded_files', encoded_filename), table=True)
-                        encoded_save_df = df.copy()
-                        for col in X_raw.columns:
-                            if col in encoded_save_df.columns:
-                                encoded_save_df[col] = X_raw[col].values
-                        encoded_save_df.to_csv(encoded_abs, index=False, mode='x')
-                        from access_control.projects import register_artifact
-                        register_artifact(encoded_abs, file_id=int(file_id))
-                        encoded_file_rel = os.path.relpath(encoded_abs, settings.MEDIA_ROOT)
-                        print(f"[ModelingStart] Saved encoded CSV ({encoded_save_df.shape[1]} cols): {encoded_file_rel}")
-                    except Exception as enc_save_err:
-                        encoded_file_rel = None
-                        print(f"[ModelingStart] Could not save encoded CSV: {enc_save_err}")
-                else:
-                    # Default behavior: convert all categorical columns to pd.Categorical for native support
-                    enable_cat = len(cat_cols) > 0
-                    for c in cat_cols:
-                        if c in X_raw.columns:
-                            levels = pd.Index(X_raw.loc[train_idx, c].dropna().unique())
-                            X_raw[c] = pd.Categorical(X_raw[c], categories=levels)
-                            cats = [str(v) for v in X_raw[c].cat.categories]
-                            encoding_report.append({
-                                'feature': c,
-                                'strategy': 'native_categorical',
-                                'categories': cats,
-                                'nunique': len(cats),
-                            })
-                print(f"[ModelingStart] Categorical features ({len(cat_cols)}): {cat_cols}")
-                print(f"[ModelingStart] enable_categorical={enable_cat}, total features={X_raw.shape[1]}")
-                # Drop columns with all NaNs
-                X_raw = X_raw.drop(columns=X_raw.columns[X_raw.loc[train_idx].isna().all()])
+                    if leakage_report.get('n_high'):
+                        print(f"[ModelingStart] Leakage warnings: {leakage_report.get('summary')}")
 
-                # If no features remain, skip training
-                if X_raw.shape[1] >= 1 and len(y) >= 5:
-                    if is_classification:
-                        y_encoded = encoded_target
-                        y_categories = [entry['label'] for entry in prediction_contract['class_mapping']]
-
-                        # Fit numeric impute on train only; transform all partitions
-                        X_train_raw = X_raw.loc[train_idx]
-                        X_valid_raw = X_raw.loc[valid_idx]
-                        X_test_raw = X_raw.loc[test_idx]
-                        impute_means = fit_numeric_imputer(X_train_raw)
-                        X_train = transform_numeric_impute(X_train_raw, impute_means)
-                        X_valid = transform_numeric_impute(X_valid_raw, impute_means)
-                        X_test = transform_numeric_impute(X_test_raw, impute_means)
-                        y_train = y_encoded.loc[train_idx]
-                        y_valid = y_encoded.loc[valid_idx]
-                        y_test = y_encoded.loc[test_idx]
-                        X = transform_numeric_impute(X_raw, impute_means)
-
-                        num_classes = len(prediction_contract['class_mapping'])
-                        if set(y_train.unique()) != set(range(num_classes)):
-                            raise PredictionContractError('The fit partition does not contain every declared class; adjust the validation design.')
-                        objective = 'binary:logistic' if num_classes == 2 else 'multi:softprob'
-                        eval_metric = 'logloss' if num_classes == 2 else 'mlogloss'
-
-                        # Build params compatible across versions
-                        params = {
-                            'objective': objective,
-                            'tree_method': 'hist',
-                            'eval_metric': eval_metric,
-
-                            'eta': 0.05,
-                            'max_depth': 4,
-                            'min_child_weight': 2,
-                            'gamma': 0.1,
-                            'lambda': 1.5,
-                            'alpha': 0.1,
-
-                            'subsample': 0.8,
-                            'colsample_bytree': 0.7,
-                            'colsample_bylevel': 0.8,
-                            'colsample_bynode': 0.8,
-
-                            'max_bin': 256,
-                            'sampling_method': 'uniform',
-
-                            'verbosity': 0,
-                            'seed': 42,
-                        }
-                        if num_classes > 2:
-                            params['num_class'] = num_classes
-                        elif num_classes == 2:
-                            # Class imbalance: scale_pos_weight = neg/pos on train
-                            pos = float((y_train == 1).sum())
-                            neg = float((y_train == 0).sum())
-                            if pos > 0:
-                                scale_pos_weight = round(neg / pos, 6)
-                                params['scale_pos_weight'] = scale_pos_weight
-
-                        # Leakage heuristics (warnings only — do not block training)
-                        leakage_report = scan_leakage_risks(
-                            X_train, y_train,
-                            feature_names=list(X_train.columns),
-                            excluded=excluded_cols_for_modeling,
+                    feature_names = list(map(str, X_train.columns.tolist()))
+                    if is_alt:
+                        from modeling.alt_pipelines import get_alt_adapter
+                        adapter = get_alt_adapter(algorithm)
+                        adapter.train(X_train, y_train, X_valid, y_valid, params={
+                            'C': 1.0, 'max_iter': 500, 'class_weight': 'balanced',
+                            'contamination': 0.05, 'n_estimators': 200,
+                        })
+                        booster = None
+                        enable_cat = bool(adapter.enable_categorical or enable_cat)
+                        models_dir = os.path.join(execution_dir, 'models')
+                        os.makedirs(models_dir, exist_ok=True)
+                        model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                        adapter.save(model_path)
+                    else:
+                        # Train via shared booster adapter (XGBoost / LightGBM / CatBoost)
+                        from modeling.declared_metric import bind_declared_metric
+                        params = bind_declared_metric(params, prediction_contract)
+                        adapter = get_adapter(algorithm)
+                        adapter.train(
+                            X_train, y_train, X_valid, y_valid, params,
+                            num_boost_round=500, early_stopping_rounds=50,
                         )
-                        if leakage_report.get('n_high'):
-                            print(f"[ModelingStart] Leakage warnings: {leakage_report.get('summary')}")
+                        booster = adapter.shap_model()  # underlying model for SHAP / legacy paths
+                        enable_cat = bool(adapter.enable_categorical or enable_cat)
 
-                        feature_names = list(map(str, X_train.columns.tolist()))
-                        if is_alt:
-                            from modeling.alt_pipelines import get_alt_adapter
-                            adapter = get_alt_adapter(algorithm)
-                            adapter.train(X_train, y_train, X_valid, y_valid, params={
-                                'C': 1.0, 'max_iter': 500, 'class_weight': 'balanced',
-                                'contamination': 0.05, 'n_estimators': 200,
-                            })
-                            booster = None
-                            enable_cat = bool(adapter.enable_categorical or enable_cat)
-                            models_dir = os.path.join(execution_dir, 'models')
-                            os.makedirs(models_dir, exist_ok=True)
-                            model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
-                            adapter.save(model_path)
-                        else:
-                            # Train via shared booster adapter (XGBoost / LightGBM / CatBoost)
-                            from modeling.declared_metric import bind_declared_metric
-                            params = bind_declared_metric(params, prediction_contract)
-                            adapter = get_adapter(algorithm)
-                            adapter.train(
-                                X_train, y_train, X_valid, y_valid, params,
-                                num_boost_round=500, early_stopping_rounds=50,
-                            )
-                            booster = adapter.shap_model()  # underlying model for SHAP / legacy paths
-                            enable_cat = bool(adapter.enable_categorical or enable_cat)
-
-                        # Quality metric on validation + probability calibration (fit on valid only)
-                        calibration_meta = {'fitted': False}
-                        calibrator = None
-                        calibrator_path = None
-                        skip_calibration = is_alt and algorithm == 'isolation_forest'
-                        try:
-                            y_prob = adapter.predict_proba(X_valid)
-                            if num_classes == 2:
-                                valid_auc = float(roc_auc_score(y_valid, y_prob))
-                                if not skip_calibration:
-                                    calibrator, calibration_meta = fit_calibrator(y_valid, y_prob, method='auto')
-                                    if calibrator is not None:
-                                        calibrator_path = save_calibrator(
-                                            int(file_id), calibrator, str(execution_dir),
+                    # Quality metric on validation + probability calibration (fit on valid only)
+                    calibration_meta = {'fitted': False}
+                    calibrator = None
+                    calibrator_path = None
+                    skip_calibration = is_alt and algorithm == 'isolation_forest'
+                    try:
+                        y_prob = adapter.predict_proba(X_valid)
+                        if num_classes == 2:
+                            valid_auc = float(roc_auc_score(y_valid, y_prob))
+                            if not skip_calibration:
+                                calibrator, calibration_meta = fit_calibrator(y_valid, y_prob, method='auto')
+                                if calibrator is not None:
+                                    calibrator_path = save_calibrator(
+                                        int(file_id), calibrator, str(execution_dir),
+                                    )
+                                    calibrator_path = os.path.relpath(execution_dir / calibrator_path, settings.MEDIA_ROOT)
+                                    y_prob_cal = apply_calibrator(calibrator, y_prob)
+                                    calibration_meta['valid_auc_raw'] = valid_auc
+                                    try:
+                                        calibration_meta['valid_auc_calibrated'] = float(
+                                            roc_auc_score(y_valid, y_prob_cal)
                                         )
-                                        calibrator_path = os.path.relpath(execution_dir / calibrator_path, settings.MEDIA_ROOT)
-                                        y_prob_cal = apply_calibrator(calibrator, y_prob)
-                                        calibration_meta['valid_auc_raw'] = valid_auc
-                                        try:
-                                            calibration_meta['valid_auc_calibrated'] = float(
-                                                roc_auc_score(y_valid, y_prob_cal)
-                                            )
-                                        except Exception:
-                                            pass
-                                else:
-                                    calibration_meta = {
-                                        'fitted': False,
-                                        'skipped': True,
-                                        'reason': 'anomaly scores are not calibrated probabilities',
-                                    }
+                                    except Exception:
+                                        pass
                             else:
-                                from evaluation.eval_utils import evaluate_multiclass
-                                valid_auc = evaluate_multiclass(y_valid, y_prob)['metrics']['roc_auc']
-                                calibration_meta = {'fitted': False, 'skipped': True,
-                                                    'reason': 'Multiclass calibration is not supported.'}
-                        except Exception:
-                            valid_auc = None
-                            y_prob = None
+                                calibration_meta = {
+                                    'fitted': False,
+                                    'skipped': True,
+                                    'reason': 'anomaly scores are not calibrated probabilities',
+                                }
+                        else:
+                            from evaluation.eval_utils import evaluate_multiclass
+                            valid_auc = evaluate_multiclass(y_valid, y_prob)['metrics']['roc_auc']
+                            calibration_meta = {'fitted': False, 'skipped': True,
+                                                'reason': 'Multiclass calibration is not supported.'}
+                    except Exception:
+                        valid_auc = None
+                        y_prob = None
 
-                        feat_names = feature_names
-                        gain_importance = adapter.gain_importance()
+                    feat_names = feature_names
+                    gain_importance = adapter.gain_importance()
 
-                        # SHAP mean |impact| and compact beeswarm payload (boosters only)
-                        class _SkipShap(Exception):
-                            pass
+                    # SHAP mean |impact| and compact beeswarm payload (boosters only)
+                    class _SkipShap(Exception):
+                        pass
 
-                        shap_importance = []
-                        selected_features = [
-                            {
-                                'feature': g.get('feature'),
-                                'impact': float(g.get('score') or 0.0),
-                                'signed_impact': float(g.get('score') or 0.0),
-                            }
-                            for g in (gain_importance or [])[:40]
-                        ] if is_alt or num_classes > 2 else []
-                        beeswarm_png = None
-                        shap_beeswarm = None
+                    shap_importance = []
+                    selected_features = [
+                        {
+                            'feature': g.get('feature'),
+                            'impact': float(g.get('score') or 0.0),
+                            'signed_impact': float(g.get('score') or 0.0),
+                        }
+                        for g in (gain_importance or [])[:40]
+                    ] if is_alt or num_classes > 2 else []
+                    beeswarm_png = None
+                    shap_beeswarm = None
+                    try:
+                        if booster is None:
+                            raise _SkipShap('alternate model — TreeExplainer not applicable')
+                        if num_classes > 2:
+                            raise _SkipShap('Multiclass explanations require class-specific SHAP; signed class averages would be misleading.')
+                        # Suppress SHAP FutureWarning about feature_perturbation
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('ignore', category=FutureWarning, module='shap')
+                            explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
+                        # limit to at most 5000 rows for performance
+                        Xv = X_valid
+                        Xv_raw = X_valid_raw
+                        if Xv.shape[0] > 5000:
+                            Xv = Xv.sample(5000, random_state=42)
+                            try:
+                                Xv_raw = Xv_raw.loc[Xv.index]
+                            except Exception:
+                                Xv_raw = Xv.copy()
+                        # SHAP's internal DMatrix doesn't pass enable_categorical,
+                        # so convert categorical columns to their numeric codes
+                        # before computing SHAP values.
+                        Xv_shap = Xv.copy()
+                        for c in cat_cols:
+                            if c in Xv_shap.columns and hasattr(Xv_shap[c], 'cat'):
+                                Xv_shap[c] = Xv_shap[c].cat.codes.astype(float)
+                                # Replace -1 (NaN sentinel from .cat.codes) with NaN
+                                Xv_shap[c] = Xv_shap[c].replace(-1, np.nan)
+                        shap_vals = explainer.shap_values(Xv_shap)
+                        if isinstance(shap_vals, list):
+                            try:
+                                shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
+                            except Exception:
+                                shap_matrix = shap_vals[0]
+                        else:
+                            shap_matrix = shap_vals
+                        mean_abs = np.mean(np.abs(shap_matrix), axis=0)
+                        mean_signed = np.mean(shap_matrix, axis=0)
+                        shap_details: list[dict[str, object]] = []
+                        for idx, fname in enumerate(feat_names):
+                            mean_abs_val = float(mean_abs[idx]) if np.isfinite(mean_abs[idx]) else 0.0
+                            signed_mean_val = float(mean_signed[idx]) if np.isfinite(mean_signed[idx]) else 0.0
+                            # Direction from SHAP behavior vs feature value:
+                            # 1) Prefer robust top-vs-bottom quantile mean SHAP difference
+                            # 2) Fallback to Spearman correlation
+                            # 3) Fallback to signed mean
+                            direction = 0.0
+                            try:
+                                fv = pd.to_numeric(Xv_raw.iloc[:, idx], errors='coerce').to_numpy()
+                            except Exception:
+                                fv = Xv.iloc[:, idx].to_numpy() if hasattr(Xv, 'iloc') else np.asarray([])
+                            sv = shap_matrix[:, idx] if shap_matrix.ndim == 2 else np.asarray([])
+                            if fv.size and sv.size and fv.shape[0] == sv.shape[0]:
+                                mask = np.isfinite(fv) & np.isfinite(sv)
+                                if np.sum(mask) > 2:
+                                    fv_m = fv[mask]
+                                    sv_m = sv[mask]
+                                    try:
+                                        q_low = np.nanpercentile(fv_m, 25)
+                                        q_high = np.nanpercentile(fv_m, 75)
+                                        top = sv_m[fv_m >= q_high]
+                                        bot = sv_m[fv_m <= q_low]
+                                        if top.size >= 5 and bot.size >= 5:
+                                            diff = float(np.nanmean(top) - np.nanmean(bot))
+                                            if np.isfinite(diff) and diff != 0.0:
+                                                direction = float(np.sign(diff))
+                                    except Exception:
+                                        pass
+                                    # Fallback to Spearman if still undecided
+                                    if direction == 0.0:
+                                        fv_rank = pd.Series(fv_m).rank(method='average').to_numpy()
+                                        sv_rank = pd.Series(sv_m).rank(method='average').to_numpy()
+                                        corr = np.corrcoef(fv_rank, sv_rank)[0, 1]
+                                        if not np.isfinite(corr):
+                                            corr = np.corrcoef(fv_m, sv_m)[0, 1]
+                                        if np.isfinite(corr) and corr != 0.0:
+                                            direction = float(np.sign(corr))
+                            if direction == 0.0 and signed_mean_val != 0.0:
+                                direction = float(np.sign(signed_mean_val))
+                            if direction == 0.0 and mean_abs_val > 0.0:
+                                direction = 1.0
+                            shap_details.append({
+                                'index': idx,
+                                'feature': fname,
+                                'mean_abs': mean_abs_val,
+                                'direction': direction,
+                                'signed_mean': signed_mean_val,
+                            })
+                        shap_details_sorted = sorted(shap_details, key=lambda item: item['mean_abs'], reverse=True)
+                        shap_importance = [
+                            {'feature': item['feature'], 'score': item['mean_abs']}
+                            for item in shap_details_sorted
+                            if item['mean_abs'] > 0
+                        ]
+
+                        # Build gain lookup from already-computed gain_importance
+                        gain_lookup = {gi['feature']: gi['score'] for gi in gain_importance}
+
+
+                        # --- ECDF-rank percentile normalization & combined score ---
+                        # Collect raw SHAP |impact| and gain for features with impact > 0
+                        _active_items = [it for it in shap_details_sorted if it['mean_abs'] > 0]
+                        _shap_vals = np.array([it['mean_abs'] for it in _active_items])
+                        _gain_vals = np.array([gain_lookup.get(it['feature'], 0.0) for it in _active_items])
+
+                        def _ecdf_rank(arr):
+                            """Return ECDF-based percentile ranks in [0, 1] — full precision."""
+                            n = len(arr)
+                            if n == 0:
+                                return arr.copy()
+                            order = np.argsort(arr)
+                            ranks = np.empty_like(order, dtype=float)
+                            ranks[order] = np.arange(1, n + 1) / n
+                            return ranks
+
+                        _shap_pct = _ecdf_rank(_shap_vals)
+                        _gain_pct = _ecdf_rank(_gain_vals)
+                        _combined = np.sqrt(_shap_pct * _gain_pct)
+
                         try:
-                            if booster is None:
-                                raise _SkipShap('alternate model — TreeExplainer not applicable')
-                            if num_classes > 2:
-                                raise _SkipShap('Multiclass explanations require class-specific SHAP; signed class averages would be misleading.')
-                            # Suppress SHAP FutureWarning about feature_perturbation
-                            import warnings
-                            with warnings.catch_warnings():
-                                warnings.filterwarnings('ignore', category=FutureWarning, module='shap')
-                                explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
-                            # limit to at most 5000 rows for performance
-                            Xv = X_valid
-                            Xv_raw = X_valid_raw
-                            if Xv.shape[0] > 5000:
-                                Xv = Xv.sample(5000, random_state=42)
+                            from declaration.models import DataDictionary
+                            selected_features = []
+                            for idx, item in enumerate(_active_items):
+                                desc = DataDictionary.get_description(file_id, item['feature']) or ''
+                                selected_features.append({
+                                    'feature': item['feature'],
+                                    'description': desc,
+                                    'impact': item['mean_abs'],
+                                    'signed_impact': item['mean_abs'] * item['direction'],
+                                    'signed_mean': item['signed_mean'],
+                                    'gain': gain_lookup.get(item['feature'], 0.0),
+                                    'vif': None,  # Filled from the immutable snapshot below.
+                                    'shap_percentile': float(_shap_pct[idx]),
+                                    'gain_percentile': float(_gain_pct[idx]),
+                                    'combined_score': float(_combined[idx]),
+                                })
+                        except Exception:
+                            selected_features = []
+                            for idx, item in enumerate(_active_items):
+                                selected_features.append({
+                                    'feature': item['feature'],
+                                    'description': '',
+                                    'impact': item['mean_abs'],
+                                    'signed_impact': item['mean_abs'] * item['direction'],
+                                    'signed_mean': item['signed_mean'],
+                                    'gain': gain_lookup.get(item['feature'], 0.0),
+                                    'vif': None,  # Filled from the immutable snapshot below.
+                                    'shap_percentile': float(_shap_pct[idx]),
+                                    'gain_percentile': float(_gain_pct[idx]),
+                                    'combined_score': float(_combined[idx]),
+                                })
+                        # Sort by combined score descending
+                        selected_features.sort(key=lambda x: x['combined_score'], reverse=True)
+
+                        try:
+                            import matplotlib
+                            matplotlib.use('Agg')
+                            import matplotlib.pyplot as plt
+                            import io, base64
+                            # Draw beeswarm and save the current figure
+                            shap.summary_plot(shap_matrix, Xv_shap, plot_type='dot', show=False, max_display=40)
+                            fig = plt.gcf()
+                            buf = io.BytesIO()
+                            fig.tight_layout()
+                            fig.savefig(buf, format='png', dpi=150)
+                            plt.close(fig)
+                            beeswarm_png = 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode('utf-8')
+                        except Exception as e:
+                            try:
+                                print(f"[ModelingStart] Beeswarm generation failed: {e}")
+                            except Exception:
+                                pass
+                            beeswarm_png = None
+
+                        # Interactive beeswarm compact payload (top_k features; per-sample shap and feature values)
+                        try:
+                            # Include all features with positive mean |impact|
+                            order_sorted = np.argsort(-mean_abs)
+                            order_idx = np.array([i for i in order_sorted if mean_abs[i] > 0])
+                            # Cap rows for transport size
+                            Xv_compact = Xv
+                            Xv_raw_compact = Xv_raw
+                            max_rows = 2000
+                            if Xv_compact.shape[0] > max_rows:
+                                Xv_compact = Xv_compact.sample(max_rows, random_state=42)
+                                # keep raw values aligned to the same subset
                                 try:
-                                    Xv_raw = Xv_raw.loc[Xv.index]
+                                    Xv_raw_compact = Xv_raw.loc[Xv_compact.index]
                                 except Exception:
-                                    Xv_raw = Xv.copy()
-                            # SHAP's internal DMatrix doesn't pass enable_categorical,
-                            # so convert categorical columns to their numeric codes
-                            # before computing SHAP values.
-                            Xv_shap = Xv.copy()
-                            for c in cat_cols:
-                                if c in Xv_shap.columns and hasattr(Xv_shap[c], 'cat'):
-                                    Xv_shap[c] = Xv_shap[c].cat.codes.astype(float)
-                                    # Replace -1 (NaN sentinel from .cat.codes) with NaN
-                                    Xv_shap[c] = Xv_shap[c].replace(-1, np.nan)
-                            shap_vals = explainer.shap_values(Xv_shap)
-                            if isinstance(shap_vals, list):
-                                try:
-                                    shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
-                                except Exception:
-                                    shap_matrix = shap_vals[0]
+                                    Xv_raw_compact = Xv_compact.copy()
+                            # Index alignment for shap_matrix when we sampled rows above
+                            if shap_matrix.shape[0] != Xv_compact.shape[0]:
+                                # Recompute shap on the compact subset to stay aligned
+                                Xv_compact_shap = Xv_compact.copy()
+                                for c in cat_cols:
+                                    if c in Xv_compact_shap.columns and hasattr(Xv_compact_shap[c], 'cat'):
+                                        Xv_compact_shap[c] = Xv_compact_shap[c].cat.codes.astype(float)
+                                        Xv_compact_shap[c] = Xv_compact_shap[c].replace(-1, np.nan)
+                                shap_sub = explainer.shap_values(Xv_compact_shap)
+                                if isinstance(shap_sub, list):
+                                    try:
+                                        shap_matrix_compact = np.mean(np.stack(shap_sub, axis=0), axis=0)
+                                    except Exception:
+                                        shap_matrix_compact = shap_sub[0]
+                                else:
+                                    shap_matrix_compact = shap_sub
                             else:
-                                shap_matrix = shap_vals
-                            mean_abs = np.mean(np.abs(shap_matrix), axis=0)
-                            mean_signed = np.mean(shap_matrix, axis=0)
-                            shap_details: list[dict[str, object]] = []
-                            for idx, fname in enumerate(feat_names):
-                                mean_abs_val = float(mean_abs[idx]) if np.isfinite(mean_abs[idx]) else 0.0
-                                signed_mean_val = float(mean_signed[idx]) if np.isfinite(mean_signed[idx]) else 0.0
-                                # Direction from SHAP behavior vs feature value:
-                                # 1) Prefer robust top-vs-bottom quantile mean SHAP difference
-                                # 2) Fallback to Spearman correlation
-                                # 3) Fallback to signed mean
-                                direction = 0.0
+                                shap_matrix_compact = shap_matrix
+                            features_ordered = [feat_names[i] for i in order_idx]
+                            # Build arrays per feature: shap values and raw feature values
+                            feature_values_list = []
+                            for i in order_idx:
+                                s = pd.to_numeric(Xv_raw_compact.iloc[:, i], errors='coerce')
+                                # convert NaN -> None so JSON renders as null
+                                s = s.where(s.notna(), None).astype(object)
+                                feature_values_list.append(s.tolist())
+                            # sanitize shap values (NaN/Inf -> None) for JSON
+                            shap_values_list = []
+                            for i in order_idx:
+                                col = shap_matrix_compact[:, i]
+                                safe_col = [ float(x) if np.isfinite(x) else None for x in col ]
+                                shap_values_list.append(safe_col)
+                            # Collect metadata per feature: description, PSI/CSI, mean_abs_impact
+                            # Metadata order must match features_ordered
+                            feature_metadata = []
+                            try:
+                                from declaration.models import DataDictionary
+                                # Load data quality summary from JSON saved during preprocessing
+                                dq_summary = None
                                 try:
-                                    fv = pd.to_numeric(Xv_raw.iloc[:, idx], errors='coerce').to_numpy()
+                                    datq_json_path = os.path.join(settings.MEDIA_ROOT, 'data_quality', f'{file_id}_datq_summary.json')
+                                    if os.path.exists(datq_json_path):
+                                        with open(datq_json_path, 'r', encoding='utf-8') as f:
+                                            datq_records = json.load(f)
+                                        # Build dict: variable_name -> {PSI, CSI, ...}
+                                        dq_summary = {rec.get('Variable', ''): rec for rec in datq_records if rec.get('Variable')}
                                 except Exception:
-                                    fv = Xv.iloc[:, idx].to_numpy() if hasattr(Xv, 'iloc') else np.asarray([])
-                                sv = shap_matrix[:, idx] if shap_matrix.ndim == 2 else np.asarray([])
-                                if fv.size and sv.size and fv.shape[0] == sv.shape[0]:
+                                    pass
+                                for i in order_idx:
+                                    fname = feat_names[i]
+                                    desc = DataDictionary.get_description(file_id, fname) or ''
+                                    # Use mean_abs for consistency with selected_features table
+                                    impact_abs = float(mean_abs[i])
+                                    # Try to get PSI or CSI from data quality summary
+                                    psi_val = None
+                                    csi_val = None
+                                    if dq_summary and fname in dq_summary:
+                                        row = dq_summary[fname]
+                                        psi_val = row.get('PSI', None)
+                                        csi_val = row.get('CSI', None)
+                                    feature_metadata.append({
+                                        'feature': fname,
+                                        'description': desc,
+                                        'impact': impact_abs,
+                                        'psi': psi_val,
+                                        'csi': csi_val
+                                    })
+                            except Exception as meta_err:
+                                try:
+                                    print(f"[ModelingStart] Feature metadata collection failed: {meta_err}")
+                                except:
+                                    pass
+                                # Fallback: minimal metadata
+                                for i in order_idx:
+                                    fname = feat_names[i]
+                                    feature_metadata.append({
+                                        'feature': fname,
+                                        'description': '',
+                                        'impact': float(mean_abs[i]),
+                                        'psi': None,
+                                        'csi': None
+                                    })
+                            # Build beeswarm payload
+                            shap_beeswarm = {
+                                'features': features_ordered,
+                                'shap_values': shap_values_list,
+                                'feature_values': feature_values_list,
+                                'metadata': feature_metadata,
+                            }
+                            # Re-derive direction using the exact compact data used in the UI
+                            try:
+                                direction_map = {}
+                                for i in order_idx:
+                                    try:
+                                        fv = pd.to_numeric(Xv_raw_compact.iloc[:, i], errors='coerce').to_numpy()
+                                    except Exception:
+                                        fv = Xv_compact.iloc[:, i].to_numpy()
+                                    sv = shap_matrix_compact[:, i]
                                     mask = np.isfinite(fv) & np.isfinite(sv)
+                                    dir_val = 0.0
                                     if np.sum(mask) > 2:
                                         fv_m = fv[mask]
                                         sv_m = sv[mask]
                                         try:
-                                            q_low = np.nanpercentile(fv_m, 25)
-                                            q_high = np.nanpercentile(fv_m, 75)
-                                            top = sv_m[fv_m >= q_high]
-                                            bot = sv_m[fv_m <= q_low]
+                                            ql = np.nanpercentile(fv_m, 25)
+                                            qh = np.nanpercentile(fv_m, 75)
+                                            top = sv_m[fv_m >= qh]
+                                            bot = sv_m[fv_m <= ql]
                                             if top.size >= 5 and bot.size >= 5:
-                                                diff = float(np.nanmean(top) - np.nanmean(bot))
-                                                if np.isfinite(diff) and diff != 0.0:
-                                                    direction = float(np.sign(diff))
+                                                d = float(np.nanmean(top) - np.nanmean(bot))
+                                                if np.isfinite(d) and d != 0.0:
+                                                    dir_val = float(np.sign(d))
                                         except Exception:
                                             pass
-                                        # Fallback to Spearman if still undecided
-                                        if direction == 0.0:
+                                        if dir_val == 0.0:
                                             fv_rank = pd.Series(fv_m).rank(method='average').to_numpy()
                                             sv_rank = pd.Series(sv_m).rank(method='average').to_numpy()
                                             corr = np.corrcoef(fv_rank, sv_rank)[0, 1]
                                             if not np.isfinite(corr):
                                                 corr = np.corrcoef(fv_m, sv_m)[0, 1]
                                             if np.isfinite(corr) and corr != 0.0:
-                                                direction = float(np.sign(corr))
-                                if direction == 0.0 and signed_mean_val != 0.0:
-                                    direction = float(np.sign(signed_mean_val))
-                                if direction == 0.0 and mean_abs_val > 0.0:
-                                    direction = 1.0
-                                shap_details.append({
-                                    'index': idx,
-                                    'feature': fname,
-                                    'mean_abs': mean_abs_val,
-                                    'direction': direction,
-                                    'signed_mean': signed_mean_val,
-                                })
-                            shap_details_sorted = sorted(shap_details, key=lambda item: item['mean_abs'], reverse=True)
-                            shap_importance = [
-                                {'feature': item['feature'], 'score': item['mean_abs']}
-                                for item in shap_details_sorted
-                                if item['mean_abs'] > 0
-                            ]
-
-                            # Build gain lookup from already-computed gain_importance
-                            gain_lookup = {gi['feature']: gi['score'] for gi in gain_importance}
-
-
-                            # --- ECDF-rank percentile normalization & combined score ---
-                            # Collect raw SHAP |impact| and gain for features with impact > 0
-                            _active_items = [it for it in shap_details_sorted if it['mean_abs'] > 0]
-                            _shap_vals = np.array([it['mean_abs'] for it in _active_items])
-                            _gain_vals = np.array([gain_lookup.get(it['feature'], 0.0) for it in _active_items])
-
-                            def _ecdf_rank(arr):
-                                """Return ECDF-based percentile ranks in [0, 1] — full precision."""
-                                n = len(arr)
-                                if n == 0:
-                                    return arr.copy()
-                                order = np.argsort(arr)
-                                ranks = np.empty_like(order, dtype=float)
-                                ranks[order] = np.arange(1, n + 1) / n
-                                return ranks
-
-                            _shap_pct = _ecdf_rank(_shap_vals)
-                            _gain_pct = _ecdf_rank(_gain_vals)
-                            _combined = np.sqrt(_shap_pct * _gain_pct)
-
-                            try:
-                                from declaration.models import DataDictionary
-                                selected_features = []
-                                for idx, item in enumerate(_active_items):
-                                    desc = DataDictionary.get_description(file_id, item['feature']) or ''
-                                    selected_features.append({
-                                        'feature': item['feature'],
-                                        'description': desc,
-                                        'impact': item['mean_abs'],
-                                        'signed_impact': item['mean_abs'] * item['direction'],
-                                        'signed_mean': item['signed_mean'],
-                                        'gain': gain_lookup.get(item['feature'], 0.0),
-                                        'vif': None,  # Filled from the immutable snapshot below.
-                                        'shap_percentile': float(_shap_pct[idx]),
-                                        'gain_percentile': float(_gain_pct[idx]),
-                                        'combined_score': float(_combined[idx]),
-                                    })
+                                                dir_val = float(np.sign(corr))
+                                    direction_map[feat_names[i]] = dir_val
+                                # Override signed_impact in selected_features when available
+                                try:
+                                    for row in selected_features:
+                                        fname = row.get('feature')
+                                        if fname in direction_map:
+                                            row['signed_impact'] = float(row.get('impact', 0.0)) * float(direction_map[fname])
+                                except Exception:
+                                    pass
                             except Exception:
-                                selected_features = []
-                                for idx, item in enumerate(_active_items):
-                                    selected_features.append({
-                                        'feature': item['feature'],
-                                        'description': '',
-                                        'impact': item['mean_abs'],
-                                        'signed_impact': item['mean_abs'] * item['direction'],
-                                        'signed_mean': item['signed_mean'],
-                                        'gain': gain_lookup.get(item['feature'], 0.0),
-                                        'vif': None,  # Filled from the immutable snapshot below.
-                                        'shap_percentile': float(_shap_pct[idx]),
-                                        'gain_percentile': float(_gain_pct[idx]),
-                                        'combined_score': float(_combined[idx]),
-                                    })
-                            # Sort by combined score descending
-                            selected_features.sort(key=lambda x: x['combined_score'], reverse=True)
-
-                            try:
-                                import matplotlib
-                                matplotlib.use('Agg')
-                                import matplotlib.pyplot as plt
-                                import io, base64
-                                # Draw beeswarm and save the current figure
-                                shap.summary_plot(shap_matrix, Xv_shap, plot_type='dot', show=False, max_display=40)
-                                fig = plt.gcf()
-                                buf = io.BytesIO()
-                                fig.tight_layout()
-                                fig.savefig(buf, format='png', dpi=150)
-                                plt.close(fig)
-                                beeswarm_png = 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode('utf-8')
-                            except Exception as e:
-                                try:
-                                    print(f"[ModelingStart] Beeswarm generation failed: {e}")
-                                except Exception:
-                                    pass
-                                beeswarm_png = None
-
-                            # Interactive beeswarm compact payload (top_k features; per-sample shap and feature values)
-                            try:
-                                # Include all features with positive mean |impact|
-                                order_sorted = np.argsort(-mean_abs)
-                                order_idx = np.array([i for i in order_sorted if mean_abs[i] > 0])
-                                # Cap rows for transport size
-                                Xv_compact = Xv
-                                Xv_raw_compact = Xv_raw
-                                max_rows = 2000
-                                if Xv_compact.shape[0] > max_rows:
-                                    Xv_compact = Xv_compact.sample(max_rows, random_state=42)
-                                    # keep raw values aligned to the same subset
-                                    try:
-                                        Xv_raw_compact = Xv_raw.loc[Xv_compact.index]
-                                    except Exception:
-                                        Xv_raw_compact = Xv_compact.copy()
-                                # Index alignment for shap_matrix when we sampled rows above
-                                if shap_matrix.shape[0] != Xv_compact.shape[0]:
-                                    # Recompute shap on the compact subset to stay aligned
-                                    Xv_compact_shap = Xv_compact.copy()
-                                    for c in cat_cols:
-                                        if c in Xv_compact_shap.columns and hasattr(Xv_compact_shap[c], 'cat'):
-                                            Xv_compact_shap[c] = Xv_compact_shap[c].cat.codes.astype(float)
-                                            Xv_compact_shap[c] = Xv_compact_shap[c].replace(-1, np.nan)
-                                    shap_sub = explainer.shap_values(Xv_compact_shap)
-                                    if isinstance(shap_sub, list):
-                                        try:
-                                            shap_matrix_compact = np.mean(np.stack(shap_sub, axis=0), axis=0)
-                                        except Exception:
-                                            shap_matrix_compact = shap_sub[0]
-                                    else:
-                                        shap_matrix_compact = shap_sub
-                                else:
-                                    shap_matrix_compact = shap_matrix
-                                features_ordered = [feat_names[i] for i in order_idx]
-                                # Build arrays per feature: shap values and raw feature values
-                                feature_values_list = []
-                                for i in order_idx:
-                                    s = pd.to_numeric(Xv_raw_compact.iloc[:, i], errors='coerce')
-                                    # convert NaN -> None so JSON renders as null
-                                    s = s.where(s.notna(), None).astype(object)
-                                    feature_values_list.append(s.tolist())
-                                # sanitize shap values (NaN/Inf -> None) for JSON
-                                shap_values_list = []
-                                for i in order_idx:
-                                    col = shap_matrix_compact[:, i]
-                                    safe_col = [ float(x) if np.isfinite(x) else None for x in col ]
-                                    shap_values_list.append(safe_col)
-                                # Collect metadata per feature: description, PSI/CSI, mean_abs_impact
-                                # Metadata order must match features_ordered
-                                feature_metadata = []
-                                try:
-                                    from declaration.models import DataDictionary
-                                    # Load data quality summary from JSON saved during preprocessing
-                                    dq_summary = None
-                                    try:
-                                        datq_json_path = os.path.join(settings.MEDIA_ROOT, 'data_quality', f'{file_id}_datq_summary.json')
-                                        if os.path.exists(datq_json_path):
-                                            with open(datq_json_path, 'r', encoding='utf-8') as f:
-                                                datq_records = json.load(f)
-                                            # Build dict: variable_name -> {PSI, CSI, ...}
-                                            dq_summary = {rec.get('Variable', ''): rec for rec in datq_records if rec.get('Variable')}
-                                    except Exception:
-                                        pass
-                                    for i in order_idx:
-                                        fname = feat_names[i]
-                                        desc = DataDictionary.get_description(file_id, fname) or ''
-                                        # Use mean_abs for consistency with selected_features table
-                                        impact_abs = float(mean_abs[i])
-                                        # Try to get PSI or CSI from data quality summary
-                                        psi_val = None
-                                        csi_val = None
-                                        if dq_summary and fname in dq_summary:
-                                            row = dq_summary[fname]
-                                            psi_val = row.get('PSI', None)
-                                            csi_val = row.get('CSI', None)
-                                        feature_metadata.append({
-                                            'feature': fname,
-                                            'description': desc,
-                                            'impact': impact_abs,
-                                            'psi': psi_val,
-                                            'csi': csi_val
-                                        })
-                                except Exception as meta_err:
-                                    try:
-                                        print(f"[ModelingStart] Feature metadata collection failed: {meta_err}")
-                                    except:
-                                        pass
-                                    # Fallback: minimal metadata
-                                    for i in order_idx:
-                                        fname = feat_names[i]
-                                        feature_metadata.append({
-                                            'feature': fname,
-                                            'description': '',
-                                            'impact': float(mean_abs[i]),
-                                            'psi': None,
-                                            'csi': None
-                                        })
-                                # Build beeswarm payload
-                                shap_beeswarm = {
-                                    'features': features_ordered,
-                                    'shap_values': shap_values_list,
-                                    'feature_values': feature_values_list,
-                                    'metadata': feature_metadata,
-                                }
-                                # Re-derive direction using the exact compact data used in the UI
-                                try:
-                                    direction_map = {}
-                                    for i in order_idx:
-                                        try:
-                                            fv = pd.to_numeric(Xv_raw_compact.iloc[:, i], errors='coerce').to_numpy()
-                                        except Exception:
-                                            fv = Xv_compact.iloc[:, i].to_numpy()
-                                        sv = shap_matrix_compact[:, i]
-                                        mask = np.isfinite(fv) & np.isfinite(sv)
-                                        dir_val = 0.0
-                                        if np.sum(mask) > 2:
-                                            fv_m = fv[mask]
-                                            sv_m = sv[mask]
-                                            try:
-                                                ql = np.nanpercentile(fv_m, 25)
-                                                qh = np.nanpercentile(fv_m, 75)
-                                                top = sv_m[fv_m >= qh]
-                                                bot = sv_m[fv_m <= ql]
-                                                if top.size >= 5 and bot.size >= 5:
-                                                    d = float(np.nanmean(top) - np.nanmean(bot))
-                                                    if np.isfinite(d) and d != 0.0:
-                                                        dir_val = float(np.sign(d))
-                                            except Exception:
-                                                pass
-                                            if dir_val == 0.0:
-                                                fv_rank = pd.Series(fv_m).rank(method='average').to_numpy()
-                                                sv_rank = pd.Series(sv_m).rank(method='average').to_numpy()
-                                                corr = np.corrcoef(fv_rank, sv_rank)[0, 1]
-                                                if not np.isfinite(corr):
-                                                    corr = np.corrcoef(fv_m, sv_m)[0, 1]
-                                                if np.isfinite(corr) and corr != 0.0:
-                                                    dir_val = float(np.sign(corr))
-                                        direction_map[feat_names[i]] = dir_val
-                                    # Override signed_impact in selected_features when available
-                                    try:
-                                        for row in selected_features:
-                                            fname = row.get('feature')
-                                            if fname in direction_map:
-                                                row['signed_impact'] = float(row.get('impact', 0.0)) * float(direction_map[fname])
-                                    except Exception:
-                                        pass
-                                except Exception:
-                                    pass
-                            except Exception as e:
-                                try:
-                                    print(f"[ModelingStart] SHAP interactive payload failed: {e}")
-                                except Exception:
-                                    pass
-                                shap_beeswarm = None
-                        except _SkipShap as e:
-                            print(f"[ModelingStart] SHAP skipped: {e}")
+                                pass
                         except Exception as e:
-                            print(f"[ModelingStart] SHAP computation outer exception: {type(e).__name__}: {e}")
-                            import traceback
-                            traceback.print_exc()
-                            if not is_alt:
-                                shap_importance = []
-                                selected_features = []
-                            beeswarm_png = None
+                            try:
+                                print(f"[ModelingStart] SHAP interactive payload failed: {e}")
+                            except Exception:
+                                pass
                             shap_beeswarm = None
+                    except _SkipShap as e:
+                        print(f"[ModelingStart] SHAP skipped: {e}")
+                    except Exception as e:
+                        print(f"[ModelingStart] SHAP computation outer exception: {type(e).__name__}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        if not is_alt:
+                            shap_importance = []
+                            selected_features = []
+                        beeswarm_png = None
+                        shap_beeswarm = None
 
-                        # Shared development assessment uses only permitted raw development rows.
+                    # Shared development assessment uses only permitted raw development rows.
+                    from modeling.development_assessment import run_development_cv
+                    cv_summary = run_development_cv(validation_context, pd.concat([X_train, X_valid]),
+                        pd.concat([y_train, y_valid]), algorithm, params)
+
+                    # Save model via adapter
+                    models_dir = os.path.join(execution_dir, 'models')
+                    os.makedirs(models_dir, exist_ok=True)
+                    model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                    adapter.save(model_path)
+
+                    print(f"[ModelingStart] SHAP data check: beeswarm={'present' if shap_beeswarm else 'missing'}, selected_features={len(selected_features) if selected_features else 0}")
+
+                    # SFS will be triggered manually by user
+                    # Save training data for later SFS use
+                    train_data_dir = os.path.join(execution_dir, 'train_data')
+                    os.makedirs(train_data_dir, exist_ok=True)
+                    train_data_path = os.path.join(train_data_dir, f'{file_id}_train_data.pkl')
+
+                    import pickle
+                    train_data = {
+                        'prediction_contract': prediction_contract,
+                        'validation_context': validation_context,
+                        'task': prediction_contract['task'],
+                        'X_train': X_train,
+                        'y_train': y_train,
+                        'X_valid': X_valid,
+                        'y_valid': y_valid,
+                        'X_test': X_test,
+                        'y_test': y_test,
+                        'X_train_raw': X_train_raw,
+                        'X_valid_raw': X_valid_raw,
+                        'X_test_raw': X_test_raw,
+                        'feature_names': list(X_train.columns),
+                        'impute_means': impute_means,
+                        'split_meta': split_meta,
+                        'scale_pos_weight': scale_pos_weight,
+                        'algorithm': algorithm,
+                        'calibrator_path': calibrator_path,
+                        'calibration': calibration_meta,
+                    }
+                    with open(train_data_path, 'wb') as f:
+                        pickle.dump(train_data, f)
+                    print(f"[ModelingStart] Training data saved for SFS: {train_data_path}")
+
+                    # Final outcomes are evaluated only through the Evaluation endpoint.
+                    test_auc = test_auc_calibrated = None
+                    # Log categorical feature gain importances for validation
+                    cat_in_gain = [g for g in gain_importance if g['feature'] in cat_cols]
+                    if cat_in_gain:
+                        print(f"[ModelingStart] Categorical features with gain > 0: {[(g['feature'], round(g['score'], 4)) for g in cat_in_gain]}")
+                    else:
+                        print(f"[ModelingStart] WARNING: No categorical features have gain importance > 0")
+
+                    model_info = {
+                        'model_type': (
+                            f'{algorithm}_anomaly' if algorithm == 'isolation_forest'
+                            else f'{algorithm}_classifier'
+                        ),
+                        'algorithm': algorithm,
+                        'task': 'anomaly' if algorithm == 'isolation_forest' else 'classification',
+                        'pipeline_family': 'alternate' if is_alt else 'boosting',
+                        'valid_auc': valid_auc,
+                        'test_auc': test_auc,
+                        'test_auc_calibrated': test_auc_calibrated,
+                        'best_iteration': int(getattr(adapter, 'best_iteration', 0) or 0),
+                        'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT),
+                        'calibrator_path': calibrator_path,
+                        'calibration': calibration_meta,
+                        'leakage_scan': leakage_report,
+                        'feature_count': int(X_train.shape[1]),
+                        'categorical_features_used': cat_cols,
+                        'enable_categorical': enable_cat,
+                        'encoding_report': encoding_report,
+                        'importances': {
+                            'gain': gain_importance,
+                            'shap_mean_abs': shap_importance,
+                        },
+                        'selected_features': selected_features,
+                        'cv': cv_summary,
+                        'beeswarm_png': beeswarm_png,
+                        'shap_beeswarm': shap_beeswarm,
+                        # SFS/HP are boosting-path tools; alt models go straight to Evaluation
+                        'sfs_ready': (not is_alt and num_classes == 2),
+                        'explanation_limitation': 'Multiclass class-specific SHAP is not yet supported; gain is a ranking heuristic.' if num_classes > 2 else None,
+                        'split': {
+                            **(split_meta or {}),
+                            'n_train': int(len(X_train)),
+                            'n_valid': int(len(X_valid)),
+                            'n_test': int(len(X_test)),
+                        },
+                        'scale_pos_weight': scale_pos_weight,
+                        'impute_fit_on_train_only': True,
+                    }
+                    if is_alt and hasattr(adapter, 'iv_table'):
+                        model_info['iv_table'] = getattr(adapter, 'iv_table', [])
+                        model_info['score_points'] = getattr(adapter, 'score_points', [])
+                        model_info['woe_maps'] = getattr(adapter, 'woe_maps', {})
+
+                    try:
+                        try:
+                            from preprocessing.purifier_contract import load_purifier_artifact
+                            _pur_art = load_purifier_artifact(int(file_id))
+                        except Exception:
+                            _pur_art = None
+                        lineage = build_lineage(
+                            int(file_id),
+                            algorithm=algorithm or 'xgboost',
+                            processed_file=processed_file,
+                            split_meta=model_info.get('split'),
+                            purifier_artifact={
+                                'path': (_pur_art or {}).get('path'),
+                                'fit_scope': (_pur_art or {}).get('fit_scope'),
+                                'n_fit': (_pur_art or {}).get('n_fit'),
+                            } if _pur_art else None,
+                            encoding_plan=encoding_plan if has_encoding_plan else None,
+                            encoding_use_native=use_native,
+                            feature_names=list(X_train.columns),
+                            excluded_variables=excluded_cols_for_modeling,
+                            model_params=params,
+                            metrics={
+                                'valid_auc': valid_auc,
+                                'test_auc': test_auc,
+                                'test_auc_calibrated': test_auc_calibrated,
+                                'best_iteration': model_info.get('best_iteration'),
+                                'calibration': calibration_meta,
+                                'leakage_n_high': (leakage_report or {}).get('n_high'),
+                            },
+                            model_path=model_info.get('model_path'),
+                            impute_means=impute_means,
+                            scale_pos_weight=scale_pos_weight,
+                            n_train=len(X_train),
+                            n_valid=len(X_valid),
+                            n_test=len(X_test),
+                        )
+                        model_info['lineage_path'] = save_lineage(int(file_id), lineage)
+                        model_info['lineage_id'] = lineage.get('lineage_id')
+                    except Exception as lin_err:
+                        print(f"[ModelingStart] lineage save failed: {lin_err}")
+                else:
+                    # Continuous target → boosting regressor (same split/impute contract)
+                    y_num = encoded_target
+                    valid_y_mask = y_num.notna()
+                    if int(valid_y_mask.sum()) >= 5 and X_raw.shape[1] >= 1:
+                        X_reg = X_raw.loc[valid_y_mask].copy()
+                        y_reg = y_num.loc[valid_y_mask].astype(float)
+                        # Keep native categoricals for boosters
+                        for c in X_reg.columns:
+                            if X_reg[c].dtype == 'object' or pd.api.types.is_string_dtype(X_reg[c]):
+                                X_reg[c] = X_reg[c].astype('category')
+
+                        if train_idx is None:
+                            train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
+                                X_reg, y_reg, file_id=int(file_id),
+                            )
+                        else:
+                            # Align previously resolved indices to regression rows
+                            train_idx = pd.Index([i for i in train_idx if i in X_reg.index])
+                            valid_idx = pd.Index([i for i in valid_idx if i in X_reg.index])
+                            test_idx = pd.Index([i for i in test_idx if i in X_reg.index])
+                            if len(train_idx) < 5:
+                                train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
+                                    X_reg, y_reg, file_id=int(file_id),
+                                )
+
+                        X_train_raw = X_reg.loc[train_idx]
+                        X_valid_raw = X_reg.loc[valid_idx]
+                        X_test_raw = X_reg.loc[test_idx]
+                        impute_means = fit_numeric_imputer(X_train_raw)
+                        X_train = transform_numeric_impute(X_train_raw, impute_means)
+                        X_valid = transform_numeric_impute(X_valid_raw, impute_means)
+                        X_test = transform_numeric_impute(X_test_raw, impute_means)
+                        y_train = y_reg.loc[train_idx]
+                        y_valid = y_reg.loc[valid_idx]
+                        y_test = y_reg.loc[test_idx]
+
+                        params = {
+                            'task': 'regression',
+                            'objective': 'reg:squarederror',
+                            'eval_metric': 'rmse',
+                            'tree_method': 'hist',
+                            'eta': 0.05,
+                            'max_depth': 4,
+                            'min_child_weight': 2,
+                            'lambda': 1.5,
+                            'alpha': 0.1,
+                            'subsample': 0.8,
+                            'colsample_bytree': 0.7,
+                            'seed': 42,
+                        }
+                        from modeling.declared_metric import bind_declared_metric
+                        params = bind_declared_metric(params, prediction_contract)
+                        adapter = get_adapter(algorithm)
+                        adapter.train(
+                            X_train, y_train, X_valid, y_valid, params,
+                            num_boost_round=500, early_stopping_rounds=50,
+                        )
+                        yhat_valid = adapter.predict(X_valid)
+                        valid_r2 = float(r2_score(y_valid, yhat_valid, force_finite=False)) if len(y_valid) >= 2 and np.var(y_valid) > 0 else None
+                        test_r2 = test_rmse = test_mae = None
+                        gain_importance = adapter.gain_importance()
+
                         from modeling.development_assessment import run_development_cv
                         cv_summary = run_development_cv(validation_context, pd.concat([X_train, X_valid]),
                             pd.concat([y_train, y_valid]), algorithm, params)
 
-                        # Save model via adapter
                         models_dir = os.path.join(execution_dir, 'models')
                         os.makedirs(models_dir, exist_ok=True)
                         model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
                         adapter.save(model_path)
 
-                        print(f"[ModelingStart] SHAP data check: beeswarm={'present' if shap_beeswarm else 'missing'}, selected_features={len(selected_features) if selected_features else 0}")
-                        
-                        # SFS will be triggered manually by user
-                        # Save training data for later SFS use
                         train_data_dir = os.path.join(execution_dir, 'train_data')
                         os.makedirs(train_data_dir, exist_ok=True)
                         train_data_path = os.path.join(train_data_dir, f'{file_id}_train_data.pkl')
-                        
                         import pickle
-                        train_data = {
-                            'prediction_contract': prediction_contract,
-                            'validation_context': validation_context,
-                            'task': prediction_contract['task'],
-                            'X_train': X_train,
-                            'y_train': y_train,
-                            'X_valid': X_valid,
-                            'y_valid': y_valid,
-                            'X_test': X_test,
-                            'y_test': y_test,
-                            'X_train_raw': X_train_raw,
-                            'X_valid_raw': X_valid_raw,
-                            'X_test_raw': X_test_raw,
-                            'feature_names': list(X_train.columns),
-                            'impute_means': impute_means,
-                            'split_meta': split_meta,
-                            'scale_pos_weight': scale_pos_weight,
-                            'algorithm': algorithm,
-                            'calibrator_path': calibrator_path,
-                            'calibration': calibration_meta,
-                        }
                         with open(train_data_path, 'wb') as f:
-                            pickle.dump(train_data, f)
-                        print(f"[ModelingStart] Training data saved for SFS: {train_data_path}")
-
-                        # Final outcomes are evaluated only through the Evaluation endpoint.
-                        test_auc = test_auc_calibrated = None
-                        # Log categorical feature gain importances for validation
-                        cat_in_gain = [g for g in gain_importance if g['feature'] in cat_cols]
-                        if cat_in_gain:
-                            print(f"[ModelingStart] Categorical features with gain > 0: {[(g['feature'], round(g['score'], 4)) for g in cat_in_gain]}")
-                        else:
-                            print(f"[ModelingStart] WARNING: No categorical features have gain importance > 0")
+                            pickle.dump({
+                                'prediction_contract': prediction_contract,
+                                'validation_context': validation_context,
+                                'encoding_report': encoding_report,
+                                'X_train': X_train, 'y_train': y_train,
+                                'X_valid': X_valid, 'y_valid': y_valid,
+                                'X_test': X_test, 'y_test': y_test,
+                                'X_train_raw': X_train_raw,
+                                'X_valid_raw': X_valid_raw,
+                                'X_test_raw': X_test_raw,
+                                'feature_names': list(X_train.columns),
+                                'impute_means': impute_means,
+                                'split_meta': split_meta,
+                                'algorithm': algorithm,
+                                'task': 'regression',
+                            }, f)
 
                         model_info = {
-                            'model_type': (
-                                f'{algorithm}_anomaly' if algorithm == 'isolation_forest'
-                                else f'{algorithm}_classifier'
-                            ),
+                            'model_type': f'{algorithm}_regressor',
                             'algorithm': algorithm,
-                            'task': 'anomaly' if algorithm == 'isolation_forest' else 'classification',
-                            'pipeline_family': 'alternate' if is_alt else 'boosting',
-                            'valid_auc': valid_auc,
-                            'test_auc': test_auc,
-                            'test_auc_calibrated': test_auc_calibrated,
-                            'best_iteration': int(getattr(adapter, 'best_iteration', 0) or 0),
+                            'task': 'regression',
+                            'score': valid_r2,
+                            'valid_r2': valid_r2,
+                            'cv': cv_summary,
+                            'test_r2': test_r2,
+                            'test_rmse': test_rmse,
+                            'test_mae': test_mae,
+                            'best_iteration': int(adapter.best_iteration or 0),
                             'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT),
-                            'calibrator_path': calibrator_path,
-                            'calibration': calibration_meta,
-                            'leakage_scan': leakage_report,
                             'feature_count': int(X_train.shape[1]),
                             'categorical_features_used': cat_cols,
                             'enable_categorical': enable_cat,
                             'encoding_report': encoding_report,
-                            'importances': {
-                                'gain': gain_importance,
-                                'shap_mean_abs': shap_importance,
-                            },
-                            'selected_features': selected_features,
-                            'cv': cv_summary,
-                            'beeswarm_png': beeswarm_png,
-                            'shap_beeswarm': shap_beeswarm,
-                            # SFS/HP are boosting-path tools; alt models go straight to Evaluation
-                            'sfs_ready': (not is_alt and num_classes == 2),
-                            'explanation_limitation': 'Multiclass class-specific SHAP is not yet supported; gain is a ranking heuristic.' if num_classes > 2 else None,
+                            'importances': {'gain': gain_importance},
                             'split': {
                                 **(split_meta or {}),
                                 'n_train': int(len(X_train)),
                                 'n_valid': int(len(X_valid)),
                                 'n_test': int(len(X_test)),
                             },
-                            'scale_pos_weight': scale_pos_weight,
                             'impute_fit_on_train_only': True,
+                            'sfs_ready': True,
                         }
-                        if is_alt and hasattr(adapter, 'iv_table'):
-                            model_info['iv_table'] = getattr(adapter, 'iv_table', [])
-                            model_info['score_points'] = getattr(adapter, 'score_points', [])
-                            model_info['woe_maps'] = getattr(adapter, 'woe_maps', {})
-
-                        try:
-                            try:
-                                from preprocessing.purifier_contract import load_purifier_artifact
-                                _pur_art = load_purifier_artifact(int(file_id))
-                            except Exception:
-                                _pur_art = None
-                            lineage = build_lineage(
-                                int(file_id),
-                                algorithm=algorithm or 'xgboost',
-                                processed_file=processed_file,
-                                split_meta=model_info.get('split'),
-                                purifier_artifact={
-                                    'path': (_pur_art or {}).get('path'),
-                                    'fit_scope': (_pur_art or {}).get('fit_scope'),
-                                    'n_fit': (_pur_art or {}).get('n_fit'),
-                                } if _pur_art else None,
-                                encoding_plan=encoding_plan if has_encoding_plan else None,
-                                encoding_use_native=use_native,
-                                feature_names=list(X_train.columns),
-                                excluded_variables=excluded_cols_for_modeling,
-                                model_params=params,
-                                metrics={
-                                    'valid_auc': valid_auc,
-                                    'test_auc': test_auc,
-                                    'test_auc_calibrated': test_auc_calibrated,
-                                    'best_iteration': model_info.get('best_iteration'),
-                                    'calibration': calibration_meta,
-                                    'leakage_n_high': (leakage_report or {}).get('n_high'),
-                                },
-                                model_path=model_info.get('model_path'),
-                                impute_means=impute_means,
-                                scale_pos_weight=scale_pos_weight,
-                                n_train=len(X_train),
-                                n_valid=len(X_valid),
-                                n_test=len(X_test),
-                            )
-                            model_info['lineage_path'] = save_lineage(int(file_id), lineage)
-                            model_info['lineage_id'] = lineage.get('lineage_id')
-                        except Exception as lin_err:
-                            print(f"[ModelingStart] lineage save failed: {lin_err}")
                     else:
-                        # Continuous target → boosting regressor (same split/impute contract)
-                        y_num = encoded_target
-                        valid_y_mask = y_num.notna()
-                        if int(valid_y_mask.sum()) >= 5 and X_raw.shape[1] >= 1:
-                            X_reg = X_raw.loc[valid_y_mask].copy()
-                            y_reg = y_num.loc[valid_y_mask].astype(float)
-                            # Keep native categoricals for boosters
-                            for c in X_reg.columns:
-                                if X_reg[c].dtype == 'object' or pd.api.types.is_string_dtype(X_reg[c]):
-                                    X_reg[c] = X_reg[c].astype('category')
-
-                            if train_idx is None:
-                                train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
-                                    X_reg, y_reg, file_id=int(file_id),
-                                )
-                            else:
-                                # Align previously resolved indices to regression rows
-                                train_idx = pd.Index([i for i in train_idx if i in X_reg.index])
-                                valid_idx = pd.Index([i for i in valid_idx if i in X_reg.index])
-                                test_idx = pd.Index([i for i in test_idx if i in X_reg.index])
-                                if len(train_idx) < 5:
-                                    train_idx, valid_idx, test_idx, split_meta = resolve_modeling_splits(
-                                        X_reg, y_reg, file_id=int(file_id),
-                                    )
-
-                            X_train_raw = X_reg.loc[train_idx]
-                            X_valid_raw = X_reg.loc[valid_idx]
-                            X_test_raw = X_reg.loc[test_idx]
-                            impute_means = fit_numeric_imputer(X_train_raw)
-                            X_train = transform_numeric_impute(X_train_raw, impute_means)
-                            X_valid = transform_numeric_impute(X_valid_raw, impute_means)
-                            X_test = transform_numeric_impute(X_test_raw, impute_means)
-                            y_train = y_reg.loc[train_idx]
-                            y_valid = y_reg.loc[valid_idx]
-                            y_test = y_reg.loc[test_idx]
-
-                            params = {
-                                'task': 'regression',
-                                'objective': 'reg:squarederror',
-                                'eval_metric': 'rmse',
-                                'tree_method': 'hist',
-                                'eta': 0.05,
-                                'max_depth': 4,
-                                'min_child_weight': 2,
-                                'lambda': 1.5,
-                                'alpha': 0.1,
-                                'subsample': 0.8,
-                                'colsample_bytree': 0.7,
-                                'seed': 42,
-                            }
-                            from modeling.declared_metric import bind_declared_metric
-                            params = bind_declared_metric(params, prediction_contract)
-                            adapter = get_adapter(algorithm)
-                            adapter.train(
-                                X_train, y_train, X_valid, y_valid, params,
-                                num_boost_round=500, early_stopping_rounds=50,
-                            )
-                            yhat_valid = adapter.predict(X_valid)
-                            valid_r2 = float(r2_score(y_valid, yhat_valid, force_finite=False)) if len(y_valid) >= 2 and np.var(y_valid) > 0 else None
-                            test_r2 = test_rmse = test_mae = None
-                            gain_importance = adapter.gain_importance()
-
-                            from modeling.development_assessment import run_development_cv
-                            cv_summary = run_development_cv(validation_context, pd.concat([X_train, X_valid]),
-                                pd.concat([y_train, y_valid]), algorithm, params)
-
-                            models_dir = os.path.join(execution_dir, 'models')
-                            os.makedirs(models_dir, exist_ok=True)
-                            model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
-                            adapter.save(model_path)
-
-                            train_data_dir = os.path.join(execution_dir, 'train_data')
-                            os.makedirs(train_data_dir, exist_ok=True)
-                            train_data_path = os.path.join(train_data_dir, f'{file_id}_train_data.pkl')
-                            import pickle
-                            with open(train_data_path, 'wb') as f:
-                                pickle.dump({
-                                    'prediction_contract': prediction_contract,
-                                    'validation_context': validation_context,
-                                    'encoding_report': encoding_report,
-                                    'X_train': X_train, 'y_train': y_train,
-                                    'X_valid': X_valid, 'y_valid': y_valid,
-                                    'X_test': X_test, 'y_test': y_test,
-                                    'X_train_raw': X_train_raw,
-                                    'X_valid_raw': X_valid_raw,
-                                    'X_test_raw': X_test_raw,
-                                    'feature_names': list(X_train.columns),
-                                    'impute_means': impute_means,
-                                    'split_meta': split_meta,
-                                    'algorithm': algorithm,
-                                    'task': 'regression',
-                                }, f)
-
-                            model_info = {
-                                'model_type': f'{algorithm}_regressor',
-                                'algorithm': algorithm,
-                                'task': 'regression',
-                                'score': valid_r2,
-                                'valid_r2': valid_r2,
-                                'cv': cv_summary,
-                                'test_r2': test_r2,
-                                'test_rmse': test_rmse,
-                                'test_mae': test_mae,
-                                'best_iteration': int(adapter.best_iteration or 0),
-                                'model_path': os.path.relpath(model_path, settings.MEDIA_ROOT),
-                                'feature_count': int(X_train.shape[1]),
-                                'categorical_features_used': cat_cols,
-                                'enable_categorical': enable_cat,
-                                'encoding_report': encoding_report,
-                                'importances': {'gain': gain_importance},
-                                'split': {
-                                    **(split_meta or {}),
-                                    'n_train': int(len(X_train)),
-                                    'n_valid': int(len(X_valid)),
-                                    'n_test': int(len(X_test)),
-                                },
-                                'impute_fit_on_train_only': True,
-                                'sfs_ready': True,
-                            }
-                        else:
-                            model_info = {
-                                'model_type': f'{algorithm}_regressor',
-                                'task': 'regression',
-                                'warning': 'Insufficient numeric target rows to train a regressor',
-                                'feature_count': int(X_raw.shape[1]),
-                            }
-                else:
-                    model_info = {'warning': 'Insufficient features or rows to train'}
+                        model_info = {
+                            'model_type': f'{algorithm}_regressor',
+                            'task': 'regression',
+                            'warning': 'Insufficient numeric target rows to train a regressor',
+                            'feature_count': int(X_raw.shape[1]),
+                        }
             else:
-                model_info = {'warning': 'No target column detected'}
-        except Exception as e:
-            err_msg = str(e)
-            metrics = {'error': err_msg}
-            model_info = {'error': err_msg}
-            try:
-                print(f"[ModelingStart] ERROR: {err_msg}")
-            except Exception:
-                pass
+                model_info = {'warning': 'Insufficient features or rows to train'}
+        else:
+            model_info = {'warning': 'No target column detected'}
+    except Exception as e:
+        from execution_jobs.legacy_context import active as legacy_child_context
+        if legacy_child_context():
+            legacy_child_context().failure(e, 'legacy_training')
+        err_msg = str(e)
+        metrics = {'error': err_msg}
+        model_info = {'error': err_msg}
+        try:
+            print(f"[ModelingStart] ERROR: {err_msg}")
+        except Exception:
+            pass
 
-        # Helper to sanitize payloads for JSON (replace NaN/Inf with None recursively)
-        def _sanitize_json(o):
-            try:
-                import numpy as np
-                if isinstance(o, (float, np.floating)):
-                    return float(o) if math.isfinite(o) else None
-                if isinstance(o, (np.integer,)):
-                    return int(o)
-                if isinstance(o, (np.bool_,)):
-                    return bool(o)
-                if isinstance(o, (np.ndarray,)):
-                    return [_sanitize_json(x) for x in o.tolist()]
-            except Exception:
-                pass
-            if isinstance(o, list):
-                return [_sanitize_json(x) for x in o]
-            if isinstance(o, tuple):
-                return [_sanitize_json(x) for x in o]
-            if isinstance(o, dict):
-                return {k: _sanitize_json(v) for k, v in o.items()}
-            if isinstance(o, float):
-                return o if math.isfinite(o) else None
-            return o
+    # Helper to sanitize payloads for JSON (replace NaN/Inf with None recursively)
+    def _sanitize_json(o):
+        try:
+            import numpy as np
+            if isinstance(o, (float, np.floating)):
+                return float(o) if math.isfinite(o) else None
+            if isinstance(o, (np.integer,)):
+                return int(o)
+            if isinstance(o, (np.bool_,)):
+                return bool(o)
+            if isinstance(o, (np.ndarray,)):
+                return [_sanitize_json(x) for x in o.tolist()]
+        except Exception:
+            pass
+        if isinstance(o, list):
+            return [_sanitize_json(x) for x in o]
+        if isinstance(o, tuple):
+            return [_sanitize_json(x) for x in o]
+        if isinstance(o, dict):
+            return {k: _sanitize_json(v) for k, v in o.items()}
+        if isinstance(o, float):
+            return o if math.isfinite(o) else None
+        return o
 
-        if model_info.get('model_path') and 'prediction_contract' in locals():
-            if 'lineage' not in locals():
-                lineage = build_lineage(int(file_id), algorithm=algorithm, processed_file=processed_file,
-                    split_meta=split_meta, feature_names=list(X_train.columns), excluded_variables=excluded_cols_for_modeling,
-                    model_params=params, model_path=model_info['model_path'], impute_means=impute_means,
-                    n_train=len(X_train), n_valid=len(X_valid), n_test=len(X_test))
-            lineage['fit_receipt'] = adapter.fit_receipt
-            lineage['prediction_contract'] = prediction_contract
-            lineage['execution_id'] = execution_id
-            lineage['encoding_report'] = encoding_report
-            lineage['purifier'] = purifier_state
-            lineage['provenance_qualification'] = ('Partition-fitted purifier, encoding and imputation recorded; assessment remains exploratory.'
-                if purifier_state else 'Input snapshot and fold membership recorded; legacy upstream purifier provenance unverified.')
-            lineage_path = execution_dir / 'lineage.json'
-            with lineage_path.open('x', encoding='utf-8') as stream:
-                stream.write(json.dumps(lineage, separators=(',', ':'), default=str))
-            model_info['lineage_path'] = os.path.relpath(lineage_path, settings.MEDIA_ROOT)
-            model_info['lineage_id'] = lineage['lineage_id']
-            model_info['fit_receipt'] = adapter.fit_receipt
-            replace_projection(lineage_path, os.path.join(settings.MEDIA_ROOT, 'lineage', f'{file_id}_lineage.json'))
-        if 'prediction_contract' in locals():
-            model_info['prediction_contract'] = prediction_contract
-            model_info['input_stage'] = 'raw_unencoded' if purifier_state else 'processed_unencoded'
-            model_info['purifier_provenance'] = ('partition_fitted' if purifier_state else 'legacy_unverified')
-            model_info['purifier_path'] = os.path.relpath(execution_dir / 'purifier.json', settings.MEDIA_ROOT) if purifier_state else None
-            model_info['diagnostic_limitations'] = DIAGNOSTIC_LIMITATIONS
-            model_info['holdout_status'] = 'uninspected_by_training'
-        if 'train_data_path' in locals():
-            with open(train_data_path, 'rb') as stream:
-                development_data = pickle.load(stream)
-            holdout_path = execution_dir / 'final_holdout.pkl'
-            final_data = {key: development_data.pop(key, None) for key in ('X_test', 'y_test', 'X_test_raw')}
-            with holdout_path.open('xb') as stream:
-                pickle.dump(final_data, stream)
-            development_data['fit_receipt'] = adapter.fit_receipt
-            development_data['encoding_report'] = encoding_report
-            development_data['purifier_state'] = purifier_state
-            development_data['execution_id'] = execution_id
-            development_data['holdout_path'] = os.path.relpath(holdout_path, settings.MEDIA_ROOT)
-            with open(train_data_path, 'wb') as stream:
-                pickle.dump(development_data, stream)
-            model_info['train_data_path'] = os.path.relpath(train_data_path, settings.MEDIA_ROOT)
-            model_info['holdout_path'] = development_data['holdout_path']
-            collinearity = write_snapshot(execution_dir, int(file_id), execution_id,
-                development_data['X_train'][development_data['feature_names']], encoding_report)
-            model_info['collinearity'] = collinearity
-            for feature in model_info.get('selected_features') or []:
-                if isinstance(feature, dict):
-                    recorded = collinearity['features'].get(feature['feature'],
-                        {'vif': None, 'vif_status': 'unavailable', 'reason': 'missing_training_predictor'})
-                    feature.update(vif=recorded['vif'], vif_status=recorded['vif_status'])
-            from modeling.holdout_evidence import holdout_spec
-            from modeling.execution_artifacts import digest_file
-            source_path = execution_dir / 'raw_input.csv' if purifier_recipe else snapshot_path
-            model_info['holdout_spec'] = holdout_spec(digest_file(source_path),
-                prediction_contract['target_column'], split_meta['membership']['test'],
-                'raw_snapshot' if purifier_recipe else 'processed_snapshot')
-        failed = 'error' in model_info or not model_info.get('model_path')
-        if failed and 'error' not in model_info:
-            model_info['error'] = model_info.get('warning') or 'No fitted model was produced.'
-        # Publish a truthful terminal status.
-        # attach algorithm to model info if provided
-        if algorithm:
-            model_info['requested_algorithm'] = algorithm
+    if model_info.get('model_path') and 'prediction_contract' in locals():
+        if 'lineage' not in locals():
+            lineage = build_lineage(int(file_id), algorithm=algorithm, processed_file=processed_file,
+                split_meta=split_meta, feature_names=list(X_train.columns), excluded_variables=excluded_cols_for_modeling,
+                model_params=params, model_path=model_info['model_path'], impute_means=impute_means,
+                n_train=len(X_train), n_valid=len(X_valid), n_test=len(X_test))
+        lineage['fit_receipt'] = adapter.fit_receipt
+        lineage['prediction_contract'] = prediction_contract
+        lineage['execution_id'] = execution_id
+        lineage['encoding_report'] = encoding_report
+        lineage['purifier'] = purifier_state
+        lineage['provenance_qualification'] = ('Partition-fitted purifier, encoding and imputation recorded; assessment remains exploratory.'
+            if purifier_state else 'Input snapshot and fold membership recorded; legacy upstream purifier provenance unverified.')
+        lineage_path = execution_dir / 'lineage.json'
+        with lineage_path.open('x', encoding='utf-8') as stream:
+            stream.write(json.dumps(lineage, separators=(',', ':'), default=str))
+        model_info['lineage_path'] = os.path.relpath(lineage_path, settings.MEDIA_ROOT)
+        model_info['lineage_id'] = lineage['lineage_id']
+        model_info['fit_receipt'] = adapter.fit_receipt
+        replace_projection(lineage_path, os.path.join(settings.MEDIA_ROOT, 'lineage', f'{file_id}_lineage.json'))
+    if 'prediction_contract' in locals():
+        model_info['prediction_contract'] = prediction_contract
+        model_info['input_stage'] = 'raw_unencoded' if purifier_state else 'processed_unencoded'
+        model_info['purifier_provenance'] = ('partition_fitted' if purifier_state else 'legacy_unverified')
+        model_info['purifier_path'] = os.path.relpath(execution_dir / 'purifier.json', settings.MEDIA_ROOT) if purifier_state else None
+        model_info['diagnostic_limitations'] = DIAGNOSTIC_LIMITATIONS
+        model_info['holdout_status'] = 'uninspected_by_training'
+    if 'train_data_path' in locals():
+        with open(train_data_path, 'rb') as stream:
+            development_data = pickle.load(stream)
+        holdout_path = execution_dir / 'final_holdout.pkl'
+        final_data = {key: development_data.pop(key, None) for key in ('X_test', 'y_test', 'X_test_raw')}
+        with holdout_path.open('xb') as stream:
+            pickle.dump(final_data, stream)
+        development_data['fit_receipt'] = adapter.fit_receipt
+        development_data['encoding_report'] = encoding_report
+        development_data['purifier_state'] = purifier_state
+        development_data['execution_id'] = execution_id
+        development_data['holdout_path'] = os.path.relpath(holdout_path, settings.MEDIA_ROOT)
+        with open(train_data_path, 'wb') as stream:
+            pickle.dump(development_data, stream)
+        model_info['train_data_path'] = os.path.relpath(train_data_path, settings.MEDIA_ROOT)
+        model_info['holdout_path'] = development_data['holdout_path']
+        collinearity = write_snapshot(execution_dir, int(file_id), execution_id,
+            development_data['X_train'][development_data['feature_names']], encoding_report)
+        model_info['collinearity'] = collinearity
+        for feature in model_info.get('selected_features') or []:
+            if isinstance(feature, dict):
+                recorded = collinearity['features'].get(feature['feature'],
+                    {'vif': None, 'vif_status': 'unavailable', 'reason': 'missing_training_predictor'})
+                feature.update(vif=recorded['vif'], vif_status=recorded['vif_status'])
+        from modeling.holdout_evidence import holdout_spec
+        from modeling.execution_artifacts import digest_file
+        source_path = execution_dir / 'raw_input.csv' if purifier_recipe else snapshot_path
+        model_info['holdout_spec'] = holdout_spec(digest_file(source_path),
+            prediction_contract['target_column'], split_meta['membership']['test'],
+            'raw_snapshot' if purifier_recipe else 'processed_snapshot')
+    failed = 'error' in model_info or not model_info.get('model_path')
+    if failed and 'error' not in model_info:
+        model_info['error'] = model_info.get('warning') or 'No fitted model was produced.'
+    # Publish a truthful terminal status.
+    # attach algorithm to model info if provided
+    if algorithm:
+        model_info['requested_algorithm'] = algorithm
 
-        result_payload = {
-            'status': 'error' if failed else 'ok',
-            'job_status': 'failed' if failed else 'completed',
-            'file_id': int(file_id),
-            'execution_id': execution_id,
-            'processed_file': processed_file,
-            'encoded_file': encoded_file_rel,
-            'metrics': metrics,
-            'model': model_info,
-            'algorithm': algorithm
-        }
-        safe_payload = _sanitize_json(result_payload)
-        
-        # Debug: Check if SHAP data made it to the final payload
-        print(f"[ModelingStart] Final payload check: shap_beeswarm in model={'shap_beeswarm' in safe_payload.get('model', {})}, selected_features count={len(safe_payload.get('model', {}).get('selected_features', []))}")
+    result_payload = {
+        'status': 'error' if failed else 'ok',
+        'job_status': 'failed' if failed else 'completed',
+        'file_id': int(file_id),
+        'execution_id': execution_id,
+        'processed_file': processed_file,
+        'encoded_file': encoded_file_rel,
+        'metrics': metrics,
+        'model': model_info,
+        'algorithm': algorithm
+    }
+    safe_payload = _sanitize_json(result_payload)
 
-        with projection_lock(file_id):
-            publish_execution(execution_id, safe_payload)
-            if not failed and 'train_data_path' in locals():
-                replace_projection(train_data_path, os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl'))
-            replace_projection(execution_dir / 'modeling_status.json', status_path)
+    # Debug: Check if SHAP data made it to the final payload
+    print(f"[ModelingStart] Final payload check: shap_beeswarm in model={'shap_beeswarm' in safe_payload.get('model', {})}, selected_features count={len(safe_payload.get('model', {}).get('selected_features', []))}")
 
-        return Response(safe_payload, status=status.HTTP_400_BAD_REQUEST if failed else status.HTTP_200_OK)
+    with projection_lock(file_id):
+        publish_execution(execution_id, safe_payload)
+        if not failed and 'train_data_path' in locals():
+            replace_projection(train_data_path, os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl'))
+        replace_projection(execution_dir / 'modeling_status.json', status_path)
+
+    return Response(safe_payload, status=status.HTTP_400_BAD_REQUEST if failed else status.HTTP_200_OK)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -1268,6 +1286,11 @@ class ModelingStatusView(APIView):
     """Returns current modeling status and metrics for a file id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_http import status as durable_status
+            response = durable_status(request, file_id, "training")
+            if response is not None:
+                return response
         execution_id = request.query_params.get('execution_id')
         if execution_id:
             try:
@@ -1361,7 +1384,7 @@ class FeatureExplainabilityView(APIView):
                     'objective': 'reg:squarederror' if train_data.get('task') == 'regression' else 'binary:logistic',
                     'eval_metric': 'rmse' if train_data.get('task') == 'regression' else 'auc',
                     'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
-                    'colsample_bytree': 0.8, 'seed': 42, 'nthread': 0
+                    'colsample_bytree': 0.8, 'seed': 42, 'nthread': native_threads(0)
                 }
                 from modeling.declared_metric import bind_declared_metric
                 _params_sf = bind_declared_metric(_params_sf, train_data.get('prediction_contract'))
@@ -1700,6 +1723,11 @@ class SFSResultsView(APIView):
     """Returns Sequential Feature Selection results for a given file_id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_http import status as durable_status
+            response = durable_status(request, file_id, "sfs")
+            if response is not None:
+                return response
         try:
             # Load SFS results from JSON file
             sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
@@ -1739,416 +1767,423 @@ class SFSStartView(APIView):
     """Start Sequential Feature Selection with user-defined parameters."""
 
     def post(self, request, *args, **kwargs):
-        data = request.data
-        if not isinstance(data, dict):
-            return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_http import launch
+            return launch(request, "sfs")
+        return execute_legacy_sfs(request.data)
+
+
+def execute_legacy_sfs(data):
+    """Fixed native business entry point; no request dispatch or client lifetime."""
+    if not isinstance(data, dict):
+        return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        file_id = data.get('file_id')
+        methods = data.get('methods', ['forward'])  # ['forward', 'backward'] or both
+        stopping_criteria = data.get('stopping_criteria', {})
+        initial_features = data.get('initial_features', None)  # Optional: Start with specific features
+        excluded_features = data.get('excluded_features', [])  # Features marked as "drop" by user
+        n_jobs = int(data.get('n_jobs', 1))  # Parallel workers for candidate evaluation
+        cv_folds = int(data.get('cv_folds', 3))
+        top_k = int(data.get('top_k', 3))  # Top-K candidates to CV-evaluate per step
+
+        # Validate required parameters
+        if not file_id:
+            return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            file_id = data.get('file_id')
-            methods = data.get('methods', ['forward'])  # ['forward', 'backward'] or both
-            stopping_criteria = data.get('stopping_criteria', {})
-            initial_features = data.get('initial_features', None)  # Optional: Start with specific features
-            excluded_features = data.get('excluded_features', [])  # Features marked as "drop" by user
-            n_jobs = int(data.get('n_jobs', 1))  # Parallel workers for candidate evaluation
-            cv_folds = int(data.get('cv_folds', 3))
-            top_k = int(data.get('top_k', 3))  # Top-K candidates to CV-evaluate per step
-            
-            # Validate required parameters
-            if not file_id:
-                return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            file_id = positive_file_id(file_id)
+        except ValidationError as error:
+            return Response(error.detail, status=status.HTTP_400_BAD_REQUEST)
+
+        if SFS_PROGRESS.get(file_id, {}).get('status') == 'running':
+            return Response({'status': 'already_running', 'error': 'Feature selection is already running. Inspect or stop the current operation.'},
+                            status=status.HTTP_409_CONFLICT)
+
+        if not methods or len(methods) == 0:
+            return Response({'error': 'At least one method (forward/backward) must be selected'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Load saved training data
+        train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
+
+        if not os.path.exists(train_data_path):
+            return Response({
+                'error': 'Training data not found. Please run modeling first.',
+                'status': 'error'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        train_data = load_development_data(file_id, data.get('execution_id'))
+
+        X_train = train_data['X_train']
+        y_train = train_data['y_train']
+        X_valid = train_data['X_valid']
+        y_valid = train_data['y_valid']
+        # Older regression pickles may omit raw frames — fall back to imputed matrices.
+        X_train_raw = train_data.get('X_train_raw', X_train)
+        X_valid_raw = train_data.get('X_valid_raw', X_valid)
+        context = train_data.get('validation_context')
+        contract = train_data.get('prediction_contract') or {}
+        if len(contract.get('class_mapping') or []) > 2:
+            return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)
+        if context is not None:
             try:
-                file_id = positive_file_id(file_id)
-            except ValidationError as error:
-                return Response(error.detail, status=status.HTTP_400_BAD_REQUEST)
-
-            if SFS_PROGRESS.get(file_id, {}).get('status') == 'running':
-                return Response({'status': 'already_running', 'error': 'Feature selection is already running. Inspect or stop the current operation.'},
-                                status=status.HTTP_409_CONFLICT)
-            
-            if not methods or len(methods) == 0:
-                return Response({'error': 'At least one method (forward/backward) must be selected'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Load saved training data
-            train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
-            
-            if not os.path.exists(train_data_path):
-                return Response({
-                    'error': 'Training data not found. Please run modeling first.',
-                    'status': 'error'
-                }, status=status.HTTP_404_NOT_FOUND)
-            
-            train_data = load_development_data(file_id, data.get('execution_id'))
-            
-            X_train = train_data['X_train']
-            y_train = train_data['y_train']
-            X_valid = train_data['X_valid']
-            y_valid = train_data['y_valid']
-            # Older regression pickles may omit raw frames — fall back to imputed matrices.
-            X_train_raw = train_data.get('X_train_raw', X_train)
-            X_valid_raw = train_data.get('X_valid_raw', X_valid)
-            context = train_data.get('validation_context')
-            contract = train_data.get('prediction_contract') or {}
-            if len(contract.get('class_mapping') or []) > 2:
-                return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)
-            if context is not None:
-                try:
-                    list(development_folds(context, X_train.index, y_train, int(data.get('cv_folds', 3))))
-                except (ValueError, KeyError) as error:
-                    return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
-            sfs_task = (train_data.get('task') or 'classification')
-            if str(sfs_task).strip().lower() in ('regression', 'regressor', 'reg'):
-                sfs_task = 'regression'
-            else:
-                sfs_task = 'classification'
-
-            # Historical inputs without fold provenance remain explicitly unverified.
-            objective_context = context or {'task': sfs_task, 'prediction_contract': contract}
-
-            algo_raw = data.get('algorithm') or train_data.get('algorithm')
-            if not algo_raw:
-                try:
-                    st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
-                    if os.path.exists(st_path):
-                        with open(st_path, 'r', encoding='utf-8') as sf:
-                            st = json.load(sf)
-                        algo_raw = (st.get('model') or {}).get('algorithm') or st.get('algorithm')
-                except Exception:
-                    algo_raw = None
-            sfs_algorithm, algo_err = normalize_boosting_algorithm(algo_raw)
-            if algo_err:
-                return Response({'error': algo_err, 'status': 'error'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Remove features marked as "drop" by user from all feature matrices
-            if excluded_features and isinstance(excluded_features, list):
-                cols_to_drop = [c for c in excluded_features if c in X_train.columns]
-                if cols_to_drop:
-                    print(f"[SFS] Excluding {len(cols_to_drop)} user-dropped features from SFS: {cols_to_drop}")
-                    X_train = X_train.drop(columns=cols_to_drop)
-                    X_valid = X_valid.drop(columns=cols_to_drop)
-                    if X_train_raw is not None and hasattr(X_train_raw, 'columns'):
-                        X_train_raw = X_train_raw.drop(columns=[c for c in cols_to_drop if c in X_train_raw.columns])
-                    if X_valid_raw is not None and hasattr(X_valid_raw, 'columns'):
-                        X_valid_raw = X_valid_raw.drop(columns=[c for c in cols_to_drop if c in X_valid_raw.columns])
-
-            # Feature sorter: reorder / truncate candidate pool by combined_score
-            use_combined_score_order = bool(data.get('use_combined_score_order'))
-            candidate_top_k = data.get('candidate_top_k')
-            try:
-                candidate_top_k = int(candidate_top_k) if candidate_top_k not in (None, '') else None
-            except (TypeError, ValueError):
-                candidate_top_k = None
-            from modeling.feature_sorter import resolve_sorted_initial_features
-            sorted_initial, sorter_meta = resolve_sorted_initial_features(
-                settings.MEDIA_ROOT, int(file_id), list(X_train.columns),
-                use_combined_score_order=use_combined_score_order,
-                candidate_top_k=candidate_top_k,
-                existing_initial=initial_features,
-            )
-            if sorted_initial is not None:
-                initial_features = sorted_initial
-                print(
-                    f"[SFS] Feature sorter applied: order={use_combined_score_order} "
-                    f"top_k={candidate_top_k} n={len(initial_features)} meta={sorter_meta}"
-                )
-            
-            from modeling.sfs_objective import prepare_search, json_record
-            try:
-                _, _, selection_objective, effective_criteria, resume_basis = prepare_search(
-                    X_train, y_train, X_valid, y_valid, sfs_task, sfs_algorithm, objective_context,
-                    stopping_criteria, cv_folds, top_k, methods, initial_features,
-                    train_data.get('execution_id'), n_jobs)
-                if n_jobs > 32 or cv_folds > 10:
-                    raise ValueError('Native selection supports at most 32 workers and 10 CV folds.')
-            except (ValueError, TypeError, KeyError) as error:
+                list(development_folds(context, X_train.index, y_train, int(data.get('cv_folds', 3))))
+            except (ValueError, KeyError) as error:
                 return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        sfs_task = (train_data.get('task') or 'classification')
+        if str(sfs_task).strip().lower() in ('regression', 'regressor', 'reg'):
+            sfs_task = 'regression'
+        else:
+            sfs_task = 'classification'
 
-            # Initialize progress tracking
-            import time as _time
-            sfs_start_time = _time.time()
-            # Load resume state if requested
-            resume = data.get('resume', False)
-            resume_state = None
-            if resume:
-                sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
+        # Historical inputs without fold provenance remain explicitly unverified.
+        objective_context = context or {'task': sfs_task, 'prediction_contract': contract}
+
+        algo_raw = data.get('algorithm') or train_data.get('algorithm')
+        if not algo_raw:
+            try:
+                st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+                if os.path.exists(st_path):
+                    with open(st_path, 'r', encoding='utf-8') as sf:
+                        st = json.load(sf)
+                    algo_raw = (st.get('model') or {}).get('algorithm') or st.get('algorithm')
+            except Exception:
+                algo_raw = None
+        sfs_algorithm, algo_err = normalize_boosting_algorithm(algo_raw)
+        if algo_err:
+            return Response({'error': algo_err, 'status': 'error'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Remove features marked as "drop" by user from all feature matrices
+        if excluded_features and isinstance(excluded_features, list):
+            cols_to_drop = [c for c in excluded_features if c in X_train.columns]
+            if cols_to_drop:
+                print(f"[SFS] Excluding {len(cols_to_drop)} user-dropped features from SFS: {cols_to_drop}")
+                X_train = X_train.drop(columns=cols_to_drop)
+                X_valid = X_valid.drop(columns=cols_to_drop)
+                if X_train_raw is not None and hasattr(X_train_raw, 'columns'):
+                    X_train_raw = X_train_raw.drop(columns=[c for c in cols_to_drop if c in X_train_raw.columns])
+                if X_valid_raw is not None and hasattr(X_valid_raw, 'columns'):
+                    X_valid_raw = X_valid_raw.drop(columns=[c for c in cols_to_drop if c in X_valid_raw.columns])
+
+        # Feature sorter: reorder / truncate candidate pool by combined_score
+        use_combined_score_order = bool(data.get('use_combined_score_order'))
+        candidate_top_k = data.get('candidate_top_k')
+        try:
+            candidate_top_k = int(candidate_top_k) if candidate_top_k not in (None, '') else None
+        except (TypeError, ValueError):
+            candidate_top_k = None
+        from modeling.feature_sorter import resolve_sorted_initial_features
+        sorted_initial, sorter_meta = resolve_sorted_initial_features(
+            settings.MEDIA_ROOT, int(file_id), list(X_train.columns),
+            use_combined_score_order=use_combined_score_order,
+            candidate_top_k=candidate_top_k,
+            existing_initial=initial_features,
+        )
+        if sorted_initial is not None:
+            initial_features = sorted_initial
+            print(
+                f"[SFS] Feature sorter applied: order={use_combined_score_order} "
+                f"top_k={candidate_top_k} n={len(initial_features)} meta={sorter_meta}"
+            )
+
+        from modeling.sfs_objective import prepare_search, json_record
+        try:
+            _, _, selection_objective, effective_criteria, resume_basis = prepare_search(
+                X_train, y_train, X_valid, y_valid, sfs_task, sfs_algorithm, objective_context,
+                stopping_criteria, cv_folds, top_k, methods, initial_features,
+                train_data.get('execution_id'), n_jobs)
+            if n_jobs > 32 or cv_folds > 10:
+                raise ValueError('Native selection supports at most 32 workers and 10 CV folds.')
+        except (ValueError, TypeError, KeyError) as error:
+            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Initialize progress tracking
+        import time as _time
+        sfs_start_time = _time.time()
+        # Load resume state if requested
+        resume = data.get('resume', False)
+        resume_state = None
+        if resume:
+            sfs_path = os.path.join(settings.MEDIA_ROOT, 'sfs_results', f'{file_id}_sfs_results.json')
+            if os.path.exists(sfs_path):
+                try:
+                    resume_state = restore_sfs_resume(sfs_path, resume_basis)
+                except (ValueError, OSError, KeyError) as re_err:
+                    return Response({'status': 'resume_blocked', 'error': str(re_err)}, status=status.HTTP_409_CONFLICT)
+            else:
+                return Response({'error': 'No recorded feature-selection evidence to resume. Start a fresh search.'}, status=status.HTTP_409_CONFLICT)
+
+        initial_progress = {
+            'status': 'running',
+            'message': 'Resuming SFS...' if resume_state else 'Starting SFS...',
+            'progress': 0.0,
+            'current_metric': None,
+            'error': None,
+            'completed_steps': resume_state.get('completed_steps', []) if resume_state else [],
+            'duration_seconds': None,
+            'stop_requested': False
+        }
+        from modeling.async_failures import record_failure
+        failure_context = {
+            'operation_id': native_operation_id(),
+            'file_id': int(file_id),
+            'execution_id': train_data.get('execution_id'),
+        }
+        initial_progress['operation_id'] = failure_context['operation_id']
+        try:
+            claimed = claim_search(SFS_PROGRESS, file_id, initial_progress,
+                                   other_registries=(HYPERPARAM_PROGRESS,))
+        except SearchCapacityExceeded:
+            return _search_capacity_response(file_id)
+        if not claimed:
+            return Response({'status': 'already_running', 'error': 'Feature selection is already running. Inspect or stop the current operation.'},
+                            status=status.HTTP_409_CONFLICT)
+
+        # Prepare paths and helpers shared by callback and thread
+        sfs_dir = os.path.join(settings.MEDIA_ROOT, 'sfs_results')
+        sfs_path = os.path.join(sfs_dir, f'{file_id}_sfs_results.json')
+
+        def sanitize_sfs(results_list):
+            return [json_record(item) for item in results_list]
+
+        def same_execution(existing):
+            recorded = existing.get('resume_basis') or {}
+            return (recorded.get('schema_version') == 2 and
+                    recorded.get('execution_id') == resume_basis.get('execution_id') and
+                    recorded.get('algorithm') == resume_basis.get('algorithm') and
+                    existing.get('selection_objective') == selection_objective and
+                    (bool(resume_basis.get('execution_id')) or recorded == resume_basis))
+
+        _last_saved_step_count = [0]  # mutable for closure
+
+        def _save_intermediate(completed_steps):
+            """Persist intermediate results to disk so they survive server restarts."""
+            try:
+                fwd = [s for s in completed_steps if s.get('direction') == 'forward']
+                bwd = [s for s in completed_steps if s.get('direction') == 'backward']
+                # Compute backward remaining features from last backward step
+                bwd_remaining = bwd[-1]['selected_features'] if bwd else []
+
+                # Read existing data to preserve results from prior runs
+                existing = {}
                 if os.path.exists(sfs_path):
                     try:
-                        resume_state = restore_sfs_resume(sfs_path, resume_basis)
-                    except (ValueError, OSError, KeyError) as re_err:
-                        return Response({'status': 'resume_blocked', 'error': str(re_err)}, status=status.HTTP_409_CONFLICT)
-                else:
-                    return Response({'error': 'No recorded feature-selection evidence to resume. Start a fresh search.'}, status=status.HTTP_409_CONFLICT)
-
-            initial_progress = {
-                'status': 'running',
-                'message': 'Resuming SFS...' if resume_state else 'Starting SFS...',
-                'progress': 0.0,
-                'current_metric': None,
-                'error': None,
-                'completed_steps': resume_state.get('completed_steps', []) if resume_state else [],
-                'duration_seconds': None,
-                'stop_requested': False
-            }
-            from modeling.async_failures import record_failure
-            failure_context = {
-                'operation_id': str(uuid.uuid4()),
-                'file_id': int(file_id),
-                'execution_id': train_data.get('execution_id'),
-            }
-            initial_progress['operation_id'] = failure_context['operation_id']
-            try:
-                claimed = claim_search(SFS_PROGRESS, file_id, initial_progress,
-                                       other_registries=(HYPERPARAM_PROGRESS,))
-            except SearchCapacityExceeded:
-                return _search_capacity_response(file_id)
-            if not claimed:
-                return Response({'status': 'already_running', 'error': 'Feature selection is already running. Inspect or stop the current operation.'},
-                                status=status.HTTP_409_CONFLICT)
-            
-            # Prepare paths and helpers shared by callback and thread
-            sfs_dir = os.path.join(settings.MEDIA_ROOT, 'sfs_results')
-            sfs_path = os.path.join(sfs_dir, f'{file_id}_sfs_results.json')
-
-            def sanitize_sfs(results_list):
-                return [json_record(item) for item in results_list]
-
-            def same_execution(existing):
-                recorded = existing.get('resume_basis') or {}
-                return (recorded.get('schema_version') == 2 and
-                        recorded.get('execution_id') == resume_basis.get('execution_id') and
-                        recorded.get('algorithm') == resume_basis.get('algorithm') and
-                        existing.get('selection_objective') == selection_objective and
-                        (bool(resume_basis.get('execution_id')) or recorded == resume_basis))
-
-            _last_saved_step_count = [0]  # mutable for closure
-
-            def _save_intermediate(completed_steps):
-                """Persist intermediate results to disk so they survive server restarts."""
-                try:
-                    fwd = [s for s in completed_steps if s.get('direction') == 'forward']
-                    bwd = [s for s in completed_steps if s.get('direction') == 'backward']
-                    # Compute backward remaining features from last backward step
-                    bwd_remaining = bwd[-1]['selected_features'] if bwd else []
-
-                    # Read existing data to preserve results from prior runs
-                    existing = {}
-                    if os.path.exists(sfs_path):
-                        try:
-                            with open(sfs_path, 'r', encoding='utf-8') as ef:
-                                existing = json.load(ef)
-                        except Exception:
-                            existing = {}
-
-                    if not same_execution(existing):
+                        with open(sfs_path, 'r', encoding='utf-8') as ef:
+                            existing = json.load(ef)
+                    except Exception:
                         existing = {}
-                    # Detect forward-from-backward: new forward steps but existing backward data on disk
-                    is_fwd_from_bwd = bool(fwd and not bwd and existing.get('backward'))
 
-                    intermediate = {
-                        'forward': existing.get('forward', []) if is_fwd_from_bwd else sanitize_sfs(fwd),
-                        'backward': sanitize_sfs(bwd) if bwd else existing.get('backward', []),
-                        'backward_remaining_features': bwd_remaining if bwd_remaining else existing.get('backward_remaining_features', []),
-                        'forward_from_backward': sanitize_sfs(fwd) if is_fwd_from_bwd else existing.get('forward_from_backward', []),
-                        'status': 'running',
-                        'error': None,
-                        'operation_id': failure_context['operation_id'],
-                        'task': sfs_task,
-                        'selection_objective': selection_objective,
-                        'resume_basis': resume_basis,
-                        'resume_direction_keys': {mode: ('forward_from_backward' if is_fwd_from_bwd else 'forward')
-                                                  if mode == 'forward' else 'backward' for mode in methods},
-                        'search_bases': {**existing.get('search_bases', {}), resume_basis['sha256']: resume_basis},
-                    }
-                    write_sfs_record(sfs_path, intermediate)
-                except Exception as save_err:
-                    record_failure(save_err, 'intermediate_evidence_write', failure_context)
+                if not same_execution(existing):
+                    existing = {}
+                # Detect forward-from-backward: new forward steps but existing backward data on disk
+                is_fwd_from_bwd = bool(fwd and not bwd and existing.get('backward'))
 
-            # Define status callback
-            def update_progress(status_info):
-                public_info = dict(status_info)
-                # A terminal search callback precedes candidate publication and the final save.
-                # Pollers may observe completion only after those operations finish.
-                if public_info.get('status') in ('completed', 'stopped', 'error'):
-                    public_info.update(status='running', message='Saving feature-selection evidence...')
-                public_info.update(status='running', operation_id=failure_context['operation_id'])
-                if not update_search_progress(SFS_PROGRESS, file_id, initial_progress,
-                                               failure_context['operation_id'], public_info, running_only=True):
-                    return
-                # Save intermediate results to disk after each new completed step
-                completed = status_info.get('completed_steps', [])
-                if len(completed) > _last_saved_step_count[0]:
-                    _last_saved_step_count[0] = len(completed)
-                    _save_intermediate(completed)
-                if status_info.get('status') != 'error':
-                    print(f"[SFS-Progress] {status_info.get('message', '')}")
-            
-            # Run SFS in background thread
-            def run_sfs_thread():
-                failure_stage = 'search'
-                try:
-                    results = run_sfs_with_progress(
-                        X_train=X_train,
-                        y_train=y_train,
-                        X_test=X_valid,
-                        y_test=y_valid,
-                        X_train_raw=X_train_raw,
-                        X_test_raw=X_valid_raw,
-                        methods=methods,
-                        stopping_criteria=stopping_criteria,
-                        status_callback=update_progress,
-                        cv_folds=cv_folds,
-                        initial_features=initial_features,
-                        n_jobs=n_jobs,
-                        top_k=top_k,
-                        stop_flag=initial_progress,
-                        resume_state=resume_state,
-                        task=sfs_task,
-                        validation_context=context,
-                        prediction_contract=contract,
-                        algorithm=sfs_algorithm,
-                        execution_id=train_data.get('execution_id'),
-                        failure_context=failure_context,
-                    )
-                    
-                    # Final save — merge with existing results to preserve previous runs
-                    existing_data = {}
-                    if os.path.exists(sfs_path):
-                        try:
-                            with open(sfs_path, 'r', encoding='utf-8') as ef:
-                                existing_data = json.load(ef)
-                        except Exception:
-                            existing_data = {}
+                intermediate = {
+                    'forward': existing.get('forward', []) if is_fwd_from_bwd else sanitize_sfs(fwd),
+                    'backward': sanitize_sfs(bwd) if bwd else existing.get('backward', []),
+                    'backward_remaining_features': bwd_remaining if bwd_remaining else existing.get('backward_remaining_features', []),
+                    'forward_from_backward': sanitize_sfs(fwd) if is_fwd_from_bwd else existing.get('forward_from_backward', []),
+                    'status': 'running',
+                    'error': None,
+                    'operation_id': failure_context['operation_id'],
+                    'task': sfs_task,
+                    'selection_objective': selection_objective,
+                    'resume_basis': resume_basis,
+                    'resume_direction_keys': {mode: ('forward_from_backward' if is_fwd_from_bwd else 'forward')
+                                              if mode == 'forward' else 'backward' for mode in methods},
+                    'search_bases': {**existing.get('search_bases', {}), resume_basis['sha256']: resume_basis},
+                }
+                write_sfs_record(sfs_path, intermediate)
+            except Exception as save_err:
+                record_failure(save_err, 'intermediate_evidence_write', failure_context)
 
-                    if not same_execution(existing_data):
+        # Define status callback
+        def update_progress(status_info):
+            public_info = dict(status_info)
+            # A terminal search callback precedes candidate publication and the final save.
+            # Pollers may observe completion only after those operations finish.
+            if public_info.get('status') in ('completed', 'stopped', 'error'):
+                public_info.update(status='running', message='Saving feature-selection evidence...')
+            public_info.update(status='running', operation_id=failure_context['operation_id'])
+            if not update_search_progress(SFS_PROGRESS, file_id, initial_progress,
+                                           failure_context['operation_id'], public_info, running_only=True):
+                return
+            # Save intermediate results to disk after each new completed step
+            completed = status_info.get('completed_steps', [])
+            if len(completed) > _last_saved_step_count[0]:
+                _last_saved_step_count[0] = len(completed)
+                _save_intermediate(completed)
+            if status_info.get('status') != 'error':
+                print(f"[SFS-Progress] {status_info.get('message', '')}")
+
+        # Run SFS in background thread
+        def run_sfs_thread():
+            failure_stage = 'search'
+            try:
+                results = run_sfs_with_progress(
+                    X_train=X_train,
+                    y_train=y_train,
+                    X_test=X_valid,
+                    y_test=y_valid,
+                    X_train_raw=X_train_raw,
+                    X_test_raw=X_valid_raw,
+                    methods=methods,
+                    stopping_criteria=stopping_criteria,
+                    status_callback=update_progress,
+                    cv_folds=cv_folds,
+                    initial_features=initial_features,
+                    n_jobs=n_jobs,
+                    top_k=top_k,
+                    stop_flag=initial_progress,
+                    resume_state=resume_state,
+                    task=sfs_task,
+                    validation_context=context,
+                    prediction_contract=contract,
+                    algorithm=sfs_algorithm,
+                    execution_id=train_data.get('execution_id'),
+                    failure_context=failure_context,
+                )
+
+                # Final save — merge with existing results to preserve previous runs
+                existing_data = {}
+                if os.path.exists(sfs_path):
+                    try:
+                        with open(sfs_path, 'r', encoding='utf-8') as ef:
+                            existing_data = json.load(ef)
+                    except Exception:
                         existing_data = {}
-                    new_forward = sanitize_sfs(results.get('forward', []))
-                    new_backward = sanitize_sfs(results.get('backward', []))
-                    new_backward_remaining = results.get('backward_remaining_features', [])
 
-                    # Detect forward-from-backward: new forward results AND existing backward data
-                    is_forward_from_backward = bool(new_forward and existing_data.get('backward'))
+                if not same_execution(existing_data):
+                    existing_data = {}
+                new_forward = sanitize_sfs(results.get('forward', []))
+                new_backward = sanitize_sfs(results.get('backward', []))
+                new_backward_remaining = results.get('backward_remaining_features', [])
 
-                    sfs_data = {
-                        # Preserve original forward results when this is a forward-from-backward run
-                        'forward': existing_data.get('forward', []) if is_forward_from_backward else (new_forward if new_forward else existing_data.get('forward', [])),
-                        'backward': new_backward if new_backward else existing_data.get('backward', []),
-                        'backward_remaining_features': new_backward_remaining if new_backward_remaining else existing_data.get('backward_remaining_features', []),
-                        'forward_from_backward': new_forward if is_forward_from_backward else existing_data.get('forward_from_backward', []),
-                        'status': results.get('status', 'completed'),
-                        'error': results.get('error', None),
-                        'failure': results.get('failure'),
-                        'operation_id': failure_context['operation_id'],
-                        'task': sfs_task,
-                        'selection_objective': selection_objective,
-                        'resume_basis': resume_basis,
-                        'resume_direction_keys': {mode: ('forward_from_backward' if is_forward_from_backward else 'forward')
-                                                  if mode == 'forward' else 'backward' for mode in methods},
-                        'search_bases': {**existing_data.get('search_bases', {}), resume_basis['sha256']: resume_basis},
-                    }
+                # Detect forward-from-backward: new forward results AND existing backward data
+                is_forward_from_backward = bool(new_forward and existing_data.get('backward'))
 
-                    sfs_data.update({key: results.get(key) for key in ('selection_objective', 'resume_basis', 'stopping_criteria', 'baselines', 'rejected_steps', 'change_semantics')})
+                sfs_data = {
+                    # Preserve original forward results when this is a forward-from-backward run
+                    'forward': existing_data.get('forward', []) if is_forward_from_backward else (new_forward if new_forward else existing_data.get('forward', [])),
+                    'backward': new_backward if new_backward else existing_data.get('backward', []),
+                    'backward_remaining_features': new_backward_remaining if new_backward_remaining else existing_data.get('backward_remaining_features', []),
+                    'forward_from_backward': new_forward if is_forward_from_backward else existing_data.get('forward_from_backward', []),
+                    'status': results.get('status', 'completed'),
+                    'error': results.get('error', None),
+                    'failure': results.get('failure'),
+                    'operation_id': failure_context['operation_id'],
+                    'task': sfs_task,
+                    'selection_objective': selection_objective,
+                    'resume_basis': resume_basis,
+                    'resume_direction_keys': {mode: ('forward_from_backward' if is_forward_from_backward else 'forward')
+                                              if mode == 'forward' else 'backward' for mode in methods},
+                    'search_bases': {**existing_data.get('search_bases', {}), resume_basis['sha256']: resume_basis},
+                }
 
-                    for key, value in existing_data.items():
-                        if key.endswith(('_model_path', '_execution_id')):
-                            sfs_data[key] = value
+                sfs_data.update({key: results.get(key) for key in ('selection_objective', 'resume_basis', 'stopping_criteria', 'baselines', 'rejected_steps', 'change_semantics')})
 
-                    # Save the final fitted model for each completed SFS direction
-                    # so Feature Card explainability can use it instead of the initial model.
-                    new_directions = ([('forward_from_backward' if is_forward_from_backward else 'forward')] if new_forward else []) + (['backward'] if new_backward else [])
-                    for direction_key in (() if results.get('status') == 'error' else new_directions):
-                        steps = sfs_data.get(direction_key, [])
-                        if steps:
-                            last_step = steps[-1]
-                            final_features = last_step.get('selected_features', [])
-                            valid_features = final_features
-                            if valid_features:
-                                try:
-                                    failure_stage = 'candidate_refit'
-                                    from modeling.sfs_utils import _sfs_fit, _sfs_booster_params
-                                    fit_params = _sfs_booster_params(sfs_task, 0)
-                                    adapter = _sfs_fit(sfs_algorithm, X_train[valid_features], y_train,
-                                        X_valid[valid_features], y_valid, fit_params, task=sfs_task, context=train_data.get('validation_context'))
-                                    parent_id = train_data.get('execution_id')
-                                    if parent_id:
-                                        failure_stage = 'candidate_publication'
-                                        candidate = publish_candidate(parent_id, int(file_id), adapter, valid_features,
-                                            fit_params, f'sfs_{direction_key}', adopt=False)
-                                        sfs_data[f'{direction_key}_model_path'] = candidate['model']['model_path']
-                                        sfs_data[f'{direction_key}_execution_id'] = candidate['execution_id']
-                                        sfs_data['parent_execution_id'] = parent_id
-                                    else:
-                                        # Legacy candidates receive unique paths too; no overwrite of inspected history.
-                                        import uuid
-                                        models_dir = os.path.join(settings.MEDIA_ROOT, 'models', 'legacy_candidates', str(uuid.uuid4()))
-                                        sfs_model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
-                                        adapter.save(sfs_model_path)
-                                        sfs_data[f'{direction_key}_model_path'] = os.path.relpath(sfs_model_path, settings.MEDIA_ROOT)
-                                except Exception as model_err:
-                                    sfs_data[f'{direction_key}_refit_error'] = str(model_err)
-                                    sfs_data.update(status='error', error=f'Candidate publication failed: {model_err}')
-                                    sfs_data['failure'] = record_failure(model_err, failure_stage, failure_context)
+                for key, value in existing_data.items():
+                    if key.endswith(('_model_path', '_execution_id')):
+                        sfs_data[key] = value
 
-                    # Persist resume_state if stopped (for continue later)
-                    if results.get('status') == 'stopped' and results.get('resume_state'):
-                        sfs_data['resume_state'] = results['resume_state']
-                        sfs_data['stopped_at'] = results.get('stopped_at', {})
-                    
-                    # Preserve immutable search evidence before publishing the current result.
-                    # History failure blocks completion and leaves the prior checkpoint intact.
-                    if results.get('status') != 'stopped':
-                        failure_stage = 'history_evidence_write'
-                        _archive_sfs_run(file_id, sfs_data)
-                    failure_stage = 'final_evidence_write'
-                    write_sfs_record(sfs_path, sfs_data)
-                    
-                    elapsed = round(_time.time() - sfs_start_time, 1)
+                # Save the final fitted model for each completed SFS direction
+                # so Feature Card explainability can use it instead of the initial model.
+                new_directions = ([('forward_from_backward' if is_forward_from_backward else 'forward')] if new_forward else []) + (['backward'] if new_backward else [])
+                for direction_key in (() if results.get('status') == 'error' else new_directions):
+                    steps = sfs_data.get(direction_key, [])
+                    if steps:
+                        last_step = steps[-1]
+                        final_features = last_step.get('selected_features', [])
+                        valid_features = final_features
+                        if valid_features:
+                            try:
+                                failure_stage = 'candidate_refit'
+                                from modeling.sfs_utils import _sfs_fit, _sfs_booster_params
+                                fit_params = _sfs_booster_params(sfs_task, 0)
+                                adapter = _sfs_fit(sfs_algorithm, X_train[valid_features], y_train,
+                                    X_valid[valid_features], y_valid, fit_params, task=sfs_task, context=train_data.get('validation_context'))
+                                parent_id = train_data.get('execution_id')
+                                if parent_id:
+                                    failure_stage = 'candidate_publication'
+                                    candidate = publish_candidate(parent_id, int(file_id), adapter, valid_features,
+                                        fit_params, f'sfs_{direction_key}', adopt=False)
+                                    sfs_data[f'{direction_key}_model_path'] = candidate['model']['model_path']
+                                    sfs_data[f'{direction_key}_execution_id'] = candidate['execution_id']
+                                    sfs_data['parent_execution_id'] = parent_id
+                                else:
+                                    # Legacy candidates receive unique paths too; no overwrite of inspected history.
+                                    import uuid
+                                    models_dir = os.path.join(settings.MEDIA_ROOT, 'models', 'legacy_candidates', str(uuid.uuid4()))
+                                    sfs_model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                                    adapter.save(sfs_model_path)
+                                    sfs_data[f'{direction_key}_model_path'] = os.path.relpath(sfs_model_path, settings.MEDIA_ROOT)
+                            except Exception as model_err:
+                                sfs_data[f'{direction_key}_refit_error'] = str(model_err)
+                                sfs_data.update(status='error', error=f'Candidate publication failed: {model_err}')
+                                sfs_data['failure'] = record_failure(model_err, failure_stage, failure_context)
 
-                    if sfs_data.get('status') == 'error':
-                        terminal = dict(status='error', error=sfs_data.get('error'), failure=sfs_data.get('failure'), message=sfs_data.get('error'), duration_seconds=elapsed)
-                    elif results.get('status') == 'stopped':
-                        terminal = dict(status='stopped', message='SFS stopped by user', duration_seconds=elapsed)
-                    else:
-                        terminal = dict(status='completed', message='SFS completed successfully', progress=1.0, duration_seconds=elapsed)
-                    published = update_search_progress(SFS_PROGRESS, file_id, initial_progress,
-                                                       failure_context['operation_id'], terminal)
-                    if published and terminal['status'] == 'completed':
-                        print(f"[SFS] Completed for file_id={file_id}, saved to {sfs_path}")
-                    elif published and terminal['status'] == 'stopped':
-                        print(f"[SFS] Stopped for file_id={file_id}, partial results saved to {sfs_path}")
-                    
-                except Exception as e:
-                    elapsed = round(_time.time() - sfs_start_time, 1)
-                    failure = record_failure(e, failure_stage, failure_context)
-                    update_search_progress(SFS_PROGRESS, file_id, initial_progress,
-                                           failure_context['operation_id'], {
-                                               'status': 'error', 'message': f'SFS failed: {str(e)}',
-                                               'error': str(e), 'duration_seconds': elapsed, 'failure': failure})
+                # Persist resume_state if stopped (for continue later)
+                if results.get('status') == 'stopped' and results.get('resume_state'):
+                    sfs_data['resume_state'] = results['resume_state']
+                    sfs_data['stopped_at'] = results.get('stopped_at', {})
             
-            # Start thread
-            launch_failure = launch_search_worker(SFS_PROGRESS, file_id, run_sfs_thread, failure_context,
-                                                   thread_factory=threading.Thread,
-                                                   prepare=lambda: os.makedirs(sfs_dir, exist_ok=True))
-            if launch_failure is not None:
-                return Response(launch_failure, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                # Preserve immutable search evidence before publishing the current result.
+                # History failure blocks completion and leaves the prior checkpoint intact.
+                if results.get('status') != 'stopped':
+                    failure_stage = 'history_evidence_write'
+                    _archive_sfs_run(file_id, sfs_data)
+                failure_stage = 'final_evidence_write'
+                write_sfs_record(sfs_path, sfs_data)
             
-            excluded_count = len([c for c in (excluded_features or []) if c in train_data['X_train'].columns])
-            msg = f'SFS started in background ({X_train.shape[1]} features'
-            if excluded_count > 0:
-                msg += f', {excluded_count} excluded by user'
-            msg += ')'
+                elapsed = round(_time.time() - sfs_start_time, 1)
+
+                if sfs_data.get('status') == 'error':
+                    terminal = dict(status='error', error=sfs_data.get('error'), failure=sfs_data.get('failure'), message=sfs_data.get('error'), duration_seconds=elapsed)
+                elif results.get('status') == 'stopped':
+                    terminal = dict(status='stopped', message='SFS stopped by user', duration_seconds=elapsed)
+                else:
+                    terminal = dict(status='completed', message='SFS completed successfully', progress=1.0, duration_seconds=elapsed)
+                published = update_search_progress(SFS_PROGRESS, file_id, initial_progress,
+                                                   failure_context['operation_id'], terminal)
+                if published and terminal['status'] == 'completed':
+                    print(f"[SFS] Completed for file_id={file_id}, saved to {sfs_path}")
+                elif published and terminal['status'] == 'stopped':
+                    print(f"[SFS] Stopped for file_id={file_id}, partial results saved to {sfs_path}")
             
-            return Response({
-                'status': 'started',
-                'message': msg,
-                'file_id': file_id,
-                'operation_id': failure_context['operation_id'],
-                'methods': methods,
-                'stopping_criteria': stopping_criteria,
-                'excluded_features': excluded_features or []
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            except Exception as e:
+                elapsed = round(_time.time() - sfs_start_time, 1)
+                failure = record_failure(e, failure_stage, failure_context)
+                update_search_progress(SFS_PROGRESS, file_id, initial_progress,
+                                       failure_context['operation_id'], {
+                                           'status': 'error', 'message': f'SFS failed: {str(e)}',
+                                           'error': str(e), 'duration_seconds': elapsed, 'failure': failure})
+
+        # Start thread
+        launch_failure = launch_search_worker(SFS_PROGRESS, file_id, run_sfs_thread, failure_context,
+                                               thread_factory=threading.Thread,
+                                               prepare=lambda: os.makedirs(sfs_dir, exist_ok=True))
+        if launch_failure is not None:
+            return Response(launch_failure, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        excluded_count = len([c for c in (excluded_features or []) if c in train_data['X_train'].columns])
+        msg = f'SFS started in background ({X_train.shape[1]} features'
+        if excluded_count > 0:
+            msg += f', {excluded_count} excluded by user'
+        msg += ')'
+
+        return Response({
+            'status': 'started',
+            'message': msg,
+            'file_id': file_id,
+            'operation_id': failure_context['operation_id'],
+            'methods': methods,
+            'stopping_criteria': stopping_criteria,
+            'excluded_features': excluded_features or []
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 def _search_stop_rejection(stopped, file_id):
@@ -2170,6 +2205,9 @@ class SFSStopView(APIView):
     The background thread checks stop_requested flag at each step."""
 
     def post(self, request, file_id: int, *args, **kwargs):
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_http import cancel
+            return cancel(request, file_id, "sfs")
         parameters = request.data  # Let DRF report parser/media errors before the execution boundary.
         try:
             stopped = request_search_stop(SFS_PROGRESS, file_id, parameters)
@@ -2211,6 +2249,13 @@ class SFSStatusView(APIView):
     """Get current SFS progress/status for a file_id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_http import status as durable_status
+            response = durable_status(request, file_id, "sfs")
+            if response is not None:
+                return response
+            return Response({'file_id': file_id, 'status': 'not_started', 'progress': 0.0,
+                'message': 'No durable operation has been submitted. Historical files remain available.'})
         try:
             if file_id not in SFS_PROGRESS:
                 # No in-memory progress — check if results file exists on disk
@@ -2265,326 +2310,333 @@ class HyperparamStartView(APIView):
     """
 
     def post(self, request, *args, **kwargs):
-        data = request.data
-        if not isinstance(data, dict):
-            return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_http import launch
+            return launch(request, "hpo")
+        return execute_legacy_hpo(request.data)
+
+
+def execute_legacy_hpo(data):
+    """Fixed native business entry point; no request dispatch or client lifetime."""
+    if not isinstance(data, dict):
+        return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        file_id = data.get('file_id')
+        if not file_id:
+            return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            file_id = data.get('file_id')
-            if not file_id:
-                return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            file_id = positive_file_id(file_id)
+        except ValidationError as error:
+            return Response(error.detail, status=status.HTTP_400_BAD_REQUEST)
+        # ── in-flight guard — refuse to spawn a duplicate run ──
+        current = HYPERPARAM_PROGRESS.get(file_id)
+        if current and current.get('status') == 'running':
+            return Response({
+                'error': (f'Hyperparameter tuning already running for file_id={file_id} '
+                          f"(progress={current.get('progress', 0.0):.0%}). "
+                          f'Wait for it to finish or stop it first.'),
+                'status': 'already_running'
+            }, status=status.HTTP_409_CONFLICT)
+
+        # Clamp user inputs to sane bounds.
+        param_space = data.get('param_space')
+        fixed_params = data.get('fixed_params')
+        features = data.get('features')
+        n_iter = max(2, min(int(data.get('n_iter', 40)), 500))
+        cv_folds = max(2, min(int(data.get('cv_folds', 5)), 10))
+        n_jobs = max(1, min(int(data.get('n_jobs', 1)), 32))
+        threshold = float(data.get('threshold', 0.5))
+        curve_points = max(2, min(int(data.get('validation_curve_points', 8)), 25))
+        search_method = str(data.get('search_method', 'auto')).strip().lower()
+        if search_method not in ('auto', 'grid', 'random', 'bayesian', 'optuna'):
+            search_method = 'auto'
+        grid_points_per_param = max(2, min(int(data.get('grid_points_per_param', 5)), 12))
+        # Per-param checkpoint counts from the UI Walk_Step column (optional).
+        grid_points_per_param_map = data.get('grid_points_per_param_map')
+        if not isinstance(grid_points_per_param_map, dict):
+            grid_points_per_param_map = None
+
+        # Load training data persisted by ModelingStartView.
+        train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
+        if not os.path.exists(train_data_path):
+            return Response({
+                'error': 'Training data not found. Please run modeling (and SFS) first.',
+                'status': 'error'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        train_data = load_development_data(file_id, data.get('execution_id'))
+        X_train = train_data['X_train']
+        y_train = train_data['y_train']
+        X_valid = train_data['X_valid']
+        y_valid = train_data['y_valid']
+        context = train_data.get('validation_context')
+        contract = train_data.get('prediction_contract') or {}
+        if len(contract.get('class_mapping') or []) > 2:
+            return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)
+        if context is not None:
             try:
-                file_id = positive_file_id(file_id)
-            except ValidationError as error:
-                return Response(error.detail, status=status.HTTP_400_BAD_REQUEST)
-            # ── in-flight guard — refuse to spawn a duplicate run ──
-            current = HYPERPARAM_PROGRESS.get(file_id)
-            if current and current.get('status') == 'running':
-                return Response({
-                    'error': (f'Hyperparameter tuning already running for file_id={file_id} '
-                              f"(progress={current.get('progress', 0.0):.0%}). "
-                              f'Wait for it to finish or stop it first.'),
-                    'status': 'already_running'
-                }, status=status.HTTP_409_CONFLICT)
-
-            # Clamp user inputs to sane bounds.
-            param_space = data.get('param_space')
-            fixed_params = data.get('fixed_params')
-            features = data.get('features')
-            n_iter = max(2, min(int(data.get('n_iter', 40)), 500))
-            cv_folds = max(2, min(int(data.get('cv_folds', 5)), 10))
-            n_jobs = max(1, min(int(data.get('n_jobs', 1)), 32))
-            threshold = float(data.get('threshold', 0.5))
-            curve_points = max(2, min(int(data.get('validation_curve_points', 8)), 25))
-            search_method = str(data.get('search_method', 'auto')).strip().lower()
-            if search_method not in ('auto', 'grid', 'random', 'bayesian', 'optuna'):
-                search_method = 'auto'
-            grid_points_per_param = max(2, min(int(data.get('grid_points_per_param', 5)), 12))
-            # Per-param checkpoint counts from the UI Walk_Step column (optional).
-            grid_points_per_param_map = data.get('grid_points_per_param_map')
-            if not isinstance(grid_points_per_param_map, dict):
-                grid_points_per_param_map = None
-
-            # Load training data persisted by ModelingStartView.
-            train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
-            if not os.path.exists(train_data_path):
-                return Response({
-                    'error': 'Training data not found. Please run modeling (and SFS) first.',
-                    'status': 'error'
-                }, status=status.HTTP_404_NOT_FOUND)
-
-            train_data = load_development_data(file_id, data.get('execution_id'))
-            X_train = train_data['X_train']
-            y_train = train_data['y_train']
-            X_valid = train_data['X_valid']
-            y_valid = train_data['y_valid']
-            context = train_data.get('validation_context')
-            contract = train_data.get('prediction_contract') or {}
-            if len(contract.get('class_mapping') or []) > 2:
-                return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)
-            if context is not None:
-                try:
-                    list(development_folds(context, X_train.index, y_train, cv_folds))
-                except (ValueError, KeyError) as error:
-                    return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
-            hp_task = str(train_data.get('task') or data.get('task') or 'classification').strip().lower()
-            if hp_task in ('regression', 'regressor', 'reg'):
-                hp_task = 'regression'
-            else:
-                hp_task = 'classification'
-            from modeling.tuning_evidence import resolve_tuning_objective, validate_features
-            try:
-                objective = resolve_tuning_objective(hp_task, context, data.get('primary_metric'), threshold)
-                features = validate_features(features, X_train, X_valid)
-            except (ValueError, TypeError) as error:
+                list(development_folds(context, X_train.index, y_train, cv_folds))
+            except (ValueError, KeyError) as error:
                 return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
-            primary_metric = objective['primary_metric']
-            # Prefer train-fitted imbalance weight; never score the locked outer test here
-            hp_scale_pos_weight = (
-                None if hp_task == 'regression' else train_data.get('scale_pos_weight')
-            )
-            # Resolve boosting algorithm (request → train_data → modeling status → xgboost)
-            algo_raw = data.get('algorithm') or train_data.get('algorithm')
-            if not algo_raw:
-                try:
-                    st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
-                    if os.path.exists(st_path):
-                        with open(st_path, 'r', encoding='utf-8') as sf:
-                            st = json.load(sf)
-                        algo_raw = (st.get('model') or {}).get('algorithm') or st.get('algorithm')
-                except Exception:
-                    algo_raw = None
-            hp_algorithm, algo_err = normalize_boosting_algorithm(algo_raw)
-            if algo_err:
-                return Response({'error': algo_err, 'status': 'error'}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Echo the clamped/validated space so the UI can reflect adjustments.
-            clean_space, space_warnings = validate_param_space(param_space)
-            # Sanitize the per-param checkpoint map against the validated space
-            # (known names only, each clamped to [2, 500]) so the recommendation
-            # echo matches what the search engine will actually run.
-            points_map = {}
-            if isinstance(grid_points_per_param_map, dict):
-                for _name, _cnt in grid_points_per_param_map.items():
-                    if _name in clean_space:
-                        try:
-                            points_map[_name] = max(2, min(int(_cnt), 500))
-                        except (TypeError, ValueError):
-                            pass
-            # Resolve the search method now so the start response can show the
-            # recommendation + which method will actually run.
-            recommendation = recommend_search_method(
-                clean_space, cv_folds, n_jobs, grid_points_per_param,
-                points_map=points_map or None)
-            resolved_method = recommendation['method'] if search_method == 'auto' else search_method
-
-            import time as _time
-            start_time = _time.time()
-            from modeling.async_failures import record_failure
-            failure_context = {
-                'operation': 'hyperparameter_tuning', 'operation_id': str(uuid.uuid4()),
-                'file_id': int(file_id), 'execution_id': train_data.get('execution_id'),
-            }
-            initial_progress = {
-                'status': 'running',
-                'message': 'Starting hyperparameter tuning...',
-                'progress': 0.0,
-                'completed_trials': 0,
-                'current_best': None,
-                'error': None,
-                'duration_seconds': None,
-                'stop_requested': False,
-                'operation_id': failure_context['operation_id'],
-            }
+        hp_task = str(train_data.get('task') or data.get('task') or 'classification').strip().lower()
+        if hp_task in ('regression', 'regressor', 'reg'):
+            hp_task = 'regression'
+        else:
+            hp_task = 'classification'
+        from modeling.tuning_evidence import resolve_tuning_objective, validate_features
+        try:
+            objective = resolve_tuning_objective(hp_task, context, data.get('primary_metric'), threshold)
+            features = validate_features(features, X_train, X_valid)
+        except (ValueError, TypeError) as error:
+            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+        primary_metric = objective['primary_metric']
+        # Prefer train-fitted imbalance weight; never score the locked outer test here
+        hp_scale_pos_weight = (
+            None if hp_task == 'regression' else train_data.get('scale_pos_weight')
+        )
+        # Resolve boosting algorithm (request → train_data → modeling status → xgboost)
+        algo_raw = data.get('algorithm') or train_data.get('algorithm')
+        if not algo_raw:
             try:
-                claimed = claim_search(HYPERPARAM_PROGRESS, file_id, initial_progress,
-                                       other_registries=(SFS_PROGRESS,))
-            except SearchCapacityExceeded:
-                return _search_capacity_response(file_id)
-            if not claimed:
-                return Response({'status': 'already_running', 'error': 'Hyperparameter tuning is already running. Inspect or stop the current operation.'},
-                                status=status.HTTP_409_CONFLICT)
+                st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+                if os.path.exists(st_path):
+                    with open(st_path, 'r', encoding='utf-8') as sf:
+                        st = json.load(sf)
+                    algo_raw = (st.get('model') or {}).get('algorithm') or st.get('algorithm')
+            except Exception:
+                algo_raw = None
+        hp_algorithm, algo_err = normalize_boosting_algorithm(algo_raw)
+        if algo_err:
+            return Response({'error': algo_err, 'status': 'error'}, status=status.HTTP_400_BAD_REQUEST)
 
-            hp_dir = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results')
-            hp_path = os.path.join(hp_dir, f'{file_id}_hyperparam.json')
+        # Echo the clamped/validated space so the UI can reflect adjustments.
+        clean_space, space_warnings = validate_param_space(param_space)
+        # Sanitize the per-param checkpoint map against the validated space
+        # (known names only, each clamped to [2, 500]) so the recommendation
+        # echo matches what the search engine will actually run.
+        points_map = {}
+        if isinstance(grid_points_per_param_map, dict):
+            for _name, _cnt in grid_points_per_param_map.items():
+                if _name in clean_space:
+                    try:
+                        points_map[_name] = max(2, min(int(_cnt), 500))
+                    except (TypeError, ValueError):
+                        pass
+        # Resolve the search method now so the start response can show the
+        # recommendation + which method will actually run.
+        recommendation = recommend_search_method(
+            clean_space, cv_folds, n_jobs, grid_points_per_param,
+            points_map=points_map or None)
+        resolved_method = recommendation['method'] if search_method == 'auto' else search_method
 
-            def update_progress(info):
+        import time as _time
+        start_time = _time.time()
+        from modeling.async_failures import record_failure
+        failure_context = {
+            'operation': 'hyperparameter_tuning', 'operation_id': native_operation_id(),
+            'file_id': int(file_id), 'execution_id': train_data.get('execution_id'),
+        }
+        initial_progress = {
+            'status': 'running',
+            'message': 'Starting hyperparameter tuning...',
+            'progress': 0.0,
+            'completed_trials': 0,
+            'current_best': None,
+            'error': None,
+            'duration_seconds': None,
+            'stop_requested': False,
+            'operation_id': failure_context['operation_id'],
+        }
+        try:
+            claimed = claim_search(HYPERPARAM_PROGRESS, file_id, initial_progress,
+                                   other_registries=(SFS_PROGRESS,))
+        except SearchCapacityExceeded:
+            return _search_capacity_response(file_id)
+        if not claimed:
+            return Response({'status': 'already_running', 'error': 'Hyperparameter tuning is already running. Inspect or stop the current operation.'},
+                            status=status.HTTP_409_CONFLICT)
+
+        hp_dir = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results')
+        hp_path = os.path.join(hp_dir, f'{file_id}_hyperparam.json')
+
+        def update_progress(info):
+            update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
+                                   failure_context['operation_id'], {**info, 'status': 'running'}, running_only=True)
+
+        def run_thread():
+            results = {'status': 'running'}
+            failure_stage = 'search'
+            try:
+                results = run_hyperparam_search_with_progress(
+                    X_train=X_train, y_train=y_train,
+                    X_test=X_valid, y_test=y_valid,  # modeling valid holdout (not outer test)
+                    param_space=param_space, fixed_params=fixed_params,
+                    n_iter=n_iter, cv_folds=cv_folds, n_jobs=n_jobs,
+                    primary_metric=primary_metric, threshold=threshold,
+                    validation_curve_points=curve_points, features=features,
+                    search_method=search_method, grid_points_per_param=grid_points_per_param,
+                    grid_points_per_param_map=grid_points_per_param_map,
+                    status_callback=update_progress,
+                    stop_flag=initial_progress,
+                    scale_pos_weight=hp_scale_pos_weight,
+                    early_stopping_rounds=50,
+                    task=hp_task,
+                    validation_context=train_data.get('validation_context'),
+                    algorithm=hp_algorithm,
+                    execution_id=train_data.get('execution_id'),
+                    failure_context=failure_context,
+                )
+                if results.get('status') not in ('completed', 'stopped', 'error'):
+                    raise ValueError('Tuning did not return a supported terminal state.')
+                results['operation_id'] = failure_context['operation_id']
+                # Only a completed search can publish its exact winning configuration.
+                if results.get('status') == 'completed' and not initial_progress.get('stop_requested'):
+                    try:
+                        failure_stage = 'candidate_refit'
+                        from modeling.tuning_evidence import fit_for_tuning
+                        best_params = results.get('selected_params') or {}
+                        if not best_params:
+                            raise ValueError('Completed tuning lacks an exact selected configuration.')
+                        feat_list = results.get('features') or list(X_train.columns)
+                        valid_feats = validate_features(feat_list, X_train, X_valid)
+                        Xtr, Xva = X_train[valid_feats], X_valid[valid_feats]
+                        if best_params:
+                            adapter = fit_for_tuning(
+                                hp_algorithm, Xtr, y_train, Xva, y_valid, best_params,
+                                task=hp_task, nthread=native_threads(1 if n_jobs > 1 else 0),
+                                scale_pos_weight=results.get('scale_pos_weight'),
+                                early_stopping_rounds=50, context=context,
+                            )
+                            results['refit_receipt'] = adapter.fit_receipt
+                            parent_id = train_data.get('execution_id')
+                            if parent_id:
+                                failure_stage = 'candidate_publication'
+                                published = publish_candidate(parent_id, int(file_id), adapter, list(Xtr.columns), best_params, 'hyperparameter_search', selection_evidence=results)
+                                results['refit_model_path'] = published['model']['model_path']
+                                results['execution_id'] = published['execution_id']
+                                results['parent_execution_id'] = parent_id
+                                results['adoption_status'] = published['adoption_status']
+                                results['refit_params'] = best_params
+                            else:
+                                import uuid
+                                models_dir = os.path.join(settings.MEDIA_ROOT, 'models', 'legacy_candidates', str(uuid.uuid4()))
+                                os.makedirs(models_dir, exist_ok=True)
+                                model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
+                                adapter.save(model_path)
+                                model_rel = os.path.relpath(model_path, settings.MEDIA_ROOT)
+                                results['refit_model_path'] = model_rel
+                                results['refit_params'] = best_params
+                                # Update modeling status artifact
+                                failure_stage = 'legacy_model_projection'
+                                st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+                                if os.path.exists(st_path):
+                                    with open(st_path, 'r', encoding='utf-8') as sf:
+                                        st = json.load(sf)
+                                    model_info = st.get('model') or {}
+                                    model_info['model_path'] = model_rel
+                                    model_info['algorithm'] = hp_algorithm
+                                    model_info['best_hyperparams'] = best_params
+                                    model_info['hyperparam_refit'] = True
+                                    model_info['selected_features'] = valid_feats
+                                    st['model'] = model_info
+                                    st['algorithm'] = hp_algorithm
+                                    with open(st_path, 'w', encoding='utf-8') as sf:
+                                        json.dump(st, sf, indent=2)
+                                print(f"[Hyperparam] Refit {hp_algorithm} model -> {model_path}")
+                    except Exception as refit_err:
+                        results.update(status='error', error=f'Winning configuration could not be published: {refit_err}', refit_error=str(refit_err))
+                        results['failure'] = record_failure(refit_err, failure_stage, failure_context)
+
+                elif results.get('status') == 'completed':
+                    results['status'] = 'stopped'
+
+                elapsed = round(_time.time() - start_time, 1)
+                results['duration_seconds'] = elapsed
+                safe = _hp_sanitize_json(results)
+                failure_stage = 'history_evidence_write'
+                _archive_hyperparam_run(file_id, safe)
                 update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
-                                       failure_context['operation_id'], {**info, 'status': 'running'}, running_only=True)
-
-            def run_thread():
-                results = {'status': 'running'}
-                failure_stage = 'search'
-                try:
-                    results = run_hyperparam_search_with_progress(
-                        X_train=X_train, y_train=y_train,
-                        X_test=X_valid, y_test=y_valid,  # modeling valid holdout (not outer test)
-                        param_space=param_space, fixed_params=fixed_params,
-                        n_iter=n_iter, cv_folds=cv_folds, n_jobs=n_jobs,
-                        primary_metric=primary_metric, threshold=threshold,
-                        validation_curve_points=curve_points, features=features,
-                        search_method=search_method, grid_points_per_param=grid_points_per_param,
-                        grid_points_per_param_map=grid_points_per_param_map,
-                        status_callback=update_progress,
-                        stop_flag=initial_progress,
-                        scale_pos_weight=hp_scale_pos_weight,
-                        early_stopping_rounds=50,
-                        task=hp_task,
-                        validation_context=train_data.get('validation_context'),
-                        algorithm=hp_algorithm,
-                        execution_id=train_data.get('execution_id'),
-                        failure_context=failure_context,
-                    )
-                    if results.get('status') not in ('completed', 'stopped', 'error'):
-                        raise ValueError('Tuning did not return a supported terminal state.')
-                    results['operation_id'] = failure_context['operation_id']
-                    # Only a completed search can publish its exact winning configuration.
-                    if results.get('status') == 'completed' and not initial_progress.get('stop_requested'):
+                                       failure_context['operation_id'], {'archive_path': safe['archive_path']})
+                failure_stage = 'final_evidence_write'
+                write_hyperparam_record(hp_path, safe)
+                final_status = results['status']
+                update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress, failure_context['operation_id'], {
+                    'status': final_status,
+                    'progress': 1.0 if final_status == 'completed' else initial_progress.get('progress', 0.0),
+                    'message': ('Hyperparameter tuning completed' if final_status == 'completed'
+                                else f'Hyperparameter tuning {final_status}'),
+                    'duration_seconds': elapsed,
+                    'error': results.get('error'),
+                    'failure': results.get('failure'),
+                    'archive_path': safe['archive_path'],
+                })
+                print(f"[Hyperparam] {final_status} for file_id={file_id} in {elapsed}s -> {hp_path}")
+            except Exception as e:
+                elapsed = round(_time.time() - start_time, 1)
+                failure = record_failure(e, failure_stage, failure_context)
+                results.update(status='error', error=str(e), duration_seconds=elapsed,
+                               operation_id=failure_context['operation_id'], failure=failure)
+                # A failed final replacement must preserve the preceding record.
+                # Other failures can retain their diagnostic as an atomic error result.
+                if failure_stage not in ('history_evidence_write', 'final_evidence_write'):
+                    try:
+                        safe = _hp_sanitize_json(results)
+                        _archive_hyperparam_run(file_id, safe)
+                    except Exception as save_error:
+                        storage_failure = record_failure(save_error, 'failure_history_write', failure_context)
+                        update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
+                                               failure_context['operation_id'], {'storage_failure': storage_failure})
+                    else:
+                        update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
+                                               failure_context['operation_id'], {'archive_path': safe['archive_path']})
                         try:
-                            failure_stage = 'candidate_refit'
-                            from modeling.tuning_evidence import fit_for_tuning
-                            best_params = results.get('selected_params') or {}
-                            if not best_params:
-                                raise ValueError('Completed tuning lacks an exact selected configuration.')
-                            feat_list = results.get('features') or list(X_train.columns)
-                            valid_feats = validate_features(feat_list, X_train, X_valid)
-                            Xtr, Xva = X_train[valid_feats], X_valid[valid_feats]
-                            if best_params:
-                                adapter = fit_for_tuning(
-                                    hp_algorithm, Xtr, y_train, Xva, y_valid, best_params,
-                                    task=hp_task, nthread=1 if n_jobs > 1 else 0,
-                                    scale_pos_weight=results.get('scale_pos_weight'),
-                                    early_stopping_rounds=50, context=context,
-                                )
-                                results['refit_receipt'] = adapter.fit_receipt
-                                parent_id = train_data.get('execution_id')
-                                if parent_id:
-                                    failure_stage = 'candidate_publication'
-                                    published = publish_candidate(parent_id, int(file_id), adapter, list(Xtr.columns), best_params, 'hyperparameter_search', selection_evidence=results)
-                                    results['refit_model_path'] = published['model']['model_path']
-                                    results['execution_id'] = published['execution_id']
-                                    results['parent_execution_id'] = parent_id
-                                    results['adoption_status'] = published['adoption_status']
-                                    results['refit_params'] = best_params
-                                else:
-                                    import uuid
-                                    models_dir = os.path.join(settings.MEDIA_ROOT, 'models', 'legacy_candidates', str(uuid.uuid4()))
-                                    os.makedirs(models_dir, exist_ok=True)
-                                    model_path = os.path.join(models_dir, adapter.model_filename(int(file_id)))
-                                    adapter.save(model_path)
-                                    model_rel = os.path.relpath(model_path, settings.MEDIA_ROOT)
-                                    results['refit_model_path'] = model_rel
-                                    results['refit_params'] = best_params
-                                    # Update modeling status artifact
-                                    failure_stage = 'legacy_model_projection'
-                                    st_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
-                                    if os.path.exists(st_path):
-                                        with open(st_path, 'r', encoding='utf-8') as sf:
-                                            st = json.load(sf)
-                                        model_info = st.get('model') or {}
-                                        model_info['model_path'] = model_rel
-                                        model_info['algorithm'] = hp_algorithm
-                                        model_info['best_hyperparams'] = best_params
-                                        model_info['hyperparam_refit'] = True
-                                        model_info['selected_features'] = valid_feats
-                                        st['model'] = model_info
-                                        st['algorithm'] = hp_algorithm
-                                        with open(st_path, 'w', encoding='utf-8') as sf:
-                                            json.dump(st, sf, indent=2)
-                                    print(f"[Hyperparam] Refit {hp_algorithm} model -> {model_path}")
-                        except Exception as refit_err:
-                            results.update(status='error', error=f'Winning configuration could not be published: {refit_err}', refit_error=str(refit_err))
-                            results['failure'] = record_failure(refit_err, failure_stage, failure_context)
-
-                    elif results.get('status') == 'completed':
-                        results['status'] = 'stopped'
-
-                    elapsed = round(_time.time() - start_time, 1)
-                    results['duration_seconds'] = elapsed
-                    safe = _hp_sanitize_json(results)
-                    failure_stage = 'history_evidence_write'
-                    _archive_hyperparam_run(file_id, safe)
-                    update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
-                                           failure_context['operation_id'], {'archive_path': safe['archive_path']})
-                    failure_stage = 'final_evidence_write'
-                    write_hyperparam_record(hp_path, safe)
-                    final_status = results['status']
-                    update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress, failure_context['operation_id'], {
-                        'status': final_status,
-                        'progress': 1.0 if final_status == 'completed' else initial_progress.get('progress', 0.0),
-                        'message': ('Hyperparameter tuning completed' if final_status == 'completed'
-                                    else f'Hyperparameter tuning {final_status}'),
-                        'duration_seconds': elapsed,
-                        'error': results.get('error'),
-                        'failure': results.get('failure'),
-                        'archive_path': safe['archive_path'],
-                    })
-                    print(f"[Hyperparam] {final_status} for file_id={file_id} in {elapsed}s -> {hp_path}")
-                except Exception as e:
-                    elapsed = round(_time.time() - start_time, 1)
-                    failure = record_failure(e, failure_stage, failure_context)
-                    results.update(status='error', error=str(e), duration_seconds=elapsed,
-                                   operation_id=failure_context['operation_id'], failure=failure)
-                    # A failed final replacement must preserve the preceding record.
-                    # Other failures can retain their diagnostic as an atomic error result.
-                    if failure_stage not in ('history_evidence_write', 'final_evidence_write'):
-                        try:
-                            safe = _hp_sanitize_json(results)
-                            _archive_hyperparam_run(file_id, safe)
+                            write_hyperparam_record(hp_path, safe)
                         except Exception as save_error:
-                            storage_failure = record_failure(save_error, 'failure_history_write', failure_context)
+                            storage_failure = record_failure(save_error, 'failure_evidence_write', failure_context)
                             update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
                                                    failure_context['operation_id'], {'storage_failure': storage_failure})
-                        else:
-                            update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
-                                                   failure_context['operation_id'], {'archive_path': safe['archive_path']})
-                            try:
-                                write_hyperparam_record(hp_path, safe)
-                            except Exception as save_error:
-                                storage_failure = record_failure(save_error, 'failure_evidence_write', failure_context)
-                                update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress,
-                                                       failure_context['operation_id'], {'storage_failure': storage_failure})
-                    update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress, failure_context['operation_id'], {
-                        'status': 'error', 'message': f'Hyperparameter tuning failed: {e}',
-                        'error': str(e), 'duration_seconds': elapsed,
-                        'failure': failure,
-                    })
+                update_search_progress(HYPERPARAM_PROGRESS, file_id, initial_progress, failure_context['operation_id'], {
+                    'status': 'error', 'message': f'Hyperparameter tuning failed: {e}',
+                    'error': str(e), 'duration_seconds': elapsed,
+                    'failure': failure,
+                })
 
-            launch_failure = launch_search_worker(HYPERPARAM_PROGRESS, file_id, run_thread, failure_context,
-                                                   thread_factory=threading.Thread,
-                                                   prepare=lambda: os.makedirs(hp_dir, exist_ok=True))
-            if launch_failure is not None:
-                return Response(launch_failure, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        launch_failure = launch_search_worker(HYPERPARAM_PROGRESS, file_id, run_thread, failure_context,
+                                               thread_factory=threading.Thread,
+                                               prepare=lambda: os.makedirs(hp_dir, exist_ok=True))
+        if launch_failure is not None:
+            return Response(launch_failure, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-            return Response({
-                'status': 'started',
-                'message': f'Hyperparameter tuning started in background '
-                           f'({resolved_method} search, algo={hp_algorithm}, n_jobs={n_jobs})',
-                'file_id': file_id,
-                'algorithm': hp_algorithm,
-                'param_space': clean_space,
-                'space_warnings': space_warnings,
-                'n_iter': n_iter,
-                'cv_folds': cv_folds,
-                'n_jobs': n_jobs,
-                'primary_metric': primary_metric,
-                'selection_objective': objective,
-                'parent_execution_id': train_data.get('execution_id'),
-                'operation_id': failure_context['operation_id'],
-                'validation_curve_points': curve_points,
-                'search_method': resolved_method,
-                'search_method_requested': search_method,
-                'grid_points_per_param': grid_points_per_param,
-                'grid_points_per_param_map': points_map,
-                'recommendation': recommendation,
-            }, status=status.HTTP_200_OK)
+        return Response({
+            'status': 'started',
+            'message': f'Hyperparameter tuning started in background '
+                       f'({resolved_method} search, algo={hp_algorithm}, n_jobs={n_jobs})',
+            'file_id': file_id,
+            'algorithm': hp_algorithm,
+            'param_space': clean_space,
+            'space_warnings': space_warnings,
+            'n_iter': n_iter,
+            'cv_folds': cv_folds,
+            'n_jobs': n_jobs,
+            'primary_metric': primary_metric,
+            'selection_objective': objective,
+            'parent_execution_id': train_data.get('execution_id'),
+            'operation_id': failure_context['operation_id'],
+            'validation_curve_points': curve_points,
+            'search_method': resolved_method,
+            'search_method_requested': search_method,
+            'grid_points_per_param': grid_points_per_param,
+            'grid_points_per_param_map': points_map,
+            'recommendation': recommendation,
+        }, status=status.HTTP_200_OK)
 
-        except (ValueError, TypeError, KeyError) as error:
-            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+    except (ValueError, TypeError, KeyError) as error:
+        return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
 
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -2592,6 +2644,13 @@ class HyperparamStatusView(APIView):
     """Get current hyperparameter-tuning progress/status for a file_id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_http import status as durable_status
+            response = durable_status(request, file_id, "hpo")
+            if response is not None:
+                return response
+            return Response({'file_id': file_id, 'status': 'not_started', 'progress': 0.0,
+                'message': 'No durable operation has been submitted. Historical files remain available.'})
         try:
             if file_id not in HYPERPARAM_PROGRESS:
                 hp_path = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results', f'{file_id}_hyperparam.json')
@@ -2621,6 +2680,9 @@ class HyperparamStopView(APIView):
     """Request a graceful stop of an in-flight hyperparameter-tuning run."""
 
     def post(self, request, file_id: int, *args, **kwargs):
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_http import cancel
+            return cancel(request, file_id, "hpo")
         parameters = request.data
         try:
             stopped = request_search_stop(HYPERPARAM_PROGRESS, file_id, parameters,
@@ -2648,6 +2710,11 @@ class HyperparamResultsView(APIView):
     """Return persisted hyperparameter-tuning results for a given file_id."""
 
     def get(self, request, file_id: int, *args, **kwargs):
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_http import status as durable_status
+            response = durable_status(request, file_id, "hpo")
+            if response is not None:
+                return response
         try:
             hp_path = os.path.join(settings.MEDIA_ROOT, 'hyperparam_results', f'{file_id}_hyperparam.json')
             if not os.path.exists(hp_path):
@@ -3018,114 +3085,121 @@ class ChampionPromoteView(APIView):
     """Fit the accepted native configuration as a new, assessable version."""
 
     def post(self, request, *args, **kwargs):
-        data = request.data or {}
-        if not isinstance(data, dict):
-            return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
-        file_id = data.get('file_id')
-        if file_id is None:
-            return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            file_id = int(file_id)
-        except Exception:
-            return Response({'error': 'file_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
+        if durable_legacy_enabled():
+            from execution_jobs.legacy_compatibility import launch
+            return launch(request, "champion", request.data)
+        return execute_legacy_champion(request.data)
 
-        features = data.get('features') or []
-        hyperparam = data.get('hyperparam') or data.get('hp') or {}
-        algorithm = data.get('algorithm')
-        if not data.get('execution_id'):
-            return Response({'error': 'Select an exact execution_id before accepting a candidate; latest-file fallback is prohibited.'}, status=status.HTTP_409_CONFLICT)
 
-        if not features:
-            return Response({
-                'error': 'Send the exact accepted feature list; historical per-file search results are not an acceptance declaration.',
-            }, status=status.HTTP_409_CONFLICT)
+def execute_legacy_champion(data):
+    data = data or {}
+    if not isinstance(data, dict):
+        return Response({'error': 'Request payload must be an object'}, status=status.HTTP_400_BAD_REQUEST)
+    file_id = data.get('file_id')
+    if file_id is None:
+        return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        file_id = int(file_id)
+    except Exception:
+        return Response({'error': 'file_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            status_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
-            with open(status_path, encoding='utf-8') as stream:
-                current = json.load(stream)
-            parent_id = current.get('execution_id')
-            if not parent_id:
-                return Response({'error': 'This historical model has no immutable execution. Re-run modeling under an accepted declaration before adopting a champion.'}, status=status.HTTP_409_CONFLICT)
-            if data.get('execution_id') and data['execution_id'] != parent_id:
-                return Response({'error': 'The selected execution has changed. Refresh the candidate evidence before accepting it.'}, status=status.HTTP_409_CONFLICT)
-            development = load_development_data(file_id, parent_id)
-            if not isinstance(features, list) or not all(isinstance(name, str) for name in features) or len(set(features)) != len(features):
-                raise ValueError('Accepted features must be a unique list of column names.')
-            missing = [name for name in features if name not in development['X_train']]
-            if missing:
-                raise ValueError(f'Accepted features are absent from this execution: {missing}')
-            if not isinstance(hyperparam, dict):
-                raise ValueError('Accepted hyperparameters must be an object.')
-            algorithm = algorithm or development['algorithm']
-            if algorithm != development['algorithm']:
-                raise ValueError('Changing the algorithm requires a separately evaluated candidate execution.')
-            from modeling.alt_pipelines import get_alt_adapter, is_alt_algorithm
-            if is_alt_algorithm(algorithm):
-                adapter = get_alt_adapter(algorithm).train(development['X_train'][features], development['y_train'],
-                    development['X_valid'][features], development['y_valid'], hyperparam)
-            else:
-                from modeling.booster_adapters import fit_booster
-                from modeling.declared_metric import bind_declared_metric
-                hyperparam = bind_declared_metric(hyperparam, development['prediction_contract'])
-                adapter = fit_booster(algorithm, development['X_train'][features], development['y_train'],
-                    development['X_valid'][features], development['y_valid'], hyperparam,
-                    task=development['task'], scale_pos_weight=development.get('scale_pos_weight'))
-            published = publish_candidate(parent_id, file_id, adapter, features, hyperparam, 'accepted_champion')
-            if published['adoption_status'] != 'adopted':
-                return Response({'error': 'Another execution became current while fitting. The candidate is retained; refresh before adoption.',
-                                 'candidate_execution_id': published['execution_id']}, status=status.HTTP_409_CONFLICT)
-        except (ValueError, KeyError, OSError) as error:
-            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+    features = data.get('features') or []
+    hyperparam = data.get('hyperparam') or data.get('hp') or {}
+    algorithm = data.get('algorithm')
+    if not data.get('execution_id'):
+        return Response({'error': 'Select an exact execution_id before accepting a candidate; latest-file fallback is prohibited.'}, status=status.HTTP_409_CONFLICT)
 
-        champion = {
-            'file_id': file_id,
-            'features': list(features),
-            'feature_count': len(features),
-            'hyperparam': hyperparam,
-            'algorithm': algorithm,
-            'execution_id': published['execution_id'],
-            'parent_execution_id': parent_id,
-            'model_path': published['model']['model_path'],
-            'evidence_status': 'exploratory',
-            'production_use_approved': False,
-            'promoted_at': __import__('datetime').datetime.now(
-                __import__('datetime').timezone.utc
-            ).isoformat(),
-            'ready_for_evaluation': True,
-        }
-
-        champ_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
-        os.makedirs(champ_dir, exist_ok=True)
-        champ_path = os.path.join(champ_dir, f"champion_{published['execution_id']}.json")
-        with open(champ_path, 'x', encoding='utf-8') as f:
-            json.dump(champion, f, indent=2, default=str)
-        replace_projection(champ_path, os.path.join(champ_dir, 'champion.json'))
-
-        try:
-            from modeling.crisp_dm import merge_crisp_dm
-            run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
-            if run is not None:
-                st = dict(run.state or {})
-                st['crisp_dm'] = merge_crisp_dm(st.get('crisp_dm'), {
-                    'champion': champion,
-                    'phase_status': {'modeling': 'completed'},
-                })
-                st['champion'] = champion
-                run.state = st
-                run.save(update_fields=['state', 'updated_at'])
-        except Exception as pe:
-            print(f"[Champion] PipelineRun update skipped: {pe}")
-
+    if not features:
         return Response({
-            'status': 'ok',
-            'file_id': file_id,
-            'champion': champion,
-            'execution_id': published['execution_id'],
-            'model': published['model'],
-            'path': os.path.relpath(champ_path, settings.MEDIA_ROOT),
-        })
+            'error': 'Send the exact accepted feature list; historical per-file search results are not an acceptance declaration.',
+        }, status=status.HTTP_409_CONFLICT)
 
+    try:
+        status_path = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_status.json')
+        with open(status_path, encoding='utf-8') as stream:
+            current = json.load(stream)
+        parent_id = current.get('execution_id')
+        if not parent_id:
+            return Response({'error': 'This historical model has no immutable execution. Re-run modeling under an accepted declaration before adopting a champion.'}, status=status.HTTP_409_CONFLICT)
+        if data.get('execution_id') and data['execution_id'] != parent_id:
+            return Response({'error': 'The selected execution has changed. Refresh the candidate evidence before accepting it.'}, status=status.HTTP_409_CONFLICT)
+        development = load_development_data(file_id, parent_id)
+        if not isinstance(features, list) or not all(isinstance(name, str) for name in features) or len(set(features)) != len(features):
+            raise ValueError('Accepted features must be a unique list of column names.')
+        missing = [name for name in features if name not in development['X_train']]
+        if missing:
+            raise ValueError(f'Accepted features are absent from this execution: {missing}')
+        if not isinstance(hyperparam, dict):
+            raise ValueError('Accepted hyperparameters must be an object.')
+        algorithm = algorithm or development['algorithm']
+        if algorithm != development['algorithm']:
+            raise ValueError('Changing the algorithm requires a separately evaluated candidate execution.')
+        from modeling.alt_pipelines import get_alt_adapter, is_alt_algorithm
+        if is_alt_algorithm(algorithm):
+            adapter = get_alt_adapter(algorithm).train(development['X_train'][features], development['y_train'],
+                development['X_valid'][features], development['y_valid'], hyperparam)
+        else:
+            from modeling.booster_adapters import fit_booster
+            from modeling.declared_metric import bind_declared_metric
+            hyperparam = bind_declared_metric(hyperparam, development['prediction_contract'])
+            adapter = fit_booster(algorithm, development['X_train'][features], development['y_train'],
+                development['X_valid'][features], development['y_valid'], hyperparam,
+                task=development['task'], scale_pos_weight=development.get('scale_pos_weight'))
+        published = publish_candidate(parent_id, file_id, adapter, features, hyperparam, 'accepted_champion')
+        from execution_jobs.legacy_context import active
+        if active() is None and published['adoption_status'] != 'adopted':
+            return Response({'error': 'Another execution became current while fitting. The candidate is retained; refresh before adoption.',
+                             'candidate_execution_id': published['execution_id']}, status=status.HTTP_409_CONFLICT)
+    except (ValueError, KeyError, OSError) as error:
+        return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+
+    champion = {
+        'file_id': file_id,
+        'features': list(features),
+        'feature_count': len(features),
+        'hyperparam': hyperparam,
+        'algorithm': algorithm,
+        'execution_id': published['execution_id'],
+        'parent_execution_id': parent_id,
+        'model_path': published['model']['model_path'],
+        'evidence_status': 'exploratory',
+        'production_use_approved': False,
+        'promoted_at': __import__('datetime').datetime.now(
+            __import__('datetime').timezone.utc
+        ).isoformat(),
+        'ready_for_evaluation': True,
+    }
+
+    champ_dir = os.path.join(settings.MEDIA_ROOT, 'modeling', f'{file_id}_runs')
+    os.makedirs(champ_dir, exist_ok=True)
+    champ_path = os.path.join(champ_dir, f"champion_{published['execution_id']}.json")
+    with open(champ_path, 'x', encoding='utf-8') as f:
+        json.dump(champion, f, indent=2, default=str)
+    replace_projection(champ_path, os.path.join(champ_dir, 'champion.json'))
+
+    try:
+        from modeling.crisp_dm import merge_crisp_dm
+        run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
+        if run is not None:
+            st = dict(run.state or {})
+            st['crisp_dm'] = merge_crisp_dm(st.get('crisp_dm'), {
+                'champion': champion,
+                'phase_status': {'modeling': 'completed'},
+            })
+            st['champion'] = champion
+            run.state = st
+            run.save(update_fields=['state', 'updated_at'])
+    except Exception as pe:
+        print(f"[Champion] PipelineRun update skipped: {pe}")
+
+    return Response({
+        'status': 'ok',
+        'file_id': file_id,
+        'champion': champion,
+        'execution_id': published['execution_id'],
+        'model': published['model'],
+        'path': os.path.relpath(champ_path, settings.MEDIA_ROOT),
+    })
 
 @method_decorator(csrf_exempt, name='dispatch')
 class BoosterCompareView(APIView):

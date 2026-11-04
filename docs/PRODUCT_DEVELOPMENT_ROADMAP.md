@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 9 (13.6%); in_progress: 0 (0.0%); waiting: 44 (66.7%); blocked: 7 (10.6%); done: 6 (9.1%).
+Inventory: 66 tasks; ready: 8 (12.1%); in_progress: 1 (1.5%); waiting: 44 (66.7%); blocked: 7 (10.6%); done: 6 (9.1%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -286,7 +286,7 @@ Exercise database/artifact recovery and machine-loss scenarios on the supported 
 
 ### D07-T05 — Migrate remaining legacy training, SFS and HPO execution
 
-**Priority / status:** P0 / ready. **Owner:** Platform. **Outcomes:** D07.
+**Priority / status:** P0 / in_progress. **Owner:** Platform. **Outcomes:** D07.
 
 Move remaining supported legacy training/search paths to shared durable jobs and typed launch/result interfaces.
 
@@ -295,6 +295,8 @@ Move remaining supported legacy training/search paths to shared durable jobs and
 **Acceptance:** Browser closure and worker loss preserve inspectable state and diagnostics.; Shared admission, cancellation and immutable result adoption replace remaining process-local authority.
 
 **Source / rationale:** Remaining acceptance scope from D07; existing tested foundation is reused, not rebuilt.
+
+**Packet / evidence:** P167; [Legacy execution protocol](PRIVATE_LEGACY_EXECUTION.md)
 
 ### D07-T06 — Qualify full concurrency, cancellation and failure matrix
 
@@ -2545,6 +2547,16 @@ Measure complete supported native development/search, export and scoring at admi
 **Evidence:** [Workload envelope protocol](PRIVATE_WORKLOAD_ENVELOPES.md); [P166 workload qualification](evidence/p166-qualification-2026-11-04.json); [PR #268](https://github.com/caglarsubas/auto_ml/pull/268); [Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41782352443)
 
 **Remaining:** D07-T07 is accepted for the disclosed synthetic ARM64 native numeric profile. Two fresh roots in both PR and independent main reproduce six installed training/search/export/scoring cases with exact seeded input/prediction parity, owned-service resource observations and observed recovery costs. Sampled observations are not exact peaks, throughput guarantees, customer capacity or broader legacy qualification. D07-T05 legacy migration, customer operational acceptance, full D07 and release acceptance remain separate.
+
+### P167 — Durable legacy training, SFS and HPO execution
+
+**Packet status:** in_progress. **Mapped outcomes:** D07.
+
+Move supported legacy training, feature selection and tuning onto shared durable jobs with frozen inputs, isolated native attempts, typed launch/result controls and explicit immutable candidate selection.
+
+**Evidence:** [Legacy execution protocol](PRIVATE_LEGACY_EXECUTION.md); [PR #270](https://github.com/caglarsubas/auto_ml/pull/270); [Strengthened retention contract source audit](evidence/p167-test-contract-delta.json); [Index-only qualification fixture contract](evidence/p167-upgrade-fixture-contract.json)
+
+**Remaining:** Implementation and qualification in progress. Task D07-T05 remains open until frozen inputs, shared admission/cancellation/recovery, immutable candidate publication, explicit development selection and UI/assistant integration pass exact-head PR and independent main checks. Preserve the fixed 66-task inventory and all original tests and limits. Full PostgreSQL qualification now uses the verified application image and source hashes, with only two pinned test tools in an explicit overlay. All original cases, fits, folds, branch coverage, two workers and the 900-second cap are preserved. Current-head PR and independent main qualification remain pending; local TLS/non-superuser full-suite evidence is not completion credit.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 

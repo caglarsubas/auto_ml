@@ -23,7 +23,7 @@ from deployment.evidence import parse_metadata, verify_bundle
 from deployment.reviews import digest, lock_authority
 from deployment.scoring_receipts import require_digest
 from execution_jobs.models import QueueLock, NativeJob, JobEvent
-from execution_jobs import csv_scoring, training_search, training_scoring, native_assessment
+from execution_jobs import csv_scoring, training_search, training_scoring, native_assessment, legacy_execution
 from modeling.execution_artifacts import projection_lock
 
 ACTIVE = {"running", "cancel_requested"}
@@ -52,6 +52,8 @@ class JobStopped(Exception):
 
 
 def limits(kind):
+    if kind == legacy_execution.KIND:
+        return {**LIMITS, **legacy_execution.BUDGET}
     if kind == native_assessment.KIND:
         return {**LIMITS, **native_assessment.BUDGET}
     if kind == training_scoring.KIND:
@@ -95,15 +97,30 @@ def runtime(kind=KIND):
                      "modeling/fit_receipts.py", "modeling/split_contract.py", "modeling/sfs_objective.py", "evaluation/eval_utils.py",
                      "preprocessing/purifier_contract.py", "deployment/scoring_receipts.py", "access_control/project_http.py"]:
             result["sources"][name] = hashlib.sha256((Path(settings.BASE_DIR) / name).read_bytes()).hexdigest()
+    if kind == legacy_execution.KIND:
+        result['packages'].update({p: version(p) for p in ['numpy', 'pandas', 'scipy', 'scikit-learn', 'xgboost', 'lightgbm', 'catboost', 'shap', 'djangorestframework', 'optuna', 'joblib', 'matplotlib', 'threadpoolctl']})
+        paths = []
+        for app in ('modeling', 'preprocessing', 'encoding'):
+            paths.extend(path for path in (Path(settings.BASE_DIR) / app).glob('*.py'))
+        paths.extend((Path(settings.BASE_DIR) / 'execution_jobs').glob('legacy_*.py'))
+        for path in paths:
+            name = path.relative_to(settings.BASE_DIR).as_posix()
+            result['sources'][name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        result['native_child'] = {'database': 'dummy', 'expert_code': False, 'native_threads': 1}
     return result
 
 
 @contextmanager
-def locked():
+def locked(*, write=False):
     # Development SQLite has no SELECT FOR UPDATE; use the existing cross-process
     # local projection lock. Private installations always require PostgreSQL.
     if connection.vendor == "sqlite":
         with projection_lock(0), transaction.atomic():
+            if write:
+                # New legacy mutations reserve SQLite write ownership before
+                # reading, avoiding SQLITE_BUSY_SNAPSHOT during concurrent API
+                # writes. Existing read-only paths never perform this update.
+                QueueLock.objects.filter(pk=1).update(id=1)
             QueueLock.objects.get_or_create(pk=1)
             QueueLock.objects.select_for_update().get(pk=1)
             yield
@@ -230,9 +247,11 @@ def header(file_id, bundle_id, expected_sha):
 def submit(actor, file_id, data):
     if not settings.DECLARAI_JOBS_ENABLED:
         raise JobConflict("job_service_disabled")
-    if not isinstance(data, dict) or data.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND, native_assessment.KIND}:
+    if not isinstance(data, dict) or data.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND, native_assessment.KIND, legacy_execution.KIND}:
         raise ValueError("Select a supported native job kind.")
     kind = data["kind"]
+    if kind == legacy_execution.KIND:
+        return legacy_execution.submit(actor, file_id, data)
     if kind == training_search.KIND:
         return training_search.submit(actor, file_id, data)
     if kind == training_scoring.KIND:
@@ -399,6 +418,8 @@ def execution_reference(spec, identifier, checksum):
 def recheck_execution(job):
     spec = execution_specification(job)
     execution_scope_bindings(job)
+    if spec['kind'] == legacy_execution.KIND:
+        legacy_execution.recheck(job)
     if spec["kind"] == native_assessment.KIND:
         execution_reference(spec, "protected_input_id", "assessment_sha256")
         native_assessment.recheck(job)
@@ -414,7 +435,7 @@ def recheck_execution(job):
     projects.recheck(job.authority)
     if job.source_dataset_id is not None:
         projects.recheck(job.specification["source_authority"])
-    if spec["kind"] not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND, native_assessment.KIND}:
+    if spec["kind"] not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND, native_assessment.KIND, legacy_execution.KIND}:
         raise JobConflict("job_runtime_changed")
 
 
@@ -508,7 +529,7 @@ def claim(identifier):
             close(job, "blocked", exc.code, metadata_only=True)
             return None
         if (
-            job.specification.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND, native_assessment.KIND}
+            job.specification.get("kind") not in {KIND, csv_scoring.KIND, training_search.KIND, training_scoring.KIND, native_assessment.KIND, legacy_execution.KIND}
             or job.specification.get("runtime") != runtime(job.specification.get("kind"))
             or job.specification.get("limits") != limits(job.specification.get("kind"))
         ):
@@ -682,6 +703,11 @@ def execute(identifier):
 
     try:
         check()
+        if spec['kind'] == legacy_execution.KIND:
+            from execution_jobs.legacy_process import execute as execute_legacy
+            result = execute_legacy(job, token, check)
+            finish(identifier, token, 'succeeded', result=result, deadline=deadline)
+            return
         if spec["kind"] == training_search.KIND:
             result = training_search.train(job, check)
             finish(identifier, token, "succeeded", result=result, deadline=deadline)
@@ -733,7 +759,7 @@ def execute(identifier):
     except JobConflict as exc:
         finish(identifier, token, "blocked", exc.code)
     except (ValueError, OSError, TypeError, KeyError):
-        finish(identifier, token, "blocked", "job_assessment_or_budget_invalid" if spec["kind"] == native_assessment.KIND else "job_training_or_budget_invalid" if spec["kind"] == training_search.KIND else "job_package_or_budget_invalid")
+        finish(identifier, token, "blocked", "job_assessment_or_budget_invalid" if spec["kind"] == native_assessment.KIND else "job_training_or_budget_invalid" if spec["kind"] == training_search.KIND else "job_legacy_execution_or_budget_invalid" if spec["kind"] == legacy_execution.KIND else "job_package_or_budget_invalid")
     # Unexpected/storage failures leave a leased attempt for reconciliation;
     # do not turn uncertain publication into a successful or retryable receipt.
 

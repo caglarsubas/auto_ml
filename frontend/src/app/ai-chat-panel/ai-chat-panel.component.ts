@@ -500,6 +500,12 @@ export class AiChatPanelComponent implements OnInit, OnDestroy, AfterViewChecked
   /** Build a human-readable confirmation message and trigger appropriate refreshes */
   private _handleActionResult(actionType: string, resp: any): void {
     const desc = resp.description || '';
+    if (resp.native_job_started && resp.native_job_id && resp.file_id) {
+      this.dataService.notifyLegacyJob(resp.file_id, resp.operation, resp.native_job_id);
+      this.messages.push({ role: 'assistant', timestamp: new Date(), content: `The reviewed development operation is queued. Job: ${resp.native_job_id}. Closing this browser does not stop it.` });
+      this.sharedService.triggerCheckpoint('ai_action_durable_execution');
+      return;
+    }
 
     if (actionType === 'execute_code') {
       const changes = resp.changes || {};

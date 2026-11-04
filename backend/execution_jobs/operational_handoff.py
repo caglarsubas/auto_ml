@@ -60,7 +60,7 @@ def read(actor, identifier, revision, expected=None):
         if (
             not isinstance(spec, dict) or not isinstance(spec.get("kind"), str)
             or spec["kind"] not in {service.KIND, service.csv_scoring.KIND, service.training_search.KIND,
-                                   service.training_scoring.KIND, service.native_assessment.KIND}
+                                   service.training_scoring.KIND, service.native_assessment.KIND, service.legacy_execution.KIND}
             or not isinstance(spec.get("limits"), dict)
             or type(spec["limits"].get("attempts")) is not int or spec["limits"]["attempts"] < 1
         ):

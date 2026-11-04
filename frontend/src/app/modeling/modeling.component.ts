@@ -60,6 +60,12 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   isStarting: boolean = false;
   modelingStatus: any | null = null;
   private pollingSub: Subscription | null = null;
+  private legacyJobSubscription: Subscription | null = null;
+  legacySelectionPreview: any = null;
+  legacySelectionExecution = '';
+  legacySelectionBusy = false;
+  legacySelectionError = '';
+
   isBrowser: boolean = false;
   showNulls: boolean = false;
   private plotlyReady: Promise<void> | null = null;
@@ -797,6 +803,20 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     // fields, then call the existing startSfs() method — the exact
     // code path a user's manual "Start SFS" button click takes,
     // including activeProcess registration and status polling.
+    this.legacyJobSubscription = this.dataService.legacyJobStarted$?.subscribe(event => {
+      if (event.fileId !== this.currentFileId) return;
+      const reply = { file_id: event.fileId, operation_id: event.jobId, native_job_id: event.jobId, status: 'running', job_status: 'queued' };
+      if (event.operation === 'training') {
+        this.modelingStatus = reply;
+        this.startStatusPolling();
+      } else if (event.operation === 'sfs') {
+        this.sfsRunning = true;
+        if (this.bindSearchOperation('sfs', event.fileId, reply)) this.startSfsStatusPolling();
+      } else {
+        this.hpRunning = true;
+        if (this.bindSearchOperation('hyperparam', event.fileId, reply)) this.startHyperparamStatusPolling();
+      }
+    });
     this.sharedService.sfsStartRequests$.subscribe((req) => {
       if (!req || typeof req !== 'object') return;
       if (!Array.isArray(req.methods) || req.methods.length === 0) return;
@@ -1082,7 +1102,65 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   boosterCompareLoading = false;
 
   continueToEvaluation(): void {
+    if (this.modelingStatus?.native_job_id && !this.modelingStatus?.selected_for_development) {
+      this.legacySelectionError = 'Select the exact candidate for development before evaluating it.';
+      return;
+    }
     this.sharedService.requestNavigateToEvaluation();
+  }
+
+  reviewLegacyCandidate(jobId: string): void {
+    this.legacySelectionError = '';
+    this.legacySelectionBusy = true;
+    this.dataService.getLegacySelection(jobId).pipe(finalize(() => this.legacySelectionBusy = false)).subscribe({
+      next: preview => {
+        this.legacySelectionPreview = preview;
+        this.legacySelectionExecution = preview.candidates?.[0]?.execution_id || '';
+      },
+      error: error => this.legacySelectionError = error.error?.error || error.error?.error_code || 'The exact candidate is unavailable.',
+    });
+  }
+
+  selectLegacyCandidate(): void {
+    const preview = this.legacySelectionPreview;
+    if (!preview || !this.legacySelectionExecution || this.currentFileId == null) return;
+    const fileId = this.currentFileId;
+    this.legacySelectionBusy = true;
+    this.dataService.selectLegacyCandidate(preview.job_id, preview, this.legacySelectionExecution).subscribe({
+      next: receipt => {
+        this.legacySelectionBusy = false;
+        if (!receipt.currently_selected) {
+          this.legacySelectionError = 'This receipt records an earlier selection. Refresh the current development candidate.';
+          return;
+        }
+        this.legacySelectionPreview = null;
+        this.dataService.getSelectedModelingStatus(fileId).subscribe({
+          next: reply => {
+            if (this.currentFileId !== fileId) return;
+            this.modelingStatus = reply;
+            this.sfsReady = reply.model?.sfs_ready || false;
+            this.applyTaskMetricDefaults(); this.applySfSort();
+            this.chartsDrawn = false;
+            setTimeout(() => this.tryDrawChartsIfReady(), 0);
+            this.pushModelingCheckpoint(this.modelingStatus?.native_job_id && !this.modelingStatus?.selected_for_development ? 'modeling_candidate_ready' : 'modeling_completed');
+          },
+          error: () => this.legacySelectionError = 'Selection was recorded; refresh the current model before continuing.',
+        });
+      },
+      error: error => {
+        this.legacySelectionBusy = false;
+        this.legacySelectionError = error.error?.error || error.error?.error_code || 'The source changed. Review the candidate again.';
+      },
+    });
+  }
+
+  cancelLegacyTraining(): void {
+    const jobId = this.modelingStatus?.native_job_id;
+    if (!jobId) return;
+    this.dataService.cancelLegacyJob(jobId).subscribe({
+      next: () => this.startStatusPolling(),
+      error: error => this.legacySelectionError = error.error?.error_code || 'Cancellation could not be recorded. Refresh this job.',
+    });
   }
 
   loadBoosterCompare(): void {
@@ -1592,12 +1670,14 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.sharedService.setActiveProcess(null); // clear active process
             setTimeout(() => this.tryDrawChartsIfReady(), 0);
             // Checkpoint: modeling completed
-            this.pushModelingCheckpoint('modeling_completed');
+            this.pushModelingCheckpoint(this.modelingStatus?.native_job_id && !this.modelingStatus?.selected_for_development ? 'modeling_candidate_ready' : 'modeling_completed');
           } else {
+            this.pushModelingCheckpoint('modeling_running');
             this.startStatusPolling();
           }
         },
         error: (err) => {
+          if (err.executionCancelled) { this.sharedService.setActiveProcess(null); return; }
           console.error('Failed to start modeling:', err);
           this.sharedService.setActiveProcess(null); // clear on error
         },
@@ -1642,7 +1722,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
           // Check if SFS is ready
           this.sfsReady = status?.model?.sfs_ready || false;
           const s = status?.job_status || status?.status;
-          if (s === 'completed' || s === 'error') {
+          if (s === 'completed' || s === 'error' || s === 'stopped') {
             this.stopStatusPolling();
             this.sharedService.setActiveProcess(null); // clear active process
             // Build catLabelLookup from encoding report in completed response
@@ -1659,7 +1739,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             setTimeout(() => this.tryDrawChartsIfReady(), 0);
             // Checkpoint: modeling completed (via polling)
             if (s === 'completed') {
-              this.pushModelingCheckpoint('modeling_completed');
+              this.pushModelingCheckpoint(this.modelingStatus?.native_job_id && !this.modelingStatus?.selected_for_development ? 'modeling_candidate_ready' : 'modeling_completed');
             }
           }
         },
@@ -1679,6 +1759,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.legacyJobSubscription?.unsubscribe();
     this.stopStatusPolling();
     this.stopSfsStatusPolling();
     this.stopHyperparamStatusPolling();
@@ -1904,6 +1985,8 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
       selectedAlgorithm: this.selectedAlgorithm,
       encodingPlan: this.encodingPlan,
       modelingStatus: this.slimModelingStatus(),
+      legacyJobs: this.currentFileId == null ? {} : this.dataService.legacyJobReferences?.(this.currentFileId),
+      legacyCheckpoint: this.currentFileId == null ? null : this.dataService.legacyCheckpointReference?.(this.currentFileId),
       sfsReady: this.sfsReady,
       encodingReport: this.encodingReport,
       catLabelLookup: this.catLabelLookup,
@@ -1965,6 +2048,13 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selectedAlgorithm = state.selectedAlgorithm || null;
     this.encodingPlan = state.encodingPlan || [];
     this.modelingStatus = state.modelingStatus || null;
+    if (this.currentFileId != null) {
+      this.dataService.restoreLegacyJobs?.(this.currentFileId, state.legacyJobs);
+      this.dataService.restoreLegacyCheckpoint?.(this.currentFileId, state.legacyCheckpoint);
+      for (const receipt of [state.modelingStatus, state.sfsResults, state.hpResults]) {
+        this.dataService.rememberLegacyReceipt?.(this.currentFileId, receipt);
+      }
+    }
     this.applyTaskMetricDefaults();
     this.sfsReady = state.sfsReady || false;
     this.encodingReport = state.encodingReport || [];
@@ -2097,8 +2187,9 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             this.chartsDrawn = false;
             setTimeout(() => this.tryDrawChartsIfReady(), 100);
             this.sharedService.setActiveProcess(null);
-            this.pushModelingCheckpoint('modeling_completed');
-          } else if (s === 'running') {
+            this.pushModelingCheckpoint(this.modelingStatus?.native_job_id && !this.modelingStatus?.selected_for_development ? 'modeling_candidate_ready' : 'modeling_completed');
+          } else if (['queued', 'running', 'cancel_requested'].includes(s)) {
+            this.modelingStatus = status;
             console.log('[Modeling] Resume: modeling still running, starting polling');
             this.startStatusPolling();
           } else if (s === 'error') {
@@ -3417,6 +3508,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         },
         error: (err: any) => {
           if (this.currentFileId !== fileId) return;
+          if (err.executionCancelled) { this.sfsRunning = false; this.sfsMessage = 'Execution canceled before submission.'; this.sharedService.setActiveProcess(null); return; }
           console.error('[SFS] Failed to start:', err);
           this.searchOperations.sfs = null;
           this.sfsRunning = false;
@@ -4109,6 +4201,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
         },
         error: (err: any) => {
           if (this.currentFileId !== fileId) return;
+          if (err.executionCancelled) { this.hpRunning = false; this.hpMessage = 'Execution canceled before submission.'; this.sharedService.setActiveProcess(null); return; }
           console.error('[Hyperparam] Failed to start:', err);
           this.searchOperations.hyperparam = null;
           this.hpRunning = false;

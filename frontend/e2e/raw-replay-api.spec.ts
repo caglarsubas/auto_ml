@@ -35,6 +35,7 @@ for (const task of ['classification', 'regression'] as const) {
     expect(registeredInput.status()).toBe(200);
     const registeredBytes = await registeredInput.body();
     let retainedScoring = false;
+    let retainedTraining = false;
     try {
       const preprocessed = await api.post('preprocessing/run/', {
         data: {
@@ -83,6 +84,8 @@ for (const task of ['classification', 'regression'] as const) {
       });
       expect(trained.status()).toBe(200);
       const run = await trained.json();
+      expect(run.native_job_id).toBeTruthy();
+      retainedTraining = true;
       expect(run.model.collinearity.method).toBe('centered_scaled_auxiliary_ols_v1');
       expect(run.model.collinearity.execution_id).toBe(run.execution_id);
       expect(run.model.collinearity.columns).toEqual(['x']);
@@ -409,6 +412,34 @@ for (const task of ['classification', 'regression'] as const) {
       });
       expect(oldReplay.status()).toBe(200);
       expect((await oldReplay.json()).scores).toEqual(fullScores);
+      // Search completion preserves the assessed selection until explicit adoption.
+      const selectedBefore = await api.get(`modeling/status/${fileId}/?selected=true`);
+      expect(selectedBefore.status()).toBe(200);
+      expect((await selectedBefore.json()).execution_id).toBe(child.execution_id);
+      const selectionPreview = await api.get(
+        `jobs/${acceptedTuning.native_job_id}/legacy-selection/`,
+      );
+      expect(selectionPreview.status()).toBe(200);
+      const exactSelection = await selectionPreview.json();
+      expect(
+        exactSelection.candidates.map(
+          (candidate: { execution_id: string }) => candidate.execution_id,
+        ),
+      ).toContain(tuning.execution_id);
+      const selectTuned = await api.post(`jobs/${acceptedTuning.native_job_id}/legacy-selection/`, {
+        data: {
+          request_id: randomUUID(),
+          result_sha256: exactSelection.result_sha256,
+          execution_id: tuning.execution_id,
+          expected_projection_sha256: exactSelection.expected_projection_sha256,
+        },
+      });
+      expect(selectTuned.status()).toBe(200);
+      expect(await selectTuned.json()).toMatchObject({
+        currently_selected: true,
+        review_approved: false,
+        production_use_approved: false,
+      });
       const blockedPackage = await api.get(`deployment/bundle/?file_id=${fileId}`);
       expect(blockedPackage.status()).toBe(409);
       const historical = await api.post('deployment/bundle/', {
@@ -609,8 +640,8 @@ for (const task of ['classification', 'regression'] as const) {
       }
     } finally {
       const removed = await api.delete(`declaration/${fileId}/`);
-      expect(removed.status()).toBe(retainedScoring ? 409 : 204);
-      if (retainedScoring) {
+      expect(removed.status()).toBe(retainedScoring || retainedTraining ? 409 : 204);
+      if (retainedScoring || retainedTraining) {
         expect((await removed.json()).error_code).toBe('dataset_retained_for_review');
         expect((await api.get(`declaration/${fileId}/`)).status()).toBe(200);
       }
@@ -638,6 +669,7 @@ test('real-session numeric diagnostics retain singular and excluded states throu
   expect(uploaded.status()).toBe(201);
   const fileId = (await uploaded.json()).id;
   let pipelineId: number | undefined;
+  let retainedTraining = false;
   try {
     const prepared = await api.post('preprocessing/run/', {
       data: { file_id: fileId, options: [], target_column: 'outcome' },
@@ -675,6 +707,8 @@ test('real-session numeric diagnostics retain singular and excluded states throu
     });
     expect(trained.status()).toBe(200);
     const run = await trained.json();
+    expect(run.native_job_id).toBeTruthy();
+    retainedTraining = true;
     expect(run.model.collinearity.features.x).toMatchObject({ vif: null, vif_status: 'unbounded' });
     const grouped = run.model.collinearity.grouped;
     expect(grouped).toMatchObject({ status: 'available', execution_id: run.execution_id });
@@ -762,6 +796,11 @@ test('real-session numeric diagnostics retain singular and excluded states throu
     await expect(inspect).toBeFocused();
   } finally {
     if (pipelineId) expect((await api.delete(`pipeline/${pipelineId}/`)).status()).toBe(200);
-    expect((await api.delete(`declaration/${fileId}/`)).status()).toBe(204);
+    const removed = await api.delete(`declaration/${fileId}/`);
+    expect(removed.status()).toBe(retainedTraining ? 409 : 204);
+    if (retainedTraining) {
+      expect((await removed.json()).error_code).toBe('dataset_retained_for_review');
+      expect((await api.get(`declaration/${fileId}/`)).status()).toBe(200);
+    }
   }
 });

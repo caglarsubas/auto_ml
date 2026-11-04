@@ -243,6 +243,14 @@ def prepare(actor, data):
             budget=BUDGET.copy(),
             expires_at=timezone.now() + timedelta(minutes=5),
         )
+        from execution_jobs.legacy_actions import prepare as prepare_legacy
+        try:
+            native = prepare_legacy(actor, record.file_id, record.action_type, record.payload)
+        except (ValueError, OSError, KeyError):
+            raise ApprovalError('action_native_proposal_invalid', 'The native proposal is unavailable. Check its declaration, exact source version and execution bounds.', 409) from None
+        if native is not None:
+            record.context['legacy_execution'] = native
+            record.budget['native_execution'] = native['budget']
         _actor(actor)
         if project_snapshot(actor.pk, requested["file_id"]) != project_scope:
             raise ApprovalError("project_authority_changed", "Project authority changed. Prepare the action again.", 403)
@@ -285,8 +293,15 @@ def _fresh(record):
     elif record.actor_snapshot.get('session_revision') != str(SessionAuthority.objects.filter(
         user_id=record.actor_id).values_list('revision', flat=True).first()):
         code = 'action_actor_authority_changed'
-    elif environment() != record.environment or recorded_context(record.file_id, record.action_type) != record.context:
+    elif environment() != record.environment or recorded_context(record.file_id, record.action_type) != {
+            k:v for k,v in record.context.items() if k!='legacy_execution'}:
         code = "action_approval_stale"
+    if not code and record.context.get('legacy_execution'):
+        from execution_jobs.legacy_actions import recheck as recheck_legacy
+        try:
+            recheck_legacy(record.actor, record.file_id, record.context['legacy_execution'])
+        except (ValueError, OSError, KeyError, PermissionError):
+            code = 'action_approval_stale'
     if code:
         AssistantActionApproval.objects.filter(pk=record.pk, state__in=["prepared", "approved"]).update(
             state="stale", reason_code=code, finished_at=timezone.now()
@@ -351,13 +366,17 @@ def execute(actor, data, dispatch):
             raise ApprovalError("action_approval_consumed", "This approval has already been consumed.")
         # Reservation commits before dispatch. Failed completion must not allow retry.
         try:
-            result = dispatch(
-                record.file_id,
-                record.action_type,
-                record.payload,
-                parent_span_id=record.parent_span_id or None,
-                source=record.source,
-            )
+            if record.context.get('legacy_execution'):
+                from execution_jobs.legacy_actions import dispatch as dispatch_legacy
+                result = dispatch_legacy(actor, record.file_id, record.action_type, record.context['legacy_execution'])
+            else:
+                result = dispatch(
+                    record.file_id,
+                    record.action_type,
+                    record.payload,
+                    parent_span_id=record.parent_span_id or None,
+                    source=record.source,
+                )
             if not isinstance(result, dict) or result.get("status") not in ("success", "error"):
                 raise ValueError("invalid dispatch result")
             canonical(result)

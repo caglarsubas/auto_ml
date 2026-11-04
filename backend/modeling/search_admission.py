@@ -62,6 +62,10 @@ def update_search_progress(registry, file_id, owner, operation_id, changes, *, r
             return False
         if running_only and owner.get("status") != "running":
             return False
+        from execution_jobs.legacy_context import active
+        context = active()
+        if context is not None:
+            context.progress(owner, changes)
         owner.update({**changes, "operation_id": operation_id})
         return True
 

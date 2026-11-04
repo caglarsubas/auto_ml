@@ -8,6 +8,8 @@ SHAP impact monitoring.
 
 import warnings
 import os
+from execution_jobs.legacy_context import native_threads
+
 import numpy as np
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -318,7 +320,7 @@ def run_forward_sfs(
             'subsample': 0.8,
             'colsample_bytree': 0.8,
             'seed': 42,
-            'nthread': 1 if n_jobs > 1 else 0
+            'nthread': native_threads(1 if n_jobs > 1 else 0)
         }
         
         for step in range(min(max_features, len(feature_names))):
@@ -362,7 +364,7 @@ def run_forward_sfs(
             selected_features.append(best_feature)
             remaining_features.remove(best_feature)
             
-            winner_params = {**ranking_params, 'nthread': 0}
+            winner_params = {**ranking_params, 'nthread': native_threads(0)}
             X_train_sub = X_train[selected_features]
             X_test_sub = X_test[selected_features]
             dtrain_w = xgb.DMatrix(X_train_sub, label=y_train, enable_categorical=_has_cat)
@@ -500,9 +502,9 @@ def run_backward_sfs(
             'subsample': 0.8,
             'colsample_bytree': 0.8,
             'seed': 42,
-            'nthread': 1 if n_jobs > 1 else 0
+            'nthread': native_threads(1 if n_jobs > 1 else 0)
         }
-        winner_params = {**ranking_params, 'nthread': 0}
+        winner_params = {**ranking_params, 'nthread': native_threads(0)}
         
         # Compute initial SHAP importance with all features
         dtrain_full = xgb.DMatrix(X_train, label=y_train, enable_categorical=_has_cat)
@@ -704,7 +706,7 @@ def _run_selection_step(
     if not candidates or (mode == "backward" and len(current_features) <= 1):
         return None
     subset = lambda name: current_features + [name] if mode == "forward" else [f for f in current_features if f != name]
-    params = _sfs_booster_params(task, 1 if n_jobs > 1 else 0)
+    params = _sfs_booster_params(task, native_threads(1 if n_jobs > 1 else 0))
 
     def screen(name):
         features = subset(name)

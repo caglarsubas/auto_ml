@@ -1,0 +1,8 @@
+{
+  "schema": "private_reference_archive_v1",
+  "archive_sha256": "62241b8b57b4801b677a151eb8032427dcbd787e5a8613c78f4e224906c9ead2",
+  "reference_sha256": "0fb59bdd01e5b226fc61738447669b038ce8aa3f7159b6aeb40803939ca993b3",
+  "files": 223,
+  "qualification_reconstruction_only": true,
+  "customer_release_qualified": false
+}

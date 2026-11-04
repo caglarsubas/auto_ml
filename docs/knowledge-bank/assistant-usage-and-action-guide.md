@@ -79,6 +79,31 @@ Supported action types:
   already been shown (for example a suggested feature drop or encoding choice).
 - `update_notes`: add, edit, or delete pipeline notes.
 
+## Durable native model development
+
+When the shared job service is enabled, `start_modeling`, `start_sfs` and
+`start_hyperparameter` are server-queued actions. Preparing an action binds the
+actor, exact input hashes, declaration, runtime and displayed budget. Approval
+then dispatches that exact request; browser closure does not cancel it. Repeating
+a completed approval returns its existing job receipt.
+
+For `start_modeling`, supply `processed_file` and the accepted
+`business_understanding`, or an owned `pipeline_run_id` containing that declaration.
+For SFS/HPO, select a native development candidate first, or supply its
+`source_job_id`, `source_result_sha256` and `execution_id` explicitly. Historical
+unverified fitted state cannot be used as a search input: start a new training
+version. `get_execution_job(job_id)` reads durable progress, safe failure frames,
+result hashes and candidate execution IDs after browser/session state is lost.
+Use those recorded IDs; never invent an execution or silently switch sources.
+
+The installed profile admits versioned CSVs up to 10,000 rows/256 columns and
+64 MiB, one/two candidate workers, two to five folds and two to 100 HPO trials,
+within the original shared two-active-job and 120-second attempt limits. The
+preview resolves HPO defaults and bounds before approval. An unavailable or
+stale source is a blocked proposal; do not repeat it automatically. A completed
+result is an immutable candidate, requiring explicit development selection.
+Independent review and approval for production use remain separate.
+
 ## One-Action Rule
 
 The assistant should emit at most one action block per chat turn. If a workflow

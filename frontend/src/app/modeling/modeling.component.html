@@ -570,6 +570,35 @@
     </div>
   </div>
 
+  @if (modelingStatus?.native_job_id) {
+    <section aria-label="Durable model execution" style="margin-top: 16px; padding: 16px; border: 1px solid #b8cbdc; border-radius: 6px">
+      <p role="status">Execution: {{ modelingStatus.native_state || modelingStatus.job_status }} · Job {{ modelingStatus.native_job_id }}</p>
+      @if (modelingStatus.immutable_candidate) {
+        <p>{{ modelingStatus.selected_for_development ? 'This candidate is selected for development.' : 'This immutable candidate has not changed the selected development model.' }}</p>
+        <button mat-stroked-button (click)="reviewLegacyCandidate(modelingStatus.native_job_id)" [disabled]="legacySelectionBusy">Review development selection</button>
+      } @else if (modelingStatus.native_state === 'queued' || modelingStatus.native_state === 'running') {
+        <button mat-stroked-button (click)="cancelLegacyTraining()">Cancel this training job</button>
+      }
+      @if (modelingStatus.failure) {
+        <details><summary>Execution failure diagnostics</summary><pre>{{ modelingStatus.failure | json }}</pre></details>
+      }
+    </section>
+  }
+  @if (legacySelectionError) { <p role="alert">{{ legacySelectionError }}</p> }
+  @if (legacySelectionPreview) {
+    <section aria-labelledby="legacy-selection-title" style="margin-top: 12px; padding: 16px; border: 1px solid #b8cbdc; border-radius: 6px">
+      <h3 id="legacy-selection-title">Choose the exact development candidate</h3>
+      <label for="legacy-selection-candidate">Candidate version</label>
+      <select id="legacy-selection-candidate" [(ngModel)]="legacySelectionExecution">
+        @for (candidate of legacySelectionPreview.candidates; track candidate.execution_id) {
+          <option [value]="candidate.execution_id">{{ candidate.algorithm }} · {{ candidate.features }} features · {{ candidate.execution_id }}</option>
+        }
+      </select>
+      <p>This updates development references. Independent review and production approval remain separate.</p>
+      <button mat-raised-button color="primary" (click)="selectLegacyCandidate()" [disabled]="legacySelectionBusy || !legacySelectionExecution">Confirm development selection</button>
+      <button mat-button (click)="legacySelectionPreview = null" [disabled]="legacySelectionBusy">Cancel</button>
+    </section>
+  }
   @if (modelingStatus) {
     <div style="margin-top: 16px">
       <h4>Modeling Status</h4>
@@ -3688,6 +3717,9 @@
               }
             </div>
           }
+          @if (sfsResults?.native_job_id && sfsResults?.immutable_candidate) {
+            <button mat-stroked-button (click)="reviewLegacyCandidate(sfsResults.native_job_id)" [disabled]="legacySelectionBusy">Review feature-selection candidates</button>
+          }
           <!-- Note: After SFS Results -->
           @if (
             sfsForwardResults.length > 0 ||
@@ -4262,7 +4294,10 @@
                     }
                   </div>
                 </div>
-                @if (hpResults && !hpRunning) {
+                @if (hpResults?.native_job_id && hpResults?.immutable_candidate) {
+                <button mat-stroked-button (click)="reviewLegacyCandidate(hpResults.native_job_id)" [disabled]="legacySelectionBusy">Review tuned development candidate</button>
+              }
+              @if (hpResults && !hpRunning) {
                   <button
                     (click)="restartHyperparam()"
                     style="
