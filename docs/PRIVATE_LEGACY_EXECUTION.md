@@ -43,7 +43,10 @@ The bounds admit CSVs up to 10,000 rows/256 columns/64 MiB, two active jobs,
 one/two search workers, one native thread per fitter, two to five folds and two
 to 100 HPO trials within the unchanged 120-second attempt budget. These are
 admission limits, not measured customer capacity. HPO defaults and normalization
-notes are visible in the exact proposal. The existing three-attempt recovery and
+notes are visible in the exact proposal. The HPO ceiling covers 1,000 booster
+fits, including trial CV/full fits, curve CV, the winning refit and its existing
+five-fold post-selection assessment. Other fitted transformations/calibrators
+remain under the same overall time/resource limits. The existing three-attempt recovery and
 180-second lease are unchanged.
 
 Qualification adds a separate clean installed root with 21 synthetic kernel

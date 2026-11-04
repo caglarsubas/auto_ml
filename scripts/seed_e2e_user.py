@@ -111,7 +111,7 @@ def seed_review_package(dataset, actor):
     from django.conf import settings
     from rest_framework.test import APIRequestFactory, force_authenticate
     from access_control import projects
-    from modeling.views import ModelingStartView
+    from execution_jobs.qualification_fixture import train_for_qualification
     from evaluation.views import EvaluationRunView
     from deployment.deploy_utils import build_score_bundle
 
@@ -126,15 +126,11 @@ def seed_review_package(dataset, actor):
                    'success_criteria': {'primary_metric': 'roc_auc', 'cost_matrix': {'fn_cost': 4, 'fp_cost': 1}}}
     token = projects.current_actor.set(actor.pk)
     try:
-        request = APIRequestFactory().post('/api/modeling/start/', {'file_id': dataset.pk,
+        trained = train_for_qualification(actor, {'file_id': dataset.pk,
             'processed_file': dataset.file.name, 'algorithm': 'logistic_regression',
-            'business_understanding': declaration}, format='json')
-        force_authenticate(request, actor)
-        result = ModelingStartView.as_view()(request)
-        if result.status_code != 200:
-            raise RuntimeError('Disposable review model failed to train.')
+            'business_understanding': declaration})
         request = APIRequestFactory().post('/api/evaluation/run/', {'file_id': dataset.pk,
-            'execution_id': result.data['execution_id']}, format='json')
+            'execution_id': trained['execution_id']}, format='json')
         force_authenticate(request, actor)
         result = EvaluationRunView.as_view()(request)
         if result.status_code != 200:

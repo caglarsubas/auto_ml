@@ -29,6 +29,7 @@ from access_control.models import Project,ProjectMembership,ProjectPolicy
 from declaration.models import Declaration
 from deployment.deploy_utils import score_frame
 from execution_jobs import service,csv_scoring
+from execution_jobs.qualification_fixture import train_for_qualification
 from execution_jobs.models import NativeJob
 from execution_jobs.tasks import run_native_job
 from execution_jobs.preflight import check_runtime
@@ -82,7 +83,7 @@ if value['phase']=='seed':
                                      'label_maturity':'Complete follow-up'},
                   'success_criteria':{'primary_metric':'roc_auc' if task=='classification' else 'rmse',
                                       'cost_matrix':{'fn_cost':4,'fp_cost':1}}}
-        trained=post(clients['developer'],'/api/modeling/start/',{'file_id':model.pk,'processed_file':model.file.name,
+        trained=train_for_qualification(users['developer'],{'file_id':model.pk,'processed_file':model.file.name,
                      'algorithm':'logistic_regression' if task=='classification' else 'xgboost','business_understanding':declared})
         assessed=post(clients['developer'],'/api/evaluation/run/',{'file_id':model.pk,'execution_id':trained['execution_id']})
         bundle=post(clients['developer'],'/api/deployment/bundle/',{'file_id':model.pk,'execution_id':trained['execution_id'],

@@ -181,6 +181,22 @@ def test_sfs_and_hpo_use_the_exact_native_source_and_keep_results_unselected(wor
         job.refresh_from_db()
         assert job.result_sha256 == picked.json()["result_sha256"]
 
+    # Trial CV alone understates work: a full fit per trial plus final
+    # publication/assessment push this request above 1,000 booster fits.
+    with pytest.raises(service.JobConflict, match="candidate_fit_budget"):
+        legacy.preview(
+            w.users["developer"],
+            w.file_id,
+            "hpo",
+            {
+                **source,
+                "cv_folds": 5,
+                "n_iter": 90,
+                "validation_curve_points": 16,
+                "search_method": "random",
+            },
+        )
+
 
 def test_worker_loss_requeues_with_new_lease_and_old_attempt_cannot_publish(world):
     w = world
@@ -316,10 +332,29 @@ def test_selection_stale_pointer_tamper_and_lost_ack_are_fenced(world, monkeypat
         with pytest.raises(OSError):
             selection.select(w.users["developer"], identifier, body)
     # Filesystem publication survived the rolled-back second DB transaction.
+    pending = w.clients["developer"].get(f"/api/modeling/status/{w.file_id}/", {"selected": "true"})
+    assert pending.status_code == 409 and pending.json()["error_code"] == "job_legacy_selection_pending"
     published = (w.root / "modeling" / f"{w.file_id}_status.json").read_bytes()
     retry = selection.select(w.users["developer"], identifier, body)
     assert retry["currently_selected"] and not retry["replayed"]
     assert (w.root / "modeling" / f"{w.file_id}_status.json").read_bytes() == published
+    pointer_path = w.root / "modeling" / f"{w.file_id}_status.json"
+    tampered = json.loads(published)
+    tampered["model"]["feature_count"] = 999
+    pointer_path.write_text(json.dumps(tampered))
+    refused = w.clients["developer"].get(f"/api/modeling/status/{w.file_id}/", {"selected": "true"})
+    assert refused.status_code == 409 and refused.json()["error_code"] == "job_legacy_selection_pointer_changed"
+    refused_replay = post(w.clients["developer"], endpoint, body)
+    assert (
+        refused_replay.status_code == 409
+        and refused_replay.json()["error_code"] == "job_legacy_selection_pointer_changed"
+    )
+    refused_status = w.clients["developer"].get(f"/api/modeling/status/{w.file_id}/", {"job_id": identifier})
+    assert (
+        refused_status.status_code == 409
+        and refused_status.json()["error_code"] == "job_legacy_selection_pointer_changed"
+    )
+    pointer_path.write_bytes(published)
     stale = {**body, "request_id": str(uuid.uuid4())}
     assert post(w.clients["developer"], endpoint, stale).json()["error_code"] == "job_legacy_selection_base_changed"
     member = legacy.output_root(job) / f"execution_runs/{body['execution_id']}/modeling_status.json"
@@ -497,3 +532,27 @@ def test_malformed_source_identifiers_fail_before_any_worker_or_state_read(world
     assert response.status_code == 409, response.content
     assert response.json()["error_code"] == "job_legacy_source_job_required"
     assert not NativeJob.objects.exists()
+
+
+def test_fixture_delivery_requires_explicit_disposable_installation(world, monkeypatch):
+    from execution_jobs.qualification_fixture import train_for_qualification
+
+    monkeypatch.delenv("DECLARAI_TEST_INSTALLATION", raising=False)
+    with pytest.raises(RuntimeError, match="Disposable qualification"):
+        train_for_qualification(world.users["developer"], options(world))
+    assert not NativeJob.objects.exists()
+
+
+def test_fixture_delivery_uses_real_lease_result_and_selection_before_workers_start(world, monkeypatch):
+    from execution_jobs.qualification_fixture import train_for_qualification
+
+    monkeypatch.setenv("DECLARAI_TEST_INSTALLATION", "1")
+    result = train_for_qualification(world.users["developer"], options(world))
+    job = NativeJob.objects.get()
+    assert job.state == "succeeded" and job.attempts == 1
+    assert job.result["payload"]["execution_id"] == result["execution_id"]
+    assert job.events.filter(event_type="legacy_child_started").exists()
+    assert job.events.filter(event_type="legacy_selection_completed").exists()
+    assert job.result["model_adopted"] is job.result["production_use_approved"] is False
+    selected = world.clients["developer"].get(f"/api/modeling/status/{world.file_id}/", {"selected": "true"})
+    assert selected.status_code == 200 and selected.json()["selected_for_development"] is True

@@ -30,7 +30,7 @@ BUDGET = {
     "max_native_jobs": 2,
     "native_threads": 1,
     "max_files": 256,
-    "max_candidate_fits": 1000,
+    "max_hpo_booster_fits": 1000,
 }
 FIELDS = {
     "training": {
@@ -345,16 +345,23 @@ def prepare(actor, file_id, operation, options):
                 conflict("search_method_invalid")
             options["search_method"] = recommendation["method"] if method == "auto" else method
             candidates = recommendation["grid_candidates"] if options["search_method"] == "grid" else options["n_iter"]
+            # Every trial fits each CV fold and a full development model.
+            # Curves fit CV folds only; publication adds one winning refit and
+            # the existing five-fold post-selection candidate assessment.
             fits = (
-                candidates + sum(bool(v.get("enabled")) for v in space.values()) * options["validation_curve_points"]
-            ) * options["cv_folds"] + 3
-            if candidates > 100 or fits > BUDGET["max_candidate_fits"]:
+                candidates * (options["cv_folds"] + 1)
+                + sum(bool(v.get("enabled")) for v in space.values())
+                * options["validation_curve_points"]
+                * options["cv_folds"]
+                + 6
+            )
+            if candidates > 100 or fits > BUDGET["max_hpo_booster_fits"]:
                 conflict("candidate_fit_budget")
             semantic_contract = {
                 **semantic_contract,
                 "search_budget": {
                     "candidates": candidates,
-                    "candidate_fit_upper_bound": fits,
+                    "booster_fit_upper_bound": fits,
                     "normalization_notes": warnings,
                 },
             }

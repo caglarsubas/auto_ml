@@ -105,7 +105,7 @@ def adapt(receipt, operation):
 def read_current(actor, file_id, operation, *, job_id=None, execution_id=None, selected=False):
     from django.db.models import Q
     from execution_jobs import history
-    from execution_jobs.legacy_selection import current as selected_pointer, bound_job, candidate
+    from execution_jobs.legacy_selection import current as selected_pointer, candidate, verified_pointer
 
     service.scope(actor, file_id)
     if job_id:
@@ -114,16 +114,10 @@ def read_current(actor, file_id, operation, *, job_id=None, execution_id=None, s
         job_id = str(uuid.UUID(str(job_id)))
     if selected and operation == "training":
         _, payload = selected_pointer(file_id)
-        stamp = (payload or {}).get("native_job_selection")
-        if stamp:
-            job, scopes = bound_job(actor, stamp["job_id"], stamp["result_sha256"])
+        if payload and "native_job_selection" in payload:
+            job = verified_pointer(actor, payload)
             if job.dataset_id != file_id:
                 legacy.conflict("dataset_mismatch")
-            candidate(job, stamp["execution_id"])
-            for scope in scopes:
-                from access_control import projects
-
-                projects.recheck(scope)
             return {
                 **payload,
                 "native_job_id": str(job.pk),
@@ -171,6 +165,10 @@ def read_current(actor, file_id, operation, *, job_id=None, execution_id=None, s
     reply["selected_for_development"] = (
         stamp.get("job_id") == str(job.pk) and stamp.get("result_sha256") == job.result_sha256
     )
+    if reply["selected_for_development"]:
+        verified_pointer(actor, payload)
+        if execution_id and stamp.get("execution_id") != execution_id:
+            reply["selected_for_development"] = False
     reply["selected_execution_id"] = stamp.get("execution_id") if reply["selected_for_development"] else None
     return reply
 

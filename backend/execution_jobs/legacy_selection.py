@@ -52,12 +52,54 @@ def candidate(job, execution):
     return payload, prefix
 
 
+def expected_pointer(job, execution, stamp):
+    payload, prefix = candidate(job, execution)
+    encoded = payload.get("encoded_file")
+    if encoded and not encoded.startswith(prefix):
+        member(job, encoded)
+        payload["encoded_file"] = str((legacy.output_root(job) / encoded).relative_to(Path(settings.MEDIA_ROOT)))
+    payload.update(
+        native_job_selection=stamp, selected_for_development=True, review_approved=False, production_use_approved=False
+    )
+    return payload
+
+
+def verified_pointer(actor, payload):
+    stamp = payload.get("native_job_selection")
+    if not isinstance(stamp, dict) or set(stamp) != {"job_id", "result_sha256", "request_id", "execution_id"}:
+        legacy.conflict("selection_pointer_changed")
+    try:
+        identifier = str(uuid.UUID(str(stamp["job_id"])))
+        pin = require_digest(stamp["result_sha256"])
+        str(uuid.UUID(str(stamp["request_id"])))
+    except (ValueError, TypeError):
+        legacy.conflict("selection_pointer_changed")
+    with service.locked():
+        job, scopes = bound_job(actor, identifier, pin)
+        expected = expected_pointer(job, stamp["execution_id"], stamp)
+        if digest(payload) != digest(expected):
+            legacy.conflict("selection_pointer_changed")
+        if not job.events.filter(
+            event_type="legacy_selection_completed",
+            detail__request_id=stamp["request_id"],
+            detail__receipt__result_sha256=pin,
+            detail__receipt__execution_id=stamp["execution_id"],
+        ).exists():
+            legacy.conflict("selection_pending")
+        for scope in scopes:
+            projects.recheck(scope)
+        return job
+
+
 def current(file_id):
     path = Path(settings.MEDIA_ROOT) / "modeling" / f"{file_id}_status.json"
     if not os.path.lexists(path):
         return None, None
     raw = legacy.read(path, legacy.BUDGET["max_result_bytes"])
-    return hashlib.sha256(raw).hexdigest(), json.loads(raw)
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        legacy.conflict("selection_pointer_changed")
+    return hashlib.sha256(raw).hexdigest(), payload
 
 
 def preview(actor, identifier):
@@ -123,16 +165,19 @@ def select(actor, identifier, data):
                 legacy.conflict("selection_request_reused")
             completed = next((e for e in previous if e.event_type == "legacy_selection_completed"), None)
             if completed:
+                selected = current(job.dataset_id)[1] or {}
+                completed_stamp = {
+                    "job_id": str(job.pk),
+                    "result_sha256": pin,
+                    "request_id": request_id,
+                    "execution_id": execution,
+                }
+                currently_selected = selected.get("native_job_selection") == completed_stamp
+                if currently_selected and digest(selected) != digest(expected_pointer(job, execution, completed_stamp)):
+                    legacy.conflict("selection_pointer_changed")
                 for scope in scopes:
                     projects.recheck(scope)
-                return {
-                    **completed.detail["receipt"],
-                    "replayed": True,
-                    "currently_selected": (current(job.dataset_id)[1] or {})
-                    .get("native_job_selection", {})
-                    .get("request_id")
-                    == request_id,
-                }
+                return {**completed.detail["receipt"], "replayed": True, "currently_selected": currently_selected}
             payload, prefix = candidate(job, execution)
             stamp = {"job_id": str(job.pk), "result_sha256": pin, "request_id": request_id, "execution_id": execution}
             actual, existing = current(job.dataset_id)

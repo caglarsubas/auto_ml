@@ -42,6 +42,7 @@ def main():
     from django.conf import settings
     from django.contrib.auth import get_user_model
     from django.db import connection
+    from execution_jobs.qualification_fixture import train_for_qualification
     from django.test import Client
     from execution_jobs import csv_scoring, service
     from execution_jobs.models import NativeJob
@@ -241,9 +242,8 @@ def main():
                     "cost_matrix": {"fn_cost": 4, "fp_cost": 1},
                 },
             }
-            trained = post(
-                clients["developer"],
-                "/api/modeling/start/",
+            trained = train_for_qualification(
+                users["developer"],
                 {
                     "file_id": model.pk,
                     "processed_file": model.file.name,

@@ -72,7 +72,8 @@
     @if (proposal.preview.semantic_contract?.search_budget; as search) {
       <p>
         {{ search.candidates }} search candidates; at most
-        {{ search.candidate_fit_upper_bound }} candidate fits, including curves.
+        {{ search.booster_fit_upper_bound }} booster fits, including curves and final candidate
+        assessment.
       </p>
       @for (note of search.normalization_notes; track note) {
         <p>{{ note }}</p>
