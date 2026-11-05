@@ -6,7 +6,8 @@ profile. [PR #270](https://github.com/caglarsubas/auto_ml/pull/270) and its
 passed all six checks; [receipts and artifact digests](evidence/p167-qualification-2026-11-04.json)
 retain the measured evidence. Fixed task distribution moves from 6/53/7 to
 7 done/52 open/7 blocked (10.6%/78.8%/10.6%), a 1.515 percentage-point
-increase in done. D07-T06 is next ready; full D07 and customer acceptance remain open.
+increase in done. D07-T06 is now qualified in [P168](PRIVATE_FAILURE_MATRIX.md); full D07 and
+customer acceptance remain open.
 
 The migration reuses existing registered native fitters, declarations, fold-local
 preparation, search objectives and immutable execution packages. Shared durable

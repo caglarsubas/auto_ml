@@ -1,8 +1,13 @@
 # D07-T06 — Concurrency, cancellation and failure qualification
 
-P168 is in progress. No D07-T06 acceptance or new completion credit is claimed
-until the exact implementation, independent main, artifact inventory and
-canonical acceptance publication pass their gates.
+P168 closes D07-T06 on the disclosed synthetic Ubuntu 24.04 ARM64 profile.
+[PR #273](https://github.com/caglarsubas/auto_ml/pull/273) and its
+[independent automatic main run](https://github.com/caglarsubas/auto_ml/actions/runs/42005490645)
+passed all six checks and strict source/case/artifact audits. The
+[qualification receipt](evidence/p168-qualification-2026-11-05.json) retains
+measured evidence. Fixed task counts move from 7/52/7 to 8 done/51 open/7
+blocked (12.1%/77.3%/10.6%): done +1.515 percentage points. Full D07, expert
+code, P162's independent P1 evaluation and customer/release acceptance remain separate.
 
 The matrix covers package verification/scoring, native development training,
 candidate scoring, protected assessment and legacy training/SFS/HPO/refits.
@@ -82,3 +87,9 @@ stale-list defect exposed by the reordered original suite. The declaration view
 now uses the framework's fresh queryset clone, preserving project filters. An
 additive regression reproduces the old failure and checks new uploads, other
 projects and immediate membership revocation. No original assertion changes.
+
+The implementation correction PR and independent main each pass 7,738 native cases with
+six unchanged skips under the 900-second cap, 809 unchanged RI cases, 731
+frontend unit tests and 48 browser cases. Each separately verifies 135 family
+boundaries, the installed 21-case kernel matrix, both real worker-loss paths
+and one-winner concurrent selection.
