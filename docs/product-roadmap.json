@@ -2063,6 +2063,11 @@
       "date": "2026-11-05",
       "packet": "P168",
       "change": "Retain PR272 implementation evidence and failed main41977718401 without task credit. Qualify source-bound whole-file duration ordering under the unchanged two-worker loadfile and900-second caps.311 original sources are byte-identical; one observer append-only hook preserves every original body. Add one ordering regression; original scientific cases/fits/folds/skips stay unchanged."
+    },
+    {
+      "date": "2026-11-05",
+      "packet": "P168",
+      "change": "Retain PR273 run41989266789: full7737 cases completed839.559s, but an unchanged declaration-list assertion failed. Fix the cached class-level queryset through framework cloning; preserve project filtering and every original test body. Add one upload/scoping/revocation regression with old-method failure and54 targeted passing cases. Fresh native count7738; no task credit before all gates."
     }
   ],
   "implementation_packets": [
@@ -5035,7 +5040,7 @@
         "[Finite failure-matrix contract](evidence/p168-matrix-contract.json)",
         "[312-source preservation baseline](evidence/p168-source-preservation.json)"
       ],
-      "remaining": "PR #272 merged after all-six checks and strict audit (native 7736 cases, six skips, 839.209s). Its independent main completed all7736 cases with zero failures/six skips in897.587s, but process finalization exceeded the unchanged900s cap; no acceptance credit. An append-only observer hook now reorders intact loadfile groups by source-bound timings, preserving two workers, all original assertions/fits/folds/skips, and311 byte-identical source files plus unchanged original observer bodies. One additive ordering regression brings native inventory to7737. Fresh all-six correction PR and independent main qualification and acceptance publication remain required.",
+      "remaining": "Qualification remains open. PR272 merged, but main41977718401 exceeded its unchanged900s process cap after all7736 cases completed. PR273 whole-file ordering finished7737 cases in839.559s but exposed one original stale declaration-list assertion. The view now clones a fresh queryset while preserving all project filters; a new before/after regression verifies upload visibility and revocation.311 sources remain byte-identical plus one append-only observer hook; every original test body/fold/fit/skip and all limits remain. Fresh inventory7738 includes two additive non-scientific regressions. All-six exact-head correction PR and independent-main audits plus acceptance publication are still required; counts remain7/52/7.",
       "description": "Qualify the distinct execution families against shared admission, cancellation, authority, lease, publication, recovery and concurrent-selection boundaries without changing scientific workloads or test limits."
     }
   ],

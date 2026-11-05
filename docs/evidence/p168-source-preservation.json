@@ -315,5 +315,5 @@
     "frontend/src/app/training-launch/training-launch.component.spec.ts": "f556eda47ed8ce050d8edba98b8ee51093d92cbc67f7da3230169ca76f05c7a5",
     "frontend/src/app/utils/download-blob.spec.ts": "b9d19ddeea2b07b89e87c6b2c6fbc68165b9c873f243ce76c1cb18ffe56a702c"
   },
-  "policy": "Baseline pins remain immutable.311 previous sources are byte-identical; the PostgreSQL observer only appends the source-bound file-ordering hook described in p168-ordering-contract.json. Every original observer body and every original test/assertion/fit/fold remains unchanged. Four matrix/readiness tests and one ordering regression are additive."
+  "policy": "Baseline pins remain immutable.311 previous sources are byte-identical; the PostgreSQL observer only appends the source-bound file-ordering hook described in p168-ordering-contract.json. Every original observer body and every original test/assertion/fit/fold remains unchanged. Four matrix/readiness tests and one ordering regression are additive. A further additive declaration-list freshness regression checks legacy upload visibility and current governed authority."
 }

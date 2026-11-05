@@ -75,4 +75,10 @@ inheriting old timings. A new regression checks every node, group and completion
 flag is retained; XML coverage, threshold, sampling and all other limits remain.
 The timing source run completed all 7,736 cases with six skips, but exceeded the
 controller deadline during shutdown. It remains failed and supplies ordering
-observations only. Fresh qualification now contains 7,737 native cases.
+observations only. Fresh qualification now contains 7,738 native cases.
+
+The [listing correction](evidence/p168-listing-contract.json) addresses a real
+stale-list defect exposed by the reordered original suite. The declaration view
+now uses the framework's fresh queryset clone, preserving project filters. An
+additive regression reproduces the old failure and checks new uploads, other
+projects and immediate membership revocation. No original assertion changes.

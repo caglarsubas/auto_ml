@@ -97,7 +97,8 @@
     "readiness_admission_before_hook_only": true
   },
   "file_ordering_contract": "docs/evidence/p168-ordering-contract.json",
-  "additional_cases": 5,
+  "additional_cases": 6,
   "existing_test_sources_byte_identical": 311,
-  "existing_observer_append_only": "backend/tests/postgresql_parallel.py"
+  "existing_observer_append_only": "backend/tests/postgresql_parallel.py",
+  "listing_freshness_contract": "docs/evidence/p168-listing-contract.json"
 }

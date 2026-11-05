@@ -22,10 +22,11 @@
   "byte_identical": 311,
   "original_observer_bodies_unchanged": true,
   "new_regression_cases": 1,
-  "native_cases": 7737,
-  "pull_request_backend_cases": 7592,
+  "native_cases": 7738,
+  "pull_request_backend_cases": 7593,
   "workers": 2,
   "worker_restarts": 0,
   "native_process_cap_seconds": 900,
-  "notes": "Reorders complete file work units only. Existing LoadFileScheduling sends exact original per-worker collection indexes. Timings come from a failed qualification and convey no acceptance. New or changed sources run early without stale duration claims; all source pins and actual order are retained."
+  "notes": "Reorders complete file work units only. Existing LoadFileScheduling sends exact original per-worker collection indexes. Timings come from a failed qualification and convey no acceptance. New or changed sources run early without stale duration claims; all source pins and actual order are retained.",
+  "additional_listing_regression": 1
 }
