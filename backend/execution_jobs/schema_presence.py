@@ -9,12 +9,66 @@ this check.
 """
 
 import json
+import pickle
 
 from django.apps import apps
+from django.conf import settings
 from django.db import connection
-from django.db.models import ForeignKey, UniqueConstraint
+from django.db import connection as model_connection
+from django.db.models import ForeignKey, Model, UniqueConstraint
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.recorder import MigrationRecorder
+from django.db.migrations.state import ModelState, ProjectState
+
+
+_migration_loader = MigrationLoader
+_rendered_declarations = None
+
+
+def _declaration_models(state):
+    """Reuse only rendering of identical, freshly loaded migration declarations.
+
+    No database state, required runtime columns or resulting contract is cached.
+    Every call still loads the graph, checks replacements and revalidates every
+    rendered field. Pre-rendered/custom states take the original rendering path.
+    """
+    global _rendered_declarations
+    eligible = (MigrationLoader is _migration_loader and type(state) is ProjectState
+                and "apps" not in state.__dict__
+                and settings.DEFAULT_AUTO_FIELD in {"django.db.models.AutoField", "django.db.models.BigAutoField",
+                                                    "django.db.models.SmallAutoField"}
+                and all(type(model) is ModelState and model.bases == (Model,)
+                        and all(type(field).__module__.startswith("django.db.models.fields")
+                                for field in model.fields.values())
+                        for model in state.models.values()))
+    # StateApps also incorporates unmigrated runtime models. Keep that less
+    # common profile uncached instead of omitting any of its dependencies.
+    eligible = eligible and not any(list(apps.get_app_config(label).get_models()) for label in state.real_apps)
+    key = None
+    if eligible:
+        try:
+            # Bytes are an equality key for trusted in-process declarations,
+            # never loaded/deserialized and never accepted from an artifact.
+            swaps = {model.options["swappable"]: getattr(settings, model.options["swappable"], None)
+                     for model in state.models.values() if model.options.get("swappable")}
+            # Rendering supplies implicit M2M IDs and truncates implicit table
+            # names using these defaults. Backend operations here read no SQL.
+            key = pickle.dumps((state.models, sorted(state.real_apps), swaps, settings.DEFAULT_AUTO_FIELD,
+                                model_connection.ops.max_name_length()), protocol=5)
+            if len(key) > 1024 * 1024:
+                key = None
+        except (TypeError, ValueError, AttributeError, pickle.PickleError):
+            key = None
+    cached = _rendered_declarations
+    if key is not None and cached is not None and cached[0] == key:
+        rendered = cached[1]
+    else:
+        rendered = state.apps
+        if key is not None:
+            # One atomic replacement bounds retention and avoids cross-key
+            # pairing when independent requests render concurrently.
+            _rendered_declarations = (key, rendered)
+    return rendered.get_models(include_auto_created=True)
 
 
 class SchemaMismatch(Exception):
@@ -37,7 +91,7 @@ def required_storage_contract():
     loader = MigrationLoader(None)
     if loader.replacements:
         raise SchemaMismatch
-    models = [m for m in loader.project_state().apps.get_models(include_auto_created=True)
+    models = [m for m in _declaration_models(loader.project_state())
               if m._meta.managed and not m._meta.proxy]
     models.append(MigrationRecorder.Migration)
     expected = {}

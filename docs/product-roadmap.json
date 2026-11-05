@@ -782,7 +782,9 @@
         "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41875398757)",
         "[P168 failure-matrix qualification](evidence/p168-qualification-2026-11-05.json)",
         "[PR #273](https://github.com/caglarsubas/auto_ml/pull/273)",
-        "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42005490645)"
+        "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42005490645)",
+        "[Fresh schema evidence and rendering reuse](PRIVATE_SCHEMA_TEMPLATE.md)",
+        "[P169 source and local qualification contract](evidence/p169-schema-template-contract.json)"
       ],
       "progress": "P168 / PR #273 closes D07-T06 on the synthetic Ubuntu 24.04 ARM64 profile. Nine families pass 135 boundary combinations; real native-prefork and legacy parent/child loss recover under natural 180-second leases, and concurrent HTTPS development selection yields one winner and one stale refusal. Source-bound whole-file duration ordering preserves every collected node and file group. Declaration lists use fresh querysets and retain current project authorization. Original scientific cases, 21 installed kernel cases, two workers and all fixed limits remain. Fixed 66-task progress: done 7 to 8 (10.6% to 12.1%, +1.515 percentage points), open 52 to 51, blocked 7 unchanged. D07-T08 still requires named customer/operator/environment inputs and D06-T03 prerequisites. D07-T09 / P162 is independent P1 work. Full D07 and customer/release acceptance remain open."
     },
@@ -2076,6 +2078,10 @@
       "date": "2026-11-05",
       "packet": "P168",
       "change": "Accept D07-T06 after exact-head all-six PR checks, guarded merge and independent automatic main artifact audit. Preserve 311 byte-identical prior sources and every original observer body through one append-only ordering hook; all original assertions/fits/folds/cases/skips and fixed limits remain. Qualify 135 family boundaries, actual worker/child loss, natural-lease coordinated restore and simultaneous HTTPS selection. Fixed 66 tasks: 8 done / 51 open / 7 blocked (12.1% / 77.3% / 10.6%); done +1.515 percentage points. Full D07, P162 P1 evaluation and customer/release acceptance remain separate."
+    },
+    {
+      "date": "2026-11-05",
+      "change": "P169 reuses only identical fresh migration-model rendering; all live schema, authority and runtime evidence remains fresh. Retain publication-main42021620253 as failed; preserve fixed66-task8/51/7 counts and every original qualification source/case/budget. Exact PR/main receipts remain separate from local focused584-case evidence."
     }
   ],
   "implementation_packets": [
@@ -5053,6 +5059,22 @@
       ],
       "remaining": "D07-T06 is accepted on the disclosed synthetic ARM64 profile after all-six exact-head PR and independent main qualification. All 135 family/boundary combinations, original scientific and RI inventories, 21 installed kernel cases, mixed-family admission, actual native-prefork and legacy-child loss, natural-lease restore and installed HTTPS selection race pass. Customer operational acceptance, D06-T03 prerequisites, P162's independent P1 read evaluation, expert code, full D07 and release remain separate.",
       "description": "Qualify the distinct execution families against shared admission, cancellation, authority, lease, publication, recovery and concurrent-selection boundaries without changing scientific workloads or test limits."
+    },
+    {
+      "id": "P169",
+      "kind": "product_implementation",
+      "title": "Fresh schema evidence with bounded migration-model rendering reuse",
+      "items": [
+        "D07"
+      ],
+      "owner": "Platform",
+      "status": "tested",
+      "description": "Remove repeated rendering of identical freshly loaded migration declarations; preserve every live preflight check and original workload after a publication-main900-second finalization timeout. Local focused Linux schema/matrix tests pass; exact-run CI receipts govern delivery qualification.",
+      "evidence": [
+        "[Schema rendering and evidence boundaries](PRIVATE_SCHEMA_TEMPLATE.md)",
+        "[Source preservation and local qualification contract](evidence/p169-schema-template-contract.json)"
+      ],
+      "remaining": "Every original native/RI/source/installed/coverage gate remains mandatory in exact-head PR and independent automatic main qualification. The superseded incomplete-key candidate cannot supply acceptance. Local tests and component timings do not qualify a failed run, full D07, expert code, release or customer acceptance. No additional task completion credit."
     }
   ],
   "release_qualification": {
