@@ -2568,7 +2568,7 @@ Qualify the distinct execution families against shared admission, cancellation, 
 
 **Evidence:** [Failure-matrix qualification](PRIVATE_FAILURE_MATRIX.md); [Finite failure-matrix contract](evidence/p168-matrix-contract.json); [312-source preservation baseline](evidence/p168-source-preservation.json)
 
-**Remaining:** Implementation, exact-head CI, source/inventory audit, independent main and acceptance publication remain pending. Task distribution remains 7 done / 52 open / 7 blocked across the fixed 66 tasks.
+**Remaining:** Qualification remains in progress. The first recovery fixture composition was corrected without changing two-slot limits or original assertions. The corrected installed clean/recovery/upgrade, actual worker-loss and concurrent-selection drills pass, but its full native run timed out at the unchanged 900 seconds after 7,734 of 7,736 cases. Two independent work units preserve every new boundary, assertion and scientific operation; the readiness hook starts after its unchanged admission to support cold processes. All 312 historical test/workflow sources remain byte-identical. Exact-head all-six PR, guarded merge, independent main audit and acceptance publication are still required; no new task credit.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 

@@ -17,7 +17,11 @@ The executable [matrix contract](evidence/p168-matrix-contract.json) requires
 those combinations and child readiness; all [312 prior test/workflow
 sources](evidence/p168-source-preservation.json) stay byte-identical. Existing
 changed-input, protected-access, broker-recovery and scientific assertions must
-also pass in the complete native suite. A test name or shared helper alone is
+also pass in the complete native suite. The four new test bodies run in two
+independent files so the unchanged loadfile scheduler can keep both workers
+occupied. Readiness performs the same admission before installing its child
+subprocess hook, keeping unrelated cold library discovery outside the hook.
+No historical source, case, assertion, fit, fold or limit changes. A test name or shared helper alone is
 not qualification evidence.
 
 Publication revalidates runtime and resource limits after authority checks,

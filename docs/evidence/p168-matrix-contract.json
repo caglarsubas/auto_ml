@@ -79,5 +79,21 @@
   "customer_accepted": false,
   "installed_native_loss_reuses_original_orphan": true,
   "original_recovery_require_assertions": 43,
-  "original_legacy_require_assertions": 17
+  "original_legacy_require_assertions": 17,
+  "additive_test_files": [
+    "backend/tests/unit/test_d07_failure_matrix.py",
+    "backend/tests/unit/test_d07_failure_matrix_legacy.py"
+  ],
+  "test_body_preserving_schedule": "Two independent two-case files use the unchanged two-worker loadfile scheduler. Three test bodies are identical; readiness performs unchanged admission before installing its subprocess hook, avoiding unrelated cold library discovery. Every assertion, call, fit/fold and limit is retained.",
+  "matrix_test_body_baseline": {
+    "commit": "5796994c1eb34716f2a504c758c870a257437d0c",
+    "path": "backend/tests/unit/test_d07_failure_matrix.py",
+    "sha256_by_function": {
+      "test_package_and_csv_family_failure_matrix": "55af68824a3f89e2a6fafcaf16a63f57fccd1ec03f4f0a8304503dc1770a7253",
+      "test_native_and_protected_family_failure_matrix": "63d0bcd98918ed83a4c700899ba8637cd92dd46054e5277d8d81068fe21f9a84",
+      "test_legacy_operation_failure_matrix": "4549fc4d956399adf9737eb4a3eebc6e8142833edb03a8b8193aba3416ca46a1",
+      "test_child_does_not_announce_readiness_before_model_handlers_import": "b1627781c02d370d2bcc5fdb3e218b7ee14e7af1a412a57c1d7d97621be5d854"
+    },
+    "readiness_admission_before_hook_only": true
+  }
 }

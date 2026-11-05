@@ -9,7 +9,6 @@ import copy
 import hashlib
 import json
 import os
-import subprocess
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -26,13 +25,12 @@ from django.utils import timezone
 from access_control import projects
 from access_control.models import ProjectMembership
 from declaration.models import Declaration
-from execution_jobs import service, legacy_execution as legacy, training_scoring
+from execution_jobs import service, training_scoring
 from execution_jobs.models import NativeJob
 from tests.unit import test_durable_training_search as native
 from tests.unit import test_native_protected_assessment as protected
 from tests.unit.test_package_reviews import packaged, world as package_world  # noqa: F401
 from tests.unit.test_durable_training_search import world as native_world  # noqa: F401
-from tests.unit.test_durable_legacy_execution import options as legacy_options
 
 pytestmark = [pytest.mark.unit, pytest.mark.auth_boundary, pytest.mark.django_db(transaction=True)]
 FAULTS = ("queued_cancel", "running_cancel", "duplicate_claim", "expired_request", "stale_token",
@@ -184,7 +182,7 @@ def report(name, families, observations=None):
         root = Path(settings.BASE_DIR).parent
         destination = root / "test-reports/postgresql/failure-matrix"
         destination.mkdir(parents=True, exist_ok=True)
-        paths = [Path(__file__), Path(service.__file__)]
+        paths = [Path(__file__), Path(__file__).with_name("test_d07_failure_matrix_legacy.py"), Path(service.__file__)]
         value = {"schema": "private_job_failure_matrix_v1", "group": name, "families": families,
                  "observations": observations or {},
                  "case_count": sum(map(len, families.values())), "synthetic_only": True,
@@ -277,81 +275,3 @@ def test_native_and_protected_family_failure_matrix(native_world, monkeypatch):
     report("native", records, {"mixed_family_contention": {
         "families": [name for name, _, _ in factories], "simultaneous_claims": 3, "claimed": sum(claims),
         "pending": claims.count(False), "terminal_cancellations": 3, "published_results": 0}})
-
-
-def test_legacy_operation_failure_matrix(native_world, monkeypatch):
-    w = native_world
-    actor = w.users["developer"]
-
-    def admit(operation, options):
-        preview = legacy.preview(actor, w.file_id, operation, options)
-        data = {"kind": legacy.KIND, "operation": operation, "options": options,
-                "request_id": str(uuid.uuid4()), "plan_sha256": preview["plan_sha256"],
-                "inputs_sha256": preview["inputs_sha256"]}
-        queued = service.submit(actor, w.file_id, data)
-        assert service.submit(actor, w.file_id, data)["id"] == queued["id"]
-        return queued["id"]
-
-    source_id = admit("training", legacy_options(w))
-    service.execute(source_id)
-    source = row(source_id)
-    assert source.state == "succeeded"
-    binding = {"file_id": w.file_id, "source_job_id": source_id, "source_result_sha256": source.result_sha256,
-               "execution_id": source.result["payload"]["execution_id"]}
-    values = {"training": legacy_options(w),
-              "sfs": {**binding, "methods": ["backward"], "stopping_criteria": {"min_features": 1},
-                      "top_k": 1, "cv_folds": 2, "n_jobs": 1},
-              "hpo": {**binding, "n_iter": 2, "cv_folds": 2, "n_jobs": 1, "validation_curve_points": 2,
-                      "search_method": "random", "fixed_params": {"n_estimators": 5}},
-              "champion": {**binding, "features": ["x"], "hyperparam": {"n_estimators": 5}}}
-    records = {}
-    for operation, options in values.items():
-        factory = lambda: admit(operation, options)
-        records["legacy_" + operation] = fences(factory, actor) + [execute_with_lost_ack(factory, monkeypatch)]
-    assert not (w.root / "modeling" / f"{w.file_id}_status.json").exists()
-    report("legacy", records)
-
-
-def test_child_does_not_announce_readiness_before_model_handlers_import(native_world, monkeypatch):
-    from execution_jobs import legacy_process
-    from tests.unit.test_durable_legacy_execution import launch
-
-    w = native_world
-    original = subprocess.Popen
-    observed = []
-
-    def start(args, **kwargs):
-        control = Path(args[-1])
-        arrived, release = control / "import-arrived", control / "import-release"
-        hook = (
-            "import builtins,time;from pathlib import Path;original_import=builtins.__import__\n"
-            "def import_gate(name,globals=None,locals=None,fromlist=(),level=0):\n"
-            " if name=='modeling' and 'views' in (fromlist or ()):\n"
-            f"  Path({str(arrived)!r}).touch();limit=time.monotonic()+10\n"
-            f"  while not Path({str(release)!r}).exists():\n"
-            "   assert time.monotonic()<limit;time.sleep(.01)\n"
-            " return original_import(name,globals,locals,fromlist,level)\n"
-            "builtins.__import__=import_gate\n"
-        )
-        command = list(args)
-        command[command.index("-c") + 1] = hook + command[command.index("-c") + 1]
-        child = original(command, **kwargs)
-        try:
-            deadline = time.monotonic() + 10
-            while not arrived.exists():
-                assert child.poll() is None and time.monotonic() < deadline
-                time.sleep(.01)
-            assert not (control / "started.json").exists(), "readiness preceded handler imports"
-            observed.append(True)
-        except BaseException:
-            child.kill()
-            child.wait(timeout=3)
-            raise
-        finally:
-            release.touch()
-        return child
-
-    monkeypatch.setattr(legacy_process.subprocess, "Popen", start)
-    identifier, _, _ = launch(w, "training", legacy_options(w))
-    service.execute(identifier)
-    assert observed == [True] and row(identifier).state == "succeeded"
