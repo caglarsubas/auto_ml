@@ -12,7 +12,7 @@ its complete final state and compares an in-process byte key. Only rendering
 an identical standard Django migration state is reused. One retained entry and
 a 1 MiB key cap bound reuse. Custom/pre-rendered states, custom field modules
 or model bases, unmigrated runtime models, oversized keys and serialization
-failure use fresh rendering. Swappable setting values participate in the key.
+failure use fresh rendering. Swappable settings, DEFAULT_AUTO_FIELD and the rendering backend identifier limit participate in the key. Custom default-PK classes use fresh rendering.
 Serialized bytes are never deserialized or obtained from model artifacts.
 
 The desired contract is rebuilt on every call, including all field and
@@ -21,18 +21,18 @@ migration history, role, TLS, authority, broker/cache and resource checks remain
 fresh. A warm rendering cannot turn a changed physical catalog into success.
 This is independent of expert-code execution; it supplies no expert sandbox.
 
-Five additive regressions cover reuse, return-value independence, changed
+Six additive regressions cover reuse, return-value independence, changed
 required names/field declarations, pre-rendered/custom state mutations,
-serialization fallback and fresh catalog refusal. All 290 prior qualification
+serialization fallback, fresh catalog refusal and implicit-ID/table-name changes after rendering defaults change. All 290 prior qualification
 source files in the immediate-main preservation inventory remain byte-identical;
 older inventories and the original P168 conjunctive matrix remain mandatory.
-The local pinned Linux/TLS/PostgreSQL probe passed 583 cases without failures
+The local pinned Linux/TLS/PostgreSQL probe passed 584 cases without failures
 or skips. It is a focused check, not full CI or customer acceptance. Alternated
 100-call component measurements under branch coverage reduced median derivation
-from 1.624 to 0.572 seconds, with equal contracts. This is not a full-suite speed
+from 2.407 to 0.995 seconds, with equal contracts. This is not a full-suite speed
 or customer-capacity claim.
 
-Full qualification contains 7,743 native cases, including the five additions,
+Full qualification contains 7,744 native cases, including the six additions,
 six unchanged skips, the unchanged coverage threshold and 809 original RI
 cases. The original fits, folds, assertions, installed clean/recovery/upgrade
 drills, two loadfile workers, zero restarts, 900-second process and 60-minute
@@ -44,3 +44,5 @@ fixed 66-task distribution remains 8 done / 51 open / 7 blocked
 (12.1% / 77.3% / 10.6%), versus the iteration baseline 7 / 52 / 7:
 done +1.515 percentage points. This maintenance correction adds no completion
 credit. Full D07, customer operational acceptance and release remain open.
+
+Review reproduced an incomplete-key defect in the first unmerged candidate: changing DEFAULT_AUTO_FIELD retained the old implicit M2M ID type. That candidate cannot supply acceptance. The corrected key and regression also cover backend identifier truncation.

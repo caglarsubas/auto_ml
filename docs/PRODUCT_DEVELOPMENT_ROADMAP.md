@@ -2578,7 +2578,7 @@ Remove repeated rendering of identical freshly loaded migration declarations; pr
 
 **Evidence:** [Schema rendering and evidence boundaries](PRIVATE_SCHEMA_TEMPLATE.md); [Source preservation and local qualification contract](evidence/p169-schema-template-contract.json)
 
-**Remaining:** Every original native/RI/source/installed/coverage gate remains mandatory in exact-head PR and independent automatic main qualification. Local tests and component timings do not qualify a failed run, full D07, expert code, release or customer acceptance. No additional task completion credit.
+**Remaining:** Every original native/RI/source/installed/coverage gate remains mandatory in exact-head PR and independent automatic main qualification. The superseded incomplete-key candidate cannot supply acceptance. Local tests and component timings do not qualify a failed run, full D07, expert code, release or customer acceptance. No additional task completion credit.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 

@@ -2081,7 +2081,7 @@
     },
     {
       "date": "2026-11-05",
-      "change": "P169 reuses only identical fresh migration-model rendering; all live schema, authority and runtime evidence remains fresh. Retain publication-main42021620253 as failed; preserve fixed66-task8/51/7 counts and every original qualification source/case/budget. Exact PR/main receipts remain separate from local focused583-case evidence."
+      "change": "P169 reuses only identical fresh migration-model rendering; all live schema, authority and runtime evidence remains fresh. Retain publication-main42021620253 as failed; preserve fixed66-task8/51/7 counts and every original qualification source/case/budget. Exact PR/main receipts remain separate from local focused584-case evidence."
     }
   ],
   "implementation_packets": [
@@ -5074,7 +5074,7 @@
         "[Schema rendering and evidence boundaries](PRIVATE_SCHEMA_TEMPLATE.md)",
         "[Source preservation and local qualification contract](evidence/p169-schema-template-contract.json)"
       ],
-      "remaining": "Every original native/RI/source/installed/coverage gate remains mandatory in exact-head PR and independent automatic main qualification. Local tests and component timings do not qualify a failed run, full D07, expert code, release or customer acceptance. No additional task completion credit."
+      "remaining": "Every original native/RI/source/installed/coverage gate remains mandatory in exact-head PR and independent automatic main qualification. The superseded incomplete-key candidate cannot supply acceptance. Local tests and component timings do not qualify a failed run, full D07, expert code, release or customer acceptance. No additional task completion credit."
     }
   ],
   "release_qualification": {

@@ -98,3 +98,34 @@ def test_live_catalog_is_rechecked_after_rendering_reuse(monkeypatch):
         schema.check_schema()
     assert schema._rendered_declarations is entry
     assert calls == ['fresh_cursor', 'fresh_cursor']
+
+
+def test_rendering_settings_invalidate_implicit_schema(monkeypatch, settings):
+    monkeypatch.setattr(schema, '_rendered_declarations', None)
+    # These IDs are supplied when rendering implicit M2M models, not stored
+    # among the migration state's explicit fields. Warm reuse must track them.
+    for value, expected in [('AutoField', 'int4'), ('BigAutoField', 'int8'), ('SmallAutoField', 'int2')]:
+        settings.DEFAULT_AUTO_FIELD = 'django.db.models.' + value
+        entry = schema._rendered_declarations
+        contract = schema.required_storage_contract()
+        assert contract['auth_user_groups']['id']['type'] == expected
+        assert schema._rendered_declarations is not entry
+        assert schema.required_storage_contract() == contract
+
+    from django.db.models import BigAutoField
+    from django.db.migrations.state import ModelState
+
+    state = MigrationLoader(None).project_state()
+    name = 'LongImplicitTableNameWhoseDefaultIdentifierRequiresTruncation'
+    state.models['execution_jobs', name.lower()] = ModelState(
+        'execution_jobs', name, fields=[('id', BigAutoField(primary_key=True))],
+    )
+    tables = []
+    for limit in [63, 30]:
+        monkeypatch.setattr(schema.model_connection.ops, 'max_name_length', lambda: limit)
+        entry = schema._rendered_declarations
+        models = list(schema._declaration_models(state.clone()))
+        assert schema._rendered_declarations is not entry
+        tables.append(next(m._meta.db_table for m in models if m.__name__ == name))
+        assert len(tables[-1]) <= limit
+    assert tables[0] != tables[1]

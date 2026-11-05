@@ -5,14 +5,14 @@
   "cache": {
     "maximum_entries": 1,
     "maximum_serialized_key_bytes": 1048576,
-    "key": "Fresh standard ProjectState models, unmigrated app labels and swappable setting values; key bytes never deserialized",
-    "fallback": "Custom/pre-rendered states, custom field modules/bases, unmigrated runtime models, serialization failure or oversized key render afresh",
+    "key": "Fresh standard ProjectState models, unmigrated app labels, swappable settings, DEFAULT_AUTO_FIELD and rendering backend identifier limit; bytes never deserialized",
+    "fallback": "Custom/pre-rendered states, custom field modules/bases or default-PK classes, unmigrated runtime models, serialization failure or oversized key render afresh",
     "live_checks": "Fresh graph and replacement checks, runtime-required names, complete desired field/constraint validation, PostgreSQL catalogs, migration history, role/TLS/authority, broker/cache and resource checks stay mandatory"
   },
   "before_schema_sha256": "bbcf76558705315eb52978a91c1756491176fbc729f7790c9eef9eac952426e6",
   "sources": {
-    "backend/execution_jobs/schema_presence.py": "fe79c55e3acf1c7d262c017c0581f2cf2c8ecaf84ca93a1d6ffd3cba439b08cf",
-    "backend/tests/unit/test_private_schema_template.py": "aac2c10223237eb755f390835cc12af3c8134294532d521ec8efa30ba1254877"
+    "backend/execution_jobs/schema_presence.py": "45b2a2d89ec1ed0c82cea3328b914a8d1c52a03d35796bffec5f1de8ec23544b",
+    "backend/tests/unit/test_private_schema_template.py": "fc8ec3600513b7345f957828ac59463a39b3e2dcc5da822794aa710d46a11c46"
   },
   "frozen_prior_qualification_sources": {
     ".github/scripts/check_ci_concurrency.py": "54f777fc07d867e4583bcf8e70e25a2498c23dfd86b5ed2c1592d727c7baf608",
@@ -306,9 +306,9 @@
     "scripts/tests/test_private_build_preflight.py": "61b19ca9449955efca3715210df9f475247a0e60f2a3979c1536eb131dfae665",
     "scripts/tests/test_private_installation_acceptance.py": "392d3fbf1ec0d3213cebe52d3055f9f146db690ca90390e81bb34e16d2601ec1"
   },
-  "new_regression_cases": 5,
-  "native_cases": 7743,
-  "pull_request_backend_cases": 7598,
+  "new_regression_cases": 6,
+  "native_cases": 7744,
+  "pull_request_backend_cases": 7599,
   "native_skip_count": 6,
   "workers": 2,
   "worker_restarts": 0,
@@ -316,19 +316,19 @@
   "job_cap_seconds": 3600,
   "local_proof": {
     "scope": "all_existing_schema_tests_and_matrix_not_full_suite_or_CI_acceptance",
-    "tests": 583,
+    "tests": 584,
     "failures": 0,
     "errors": 0,
     "skips": 0,
-    "seconds": 60.182,
+    "seconds": 60.287,
     "runtime": {
       "schema": "private_native_suite_runtime_v1",
-      "application_image_id": "sha256:18ff3177359e76eee33a2c09ab1c343352df1b198d2c8e726bf3aa0277147927",
+      "application_image_id": "sha256:b4823c2d2a8eb2a4f0a42451adf4b5e39420e2bec77ea1969dfc36c0d6fffad2",
       "python": "3.12.15",
       "implementation": "CPython",
       "machine": "aarch64",
       "system": "Linux",
-      "application_runtime_manifest_sha256": "5e5498e2d67ab18cdd9ef768bcdb10f2a61a15956184435be1dcbb3d4882ee96",
+      "application_runtime_manifest_sha256": "9e43a35f17071ae40b21e157f2a473b2b31f04f762818f0504f1fd2f8f3f9980",
       "qualification_tools": {
         "versions": {
           "execnet": "2.1.2",
@@ -398,7 +398,7 @@
       "host_site_packages_mounted": false,
       "credentials_in_receipt": false,
       "application_source_files_verified": 233,
-      "application_source_sha256": "d615a3f73bc9079012f227e74c8e878bbf40ee4f61286f9835b9331b235224f9",
+      "application_source_sha256": "25ec405060bd580764b20b6778defba6bdde9d912ef01a2a7699e1f3d00fd623",
       "installed_service_or_customer_qualification": false
     },
     "all_prior_case_and_source_inventories_unchanged": true,
@@ -417,30 +417,37 @@
     "scope": "isolated_derivation_with_branch_coverage_not_full_suite_or_CI",
     "rounds": [
       {
-        "before": 1.629453917965293,
-        "after": 0.5715360839967616
+        "before": 3.077447042975109,
+        "after": 0.9945695839705877
       },
       {
-        "after": 0.5768236260046251,
-        "before": 1.5690965420217253
+        "after": 1.0116798750241287,
+        "before": 2.406554542016238
       },
       {
-        "before": 1.5270962089998648,
-        "after": 0.561987749999389
+        "before": 2.370191375957802,
+        "after": 0.9677015009801835
       },
       {
-        "after": 0.5583219589898363,
-        "before": 1.6513898340053856
+        "after": 1.0441481250454672,
+        "before": 2.537729001021944
       },
       {
-        "before": 1.6237011679913849,
-        "after": 0.5973285009968095
+        "before": 2.3805629599955864,
+        "after": 0.9521872090408579
       }
     ],
     "calls_per_measurement": 100,
-    "median_before": 1.6237011679913849,
-    "median_after": 0.5715360839967616,
+    "median_before": 2.406554542016238,
+    "median_after": 0.9945695839705877,
     "contracts_identical": true,
-    "database_queries_cached": false
+    "database_queries_cached": false,
+    "host_workload_uncontrolled": true
+  },
+  "superseded_PR_candidate": {
+    "head": "7dc7ae926269f628dab202fff7eb0ed1f6a5c707",
+    "run": 42034315437,
+    "qualified": false,
+    "reason": "Review reproduced stale implicit M2M ID types after DEFAULT_AUTO_FIELD changes. Key now also binds PK default and backend identifier truncation; six additive regressions include both changes. Prior candidate cannot supply acceptance."
   }
 }
