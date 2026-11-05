@@ -6,6 +6,7 @@ and registered implementations enter this process; D08 remains separate.
 
 import json
 import os
+import time
 import uuid
 from pathlib import Path
 
@@ -30,6 +31,47 @@ class ChildContext:
     def __init__(self, directory):
         self.directory = Path(directory)
 
+    def ready(self, *, await_ack=False):
+        request = json.loads((self.directory / "request.json").read_bytes())
+        stage = self.directory / "started.tmp"
+        stage.write_text(json.dumps({"job_id": request["job_id"], "parent_pid": request["parent_pid"],
+                                     "pid": os.getpid(), "database": "dummy", "entrypoint": "registered_native"}))
+        os.replace(stage, self.directory / "started.json")
+        if await_ack:
+            # The parent rechecks its live lease/cancellation before releasing
+            # the first search step. The existing work deadline still bounds it.
+            deadline = time.monotonic() + 120
+            while not (self.directory / "start-ack").exists() and not (self.directory / "stop").exists():
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Native parent readiness acknowledgement unavailable")
+                time.sleep(.02)
+
+    def selection_ready(self, changes):
+        """Record an actual zero-step basis before announcing resumable work."""
+        if (self.directory / "started.json").exists() or not isinstance(changes.get("resume_basis"), dict):
+            return
+        request = json.loads((self.directory / "request.json").read_bytes())
+        if request["operation"] != "sfs":
+            return
+        from django.conf import settings
+        from modeling.sfs_evidence import write_sfs_record
+        from modeling.sfs_resume import restore_sfs_resume
+
+        basis = changes["resume_basis"]
+        path = Path(settings.MEDIA_ROOT) / "sfs_results" / f"{request['options']['file_id']}_sfs_results.json"
+        if path.exists():
+            restore_sfs_resume(path, basis)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            write_sfs_record(path, {
+                "forward": [], "backward": [], "forward_from_backward": [], "status": "running",
+                "operation_id": request["job_id"], "resume_basis": basis,
+                "selection_objective": changes["selection_objective"], "baselines": {},
+                "resume_direction_keys": {mode: mode for mode in basis["methods"]},
+            }, exclusive=True)
+            restore_sfs_resume(path, basis)
+        self.ready(await_ack=True)
+
     def failure(self, error, stage):
         from modeling.async_failures import record_failure
 
@@ -47,6 +89,9 @@ class ChildContext:
         return record
 
     def progress(self, owner, changes):
+        if (self.directory / "stop").exists():
+            owner["stop_requested"] = True
+        self.selection_ready(changes)
         if (self.directory / "stop").exists():
             owner["stop_requested"] = True
         allowed = {

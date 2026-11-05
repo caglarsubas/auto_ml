@@ -82,16 +82,19 @@ def retain_checkpoint(job, token, control, work):
         return
     try:
         from modeling.sfs_state import read_recorded_sfs
+        from modeling.sfs_resume import restore_sfs_resume
 
         raw = legacy.read(path, 8 * 1024**2)
         value = read_recorded_sfs(path)
         source = job.specification["legacy"]["source"]
         if (
-            not value.get("resume_state")
-            or not source
+            not source
             or value.get("resume_basis", {}).get("execution_id") != source["execution_id"]
         ):
             return
+        # An explicit zero-step/intermediate record is a valid checkpoint too;
+        # its complete recorded basis is validated by the same replay reader.
+        restore_sfs_resume(path, value["resume_basis"])
         path.chmod(0o400)
         event(
             job.pk,
@@ -194,6 +197,8 @@ def execute(job, token, check):
                     {"operation": plan["operation"], "database": "dummy", "expert_code": False, "scratch_only": True},
                 )
                 child_started = True
+                check()
+                (control / "start-ack").touch(exist_ok=True)
             now = time.monotonic()
             if now >= next_progress and (control / "progress.json").exists():
                 raw = legacy.read(control / "progress.json", 16384)

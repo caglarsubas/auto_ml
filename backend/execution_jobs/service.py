@@ -645,6 +645,14 @@ def finish(identifier, token, state, reason="", result=None, *, deadline=None):
             if job.source_dataset_id is not None:
                 lock_authority(actor, job.source_dataset_id, None)
             recheck_execution(job)
+            if state == "succeeded" and (
+                job.specification.get("runtime") != runtime(job.specification["kind"])
+                or job.specification.get("limits") != limits(job.specification["kind"])
+            ):
+                # Claim-time admission does not authorize a changed runtime or
+                # budget at publication. Keep this full runtime verification at
+                # the publication boundary, outside numerical checkpoints.
+                raise JobConflict("job_runtime_changed")
         except (projects.ProjectDenied, ObjectDoesNotExist):
             if _owns_live_lease(job, token, timezone.now()):
                 close(job, "blocked", "job_authority_changed", metadata_only=True)
