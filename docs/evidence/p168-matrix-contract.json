@@ -95,5 +95,9 @@
       "test_child_does_not_announce_readiness_before_model_handlers_import": "b1627781c02d370d2bcc5fdb3e218b7ee14e7af1a412a57c1d7d97621be5d854"
     },
     "readiness_admission_before_hook_only": true
-  }
+  },
+  "file_ordering_contract": "docs/evidence/p168-ordering-contract.json",
+  "additional_cases": 5,
+  "existing_test_sources_byte_identical": 311,
+  "existing_observer_append_only": "backend/tests/postgresql_parallel.py"
 }

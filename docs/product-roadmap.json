@@ -2058,6 +2058,11 @@
       "date": "2026-11-04",
       "packet": "P167",
       "change": "Accept D07-T05 after all six exact-head PR checks, guarded merge and independent automatic main artifact audit. Preserve every scientific assertion/fit/fold/case and all fixed limits; record the one strengthened browser retention/explicit-selection contract delta. Fixed 66 tasks: 7 done / 52 open / 7 blocked (10.6% / 78.8% / 10.6%); done +1.515 percentage points. D07-T06 becomes ready. Full D07 and release/customer acceptance remain open."
+    },
+    {
+      "date": "2026-11-05",
+      "packet": "P168",
+      "change": "Retain PR272 implementation evidence and failed main41977718401 without task credit. Qualify source-bound whole-file duration ordering under the unchanged two-worker loadfile and900-second caps.311 original sources are byte-identical; one observer append-only hook preserves every original body. Add one ordering regression; original scientific cases/fits/folds/skips stay unchanged."
     }
   ],
   "implementation_packets": [
@@ -5030,7 +5035,7 @@
         "[Finite failure-matrix contract](evidence/p168-matrix-contract.json)",
         "[312-source preservation baseline](evidence/p168-source-preservation.json)"
       ],
-      "remaining": "Qualification remains in progress. The first recovery fixture composition was corrected without changing two-slot limits or original assertions. The corrected installed clean/recovery/upgrade, actual worker-loss and concurrent-selection drills pass, but its full native run timed out at the unchanged 900 seconds after 7,734 of 7,736 cases. Two independent work units preserve every new boundary, assertion and scientific operation; the readiness hook starts after its unchanged admission to support cold processes. All 312 historical test/workflow sources remain byte-identical. Exact-head all-six PR, guarded merge, independent main audit and acceptance publication are still required; no new task credit.",
+      "remaining": "PR #272 merged after all-six checks and strict audit (native 7736 cases, six skips, 839.209s). Its independent main completed all7736 cases with zero failures/six skips in897.587s, but process finalization exceeded the unchanged900s cap; no acceptance credit. An append-only observer hook now reorders intact loadfile groups by source-bound timings, preserving two workers, all original assertions/fits/folds/skips, and311 byte-identical source files plus unchanged original observer bodies. One additive ordering regression brings native inventory to7737. Fresh all-six correction PR and independent main qualification and acceptance publication remain required.",
       "description": "Qualify the distinct execution families against shared admission, cancellation, authority, lease, publication, recovery and concurrent-selection boundaries without changing scientific workloads or test limits."
     }
   ],

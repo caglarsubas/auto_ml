@@ -1,0 +1,31 @@
+{
+  "schema": "native_loadfile_ordering_contract_v1",
+  "base": "d376b7ba7d3e095a48d4e721575b062e1028c3b6",
+  "changed_observer": {
+    "path": "backend/tests/postgresql_parallel.py",
+    "before_sha256": "a0e4076b272742f0fc2251f8a50e3e54791ae3425cd2727279d91fbfe90ad38f",
+    "after_sha256": "f9b2784c6cd2a285cccc365a178f53b5b2903062b5fb81e145a0e1efe84fc62e",
+    "appended_text": "\n\ndef pytest_xdist_make_scheduler(config, log):\n    from tests.native_file_order import scheduler\n\n    return scheduler(config, log)\n",
+    "original_module_prefix_unchanged": true
+  },
+  "new_sources": {
+    "backend/tests/native_file_order.py": "1f5e977cf4d129fa7d1d8a66ad77e342e7a67fd2c7cd9ac612c123000d658a99",
+    "backend/tests/native_file_costs.json": "9297c2e88430788d214bed5197334e5f7323b82aea99623590971adbe7e5a544",
+    "backend/tests/unit/test_native_file_order.py": "16424cdcfef9ae1aa268a335215ee029495c1fd11c1d6671f354c6b304cebf96"
+  },
+  "ordering": "source_bound_observed_duration_descending",
+  "grouping": "loadfile",
+  "source_run": 41977718401,
+  "source_run_qualified": false,
+  "original_case_assertion_fit_fold_inventory_unchanged": true,
+  "historical_test_workflow_sources": 312,
+  "byte_identical": 311,
+  "original_observer_bodies_unchanged": true,
+  "new_regression_cases": 1,
+  "native_cases": 7737,
+  "pull_request_backend_cases": 7592,
+  "workers": 2,
+  "worker_restarts": 0,
+  "native_process_cap_seconds": 900,
+  "notes": "Reorders complete file work units only. Existing LoadFileScheduling sends exact original per-worker collection indexes. Timings come from a failed qualification and convey no acceptance. New or changed sources run early without stale duration claims; all source pins and actual order are retained."
+}

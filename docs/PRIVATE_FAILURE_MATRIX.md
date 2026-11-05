@@ -15,7 +15,9 @@ the installed 21-case legacy kernel matrix, actual worker/child loss and natural
 The executable [matrix contract](evidence/p168-matrix-contract.json) requires
 135 boundary combinations across nine families. Four additive tests exercise
 those combinations and child readiness; all [312 prior test/workflow
-sources](evidence/p168-source-preservation.json) stay byte-identical. Existing
+sources](evidence/p168-source-preservation.json) are accounted for: 311 stay
+byte-identical and the PostgreSQL observer gains only an appended ordering hook.
+Every original observer function and scientific assertion stays unchanged. Existing
 changed-input, protected-access, broker-recovery and scientific assertions must
 also pass in the complete native suite. The four new test bodies run in two
 independent files so the unchanged loadfile scheduler can keep both workers
@@ -64,3 +66,13 @@ workers, zero worker restarts, the 900-second native limit, original installatio
 and recovery/upgrade limits and the 60-minute job limit. Qualification applies
 to the disclosed synthetic Ubuntu 24.04 ARM64 profile; customer operational
 acceptance, full D07, D08 expert code and release remain separate.
+
+The [file-order contract](evidence/p168-ordering-contract.json) prioritizes whole
+loadfile units by source-bound observed durations. It keeps both workers busy
+without splitting files, removing cases, changing outcomes or moving work
+outside the 900-second process cap. Unknown or changed files run early without
+inheriting old timings. A new regression checks every node, group and completion
+flag is retained; XML coverage, threshold, sampling and all other limits remain.
+The timing source run completed all 7,736 cases with six skips, but exceeded the
+controller deadline during shutdown. It remains failed and supplies ordering
+observations only. Fresh qualification now contains 7,737 native cases.
