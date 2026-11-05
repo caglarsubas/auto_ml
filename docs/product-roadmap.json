@@ -2058,6 +2058,16 @@
       "date": "2026-11-04",
       "packet": "P167",
       "change": "Accept D07-T05 after all six exact-head PR checks, guarded merge and independent automatic main artifact audit. Preserve every scientific assertion/fit/fold/case and all fixed limits; record the one strengthened browser retention/explicit-selection contract delta. Fixed 66 tasks: 7 done / 52 open / 7 blocked (10.6% / 78.8% / 10.6%); done +1.515 percentage points. D07-T06 becomes ready. Full D07 and release/customer acceptance remain open."
+    },
+    {
+      "date": "2026-11-05",
+      "packet": "P168",
+      "change": "Retain PR272 implementation evidence and failed main41977718401 without task credit. Qualify source-bound whole-file duration ordering under the unchanged two-worker loadfile and900-second caps.311 original sources are byte-identical; one observer append-only hook preserves every original body. Add one ordering regression; original scientific cases/fits/folds/skips stay unchanged."
+    },
+    {
+      "date": "2026-11-05",
+      "packet": "P168",
+      "change": "Retain PR273 run41989266789: full7737 cases completed839.559s, but an unchanged declaration-list assertion failed. Fix the cached class-level queryset through framework cloning; preserve project filtering and every original test body. Add one upload/scoping/revocation regression with old-method failure and54 targeted passing cases. Fresh native count7738; no task credit before all gates."
     }
   ],
   "implementation_packets": [
@@ -5030,7 +5040,7 @@
         "[Finite failure-matrix contract](evidence/p168-matrix-contract.json)",
         "[312-source preservation baseline](evidence/p168-source-preservation.json)"
       ],
-      "remaining": "Qualification remains in progress. The first recovery fixture composition was corrected without changing two-slot limits or original assertions. The corrected installed clean/recovery/upgrade, actual worker-loss and concurrent-selection drills pass, but its full native run timed out at the unchanged 900 seconds after 7,734 of 7,736 cases. Two independent work units preserve every new boundary, assertion and scientific operation; the readiness hook starts after its unchanged admission to support cold processes. All 312 historical test/workflow sources remain byte-identical. Exact-head all-six PR, guarded merge, independent main audit and acceptance publication are still required; no new task credit.",
+      "remaining": "Qualification remains open. PR272 merged, but main41977718401 exceeded its unchanged900s process cap after all7736 cases completed. PR273 whole-file ordering finished7737 cases in839.559s but exposed one original stale declaration-list assertion. The view now clones a fresh queryset while preserving all project filters; a new before/after regression verifies upload visibility and revocation.311 sources remain byte-identical plus one append-only observer hook; every original test body/fold/fit/skip and all limits remain. Fresh inventory7738 includes two additive non-scientific regressions. All-six exact-head correction PR and independent-main audits plus acceptance publication are still required; counts remain7/52/7.",
       "description": "Qualify the distinct execution families against shared admission, cancellation, authority, lease, publication, recovery and concurrent-selection boundaries without changing scientific workloads or test limits."
     }
   ],

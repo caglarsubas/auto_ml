@@ -1,0 +1,41 @@
+{
+  "schema": "declaration_list_freshness_contract_v1",
+  "source_run": 41989266789,
+  "source_run_qualified": false,
+  "source_head": "e0d4655d34714366ef6ed9cf56a025ba3028110c",
+  "failure": "Existing TestDeclarationAPI.test_list_declarations: uploaded id1192 absent from an empty response.",
+  "native_source_measurement": {
+    "cases": 7737,
+    "failures": 1,
+    "errors": 0,
+    "skips": 6,
+    "seconds": 839.559
+  },
+  "fix": {
+    "path": "backend/declaration/views.py",
+    "before_sha256": "f7e77b0698279da441bc2f5540bfcad0ef04974b62e15f0a29b8bca831db3f75",
+    "after_sha256": "1a6814cca86cd0f9786d7670249e6a81fe18eac7b8ddeafc51cf1e72155ffb90",
+    "behavior": "Use GenericAPIView.get_queryset to clone fresh rows on every request; retain all existing project and dataset filters.",
+    "before_method": "def get_queryset(self):\n        from access_control.projects import governed, allowed_datasets\n        if governed():\n            rows = self.queryset.filter(pk__in=allowed_datasets(self.request.user.pk))\n            if self.request.query_params.get('project_id'):\n                rows = rows.filter(project_binding__project_id=self.request.query_params['project_id'])\n            return rows.select_related('project_binding')\n        return self.queryset",
+    "after_method": "def get_queryset(self):\n        from access_control.projects import governed, allowed_datasets\n        # GenericAPIView clones the class-level queryset for each request.\n        # Returning it directly can reuse a result cache populated before upload.\n        rows = super().get_queryset()\n        if governed():\n            rows = rows.filter(pk__in=allowed_datasets(self.request.user.pk))\n            if self.request.query_params.get('project_id'):\n                rows = rows.filter(project_binding__project_id=self.request.query_params['project_id'])\n            return rows.select_related('project_binding')\n        return rows"
+  },
+  "regression": {
+    "path": "backend/tests/unit/test_declaration_list_freshness.py",
+    "sha256": "8b155c31293ee6f623a1358aee3721f39f7f1243eb8e12232314147fd46cb1a6",
+    "name": "test_list_uses_fresh_rows_and_current_project_authority_after_cached_empty_query",
+    "checks": [
+      "cached empty class queryset remains unchanged",
+      "successful upload appears on the next list",
+      "other project rows remain absent",
+      "revoked membership is observed immediately"
+    ]
+  },
+  "local_before": "New regression fails with recorded old method: uploaded id1 absent from empty list.",
+  "local_after": {
+    "targeted_cases": 54,
+    "failures": 0,
+    "skips": 0
+  },
+  "original_test_functions_modified": false,
+  "worker_and_native_cap_changes": false
+}

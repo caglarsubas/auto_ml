@@ -72,3 +72,9 @@ def pytest_sessionfinish(session):
     )
     if not valid:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+def pytest_xdist_make_scheduler(config, log):
+    from tests.native_file_order import scheduler
+
+    return scheduler(config, log)

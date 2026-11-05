@@ -199,12 +199,15 @@ class DeclarationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         from access_control.projects import governed, allowed_datasets
+        # GenericAPIView clones the class-level queryset for each request.
+        # Returning it directly can reuse a result cache populated before upload.
+        rows = super().get_queryset()
         if governed():
-            rows = self.queryset.filter(pk__in=allowed_datasets(self.request.user.pk))
+            rows = rows.filter(pk__in=allowed_datasets(self.request.user.pk))
             if self.request.query_params.get('project_id'):
                 rows = rows.filter(project_binding__project_id=self.request.query_params['project_id'])
             return rows.select_related('project_binding')
-        return self.queryset
+        return rows
     
     def create(self, request, *args, **kwargs):
         files = request.FILES

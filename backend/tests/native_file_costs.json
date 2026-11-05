@@ -1,0 +1,1120 @@
+{
+  "schema": "native_file_cost_observations_v1",
+  "source_run": 41977718401,
+  "source_head": "b4c1d3a8f16cdd8bca07b68f5c9364f20e953031",
+  "source_run_qualified": false,
+  "source_run_outcome": "All7736 cases completed with zero failures/six skips, but controller900s expired; timings are scheduling observations only.",
+  "cases": 7736,
+  "files": {
+    "tests/test_functional.py": {
+      "cases": 118,
+      "wall_seconds": 3.191415,
+      "source_sha256": "eb1b46e315b4399bce55a4ec15ee754cd9bf0f889f1013c1b59f93eee66628bc"
+    },
+    "tests/test_integration.py": {
+      "cases": 18,
+      "wall_seconds": 4.40374,
+      "source_sha256": "9bb56d673179e1223dbbcb7335f72c7947d142f8534ba36e710930e28aba4aa5"
+    },
+    "tests/test_mcp_server.py": {
+      "cases": 13,
+      "wall_seconds": 1.532455,
+      "source_sha256": "1e561023372e8bd30f06463046d1061fc2b90d82fa20cea1dc3734a51b5e5b81"
+    },
+    "tests/test_prometa_bundle_runner.py": {
+      "cases": 15,
+      "wall_seconds": 1.409598,
+      "source_sha256": "804197cc02af8b55245dcabf7b9fa6dbc7e3efa62eecd68d5dea855a63655554"
+    },
+    "tests/test_regression.py": {
+      "cases": 34,
+      "wall_seconds": 0.374524,
+      "source_sha256": "4e7db7af8657b2045aab82882e0f2b81a77a35692331f9ff515d1d825297d727"
+    },
+    "tests/test_uat.py": {
+      "cases": 9,
+      "wall_seconds": 0.496814,
+      "source_sha256": "c37cdd2e23f3b679651ddd265f5cff4aa126b2a10ce59fa95b0e47502cd18820"
+    },
+    "tests/unit/test_account_enrollment.py": {
+      "cases": 41,
+      "wall_seconds": 1.146839,
+      "source_sha256": "e73889b9ca654d8beace2c5b11501800208195abd2b025a4e18e0f482a745754"
+    },
+    "tests/unit/test_ai_actions.py": {
+      "cases": 155,
+      "wall_seconds": 2.515605,
+      "source_sha256": "d83c7015e76cb98cdcc553a0fa9703124a2afb6ddbda748b222d56a4cfa7cea5"
+    },
+    "tests/unit/test_ai_cache_telemetry.py": {
+      "cases": 162,
+      "wall_seconds": 1.481714,
+      "source_sha256": "5d45a779d7ee8f256dfbacd0fe28bc41af63bb2dfcfd97fefaa440e01e1652f6"
+    },
+    "tests/unit/test_ai_chat.py": {
+      "cases": 54,
+      "wall_seconds": 0.69485,
+      "source_sha256": "65bde99574a7e8e6d53396aba68411538fcc4871131de29153186eb2e25fd082"
+    },
+    "tests/unit/test_ai_engine.py": {
+      "cases": 100,
+      "wall_seconds": 1.559907,
+      "source_sha256": "33850ca0f201123adc7c424e7d95c0f0b3055e310994cd941eafdc1869a99065"
+    },
+    "tests/unit/test_ai_engine_admission.py": {
+      "cases": 17,
+      "wall_seconds": 0.09213,
+      "source_sha256": "a3c36685b5e82566f78456be666db56aa8b805917aeab20ae1181b8a8ec3bd66"
+    },
+    "tests/unit/test_ai_progress.py": {
+      "cases": 22,
+      "wall_seconds": 0.405464,
+      "source_sha256": "81728fc954c1782edcf72b80e714dc0b3abbc05b431b43c6f6c99183e0869940"
+    },
+    "tests/unit/test_ai_prompts.py": {
+      "cases": 41,
+      "wall_seconds": 0.229824,
+      "source_sha256": "8f507d7d03b5f5dead911d4632c8ad1fea294d2227a9292299614f14e55f5e98"
+    },
+    "tests/unit/test_ai_skills.py": {
+      "cases": 53,
+      "wall_seconds": 1.756116,
+      "source_sha256": "88070244722cc2165b72b01d0f1aef4d164e8b92b531d07213d69955be12e682"
+    },
+    "tests/unit/test_assessment_metric_reuse.py": {
+      "cases": 49,
+      "wall_seconds": 7.156163,
+      "source_sha256": "a7c08214be0e88d89299ad06ae87576abc98da868046725b26a1de3b83cf9fbc"
+    },
+    "tests/unit/test_assistant_approvals.py": {
+      "cases": 55,
+      "wall_seconds": 29.562061,
+      "source_sha256": "c663bd54744de9798a4a636e99de4a02bb280980d83bd8ce94ce2ca6fa56315a"
+    },
+    "tests/unit/test_binary_auc_execution.py": {
+      "cases": 77,
+      "wall_seconds": 1.079102,
+      "source_sha256": "05e8a989fca2d89d91cbfbf70760c68325d2d29d7736182ed16d5ec62620e3a5"
+    },
+    "tests/unit/test_binary_curve_reuse.py": {
+      "cases": 34,
+      "wall_seconds": 1.337307,
+      "source_sha256": "9aac5ea741558967467e2513e4c8eb11a8cf5f7bc70a21c1cce33a0983f8a4a6"
+    },
+    "tests/unit/test_binary_selected_metrics.py": {
+      "cases": 99,
+      "wall_seconds": 2.309215,
+      "source_sha256": "b0ba2eba97e53632f0bf218dbaf1970a7150913fffdfa52faa98b2ef3cd461d6"
+    },
+    "tests/unit/test_bounded_metric_work.py": {
+      "cases": 32,
+      "wall_seconds": 4.343984,
+      "source_sha256": "dbf76a69f7bdc2530e0c90a83c981cc788eb7b53e1a3846f4470bb3765c755a4"
+    },
+    "tests/unit/test_broker_recovery_scope.py": {
+      "cases": 4,
+      "wall_seconds": 0.03718,
+      "source_sha256": "874712693017b09bb30e4f95ab3554d19a248b93922a7d81112d17f5e6a79b05"
+    },
+    "tests/unit/test_cache_recovery.py": {
+      "cases": 5,
+      "wall_seconds": 0.068147,
+      "source_sha256": "e952dbbd5d597affd8bf18798cde2a0c6aa7e5ebd6adb7cad325b189ea742e48"
+    },
+    "tests/unit/test_cache_recovery_scope.py": {
+      "cases": 4,
+      "wall_seconds": 0.030686,
+      "source_sha256": "eee29f0768ffc42c699201b7af93d004459a273a30b958a6e1ced229bc4c516d"
+    },
+    "tests/unit/test_candidate_evidence.py": {
+      "cases": 30,
+      "wall_seconds": 4.374624,
+      "source_sha256": "4b68c4be650b9d3d12620023eb95e6600cac45555c0d8a021bbb03fa7309bb66"
+    },
+    "tests/unit/test_checkpoint_materialization.py": {
+      "cases": 22,
+      "wall_seconds": 5.942243,
+      "source_sha256": "7b56823a5bfe57df7fddfd00646428e2b152846d24baabbfd867b13d1fce506a"
+    },
+    "tests/unit/test_collinearity.py": {
+      "cases": 26,
+      "wall_seconds": 1.883435,
+      "source_sha256": "0880b3d748c3fdbfad53b11af36fe8b28ebceb8aef4735c3936a3718f2ca7463"
+    },
+    "tests/unit/test_common.py": {
+      "cases": 19,
+      "wall_seconds": 0.135949,
+      "source_sha256": "a9dd1112a03a2112e500af780f9c8de10f90502c6524b981f538a3d7f1de0e6a"
+    },
+    "tests/unit/test_csv_input_authority.py": {
+      "cases": 15,
+      "wall_seconds": 5.13004,
+      "source_sha256": "458fabf9e9c5eec7417e813c404ebf29c455ad84ea40192e851cb2ea13d41acf"
+    },
+    "tests/unit/test_cv_strategy.py": {
+      "cases": 5,
+      "wall_seconds": 0.037769,
+      "source_sha256": "4ca19b280b51af2428c5ee1dc4f386a6110b3b939ed73e8d0d763ca8efe0d858"
+    },
+    "tests/unit/test_d07_failure_matrix.py": {
+      "cases": 2,
+      "wall_seconds": 18.424755,
+      "source_sha256": "23530636c888922251b05dda2c2d186eee6ab85ccd85cc806532d7f56990f470"
+    },
+    "tests/unit/test_d07_failure_matrix_legacy.py": {
+      "cases": 2,
+      "wall_seconds": 40.97111,
+      "source_sha256": "853817f8dafdcd31d5944b5bb09585833735ce37d5a2d5607acf8263f760f2d3"
+    },
+    "tests/unit/test_data_quality.py": {
+      "cases": 9,
+      "wall_seconds": 0.459604,
+      "source_sha256": "03227ff03e5cbcfefb8b5c2c676cd0ff72d92273587fd0531432261fbb37063e"
+    },
+    "tests/unit/test_declaration.py": {
+      "cases": 39,
+      "wall_seconds": 0.329219,
+      "source_sha256": "31ac43e28d4bb24ee5a5d10bb0a5dc7922c62dda97c44baee96ea589952d10d7"
+    },
+    "tests/unit/test_declared_metric.py": {
+      "cases": 105,
+      "wall_seconds": 4.911553,
+      "source_sha256": "4d19503e4a86edf764ddbcde33a300702aa4b1852348e24ddd9115716ed6ddf1"
+    },
+    "tests/unit/test_dependency_credential_bytes.py": {
+      "cases": 32,
+      "wall_seconds": 1.037697,
+      "source_sha256": "824e779089f4a5c042c7aadbec6d79b40c19ac90a20327afa0cd8203848428e2"
+    },
+    "tests/unit/test_deploy_readiness.py": {
+      "cases": 5,
+      "wall_seconds": 0.031435,
+      "source_sha256": "66bcd0c80a36c16e57683a0fd35f052684618a8e12fe424f0f39a4b2d8098d65"
+    },
+    "tests/unit/test_development_assessment.py": {
+      "cases": 36,
+      "wall_seconds": 3.07305,
+      "source_sha256": "874904454c7aca9412a5023e561bc262e4f19d73d13b888a162148467d8e4854"
+    },
+    "tests/unit/test_development_binary_summary.py": {
+      "cases": 38,
+      "wall_seconds": 17.684657,
+      "source_sha256": "03b5fd6e3e8485e02176bf9ba75f8537dc617727c9e53ecc22eace9170bcf7c1"
+    },
+    "tests/unit/test_development_shared_curves.py": {
+      "cases": 33,
+      "wall_seconds": 0.619713,
+      "source_sha256": "75778422748267d021c664966f3c9ee8f392e6715004404591839287a5b1a825"
+    },
+    "tests/unit/test_dispatcher_batch_shutdown.py": {
+      "cases": 9,
+      "wall_seconds": 10.906948,
+      "source_sha256": "49a1fb6421268c7fb8659d556027c6ee972261de9c07c0c7a118ec8b64eeaf87"
+    },
+    "tests/unit/test_dispatcher_database_recovery.py": {
+      "cases": 11,
+      "wall_seconds": 0.806202,
+      "source_sha256": "8bca841e9809ed09c76fc695cc625e5f9d41cf5c874866dd210cad59616e98fd"
+    },
+    "tests/unit/test_dispatcher_shutdown.py": {
+      "cases": 8,
+      "wall_seconds": 0.048128,
+      "source_sha256": "02ec346b34d950c7bd82618a49bbdf5ceb914658d261264f71fa64ef859a0879"
+    },
+    "tests/unit/test_durable_legacy_execution.py": {
+      "cases": 39,
+      "wall_seconds": 84.548445,
+      "source_sha256": "cfb3f8b30bbcdd3d9cd6abe0a7287a26e8f02ce4b943ed7eafa124bd36b2a6eb"
+    },
+    "tests/unit/test_durable_scoring.py": {
+      "cases": 28,
+      "wall_seconds": 29.276911,
+      "source_sha256": "9d6883241a383d9c29fe258192c78ac5710c86f8c8c96fff77d56251b88769ad"
+    },
+    "tests/unit/test_durable_training_search.py": {
+      "cases": 42,
+      "wall_seconds": 18.249295,
+      "source_sha256": "3102393ffff57977181b863428caa49c57be62a9ea22430f9ea661462d02670e"
+    },
+    "tests/unit/test_embedding_cache.py": {
+      "cases": 5,
+      "wall_seconds": 0.883434,
+      "source_sha256": "e30ee52875df78fbfd571975d1d997e042eec7e6d44862b3a8dcc371d83bed6f"
+    },
+    "tests/unit/test_encoding.py": {
+      "cases": 25,
+      "wall_seconds": 0.161437,
+      "source_sha256": "f8c4f2740d86ec09d7cae7adceb53a91c55b41cd65bd4c66b33cf751b7f23b0a"
+    },
+    "tests/unit/test_evaluation_regression.py": {
+      "cases": 4,
+      "wall_seconds": 0.025189,
+      "source_sha256": "75b3c53c75bc0cba465e61cb4e6a8729c554f56ea9929426cee3327ab8a13b60"
+    },
+    "tests/unit/test_execution_metadata_serialization.py": {
+      "cases": 24,
+      "wall_seconds": 0.626605,
+      "source_sha256": "ee54bacf61c7800ddf7574ce98392150ed39b3ee10c5379292afb196a348ce0b"
+    },
+    "tests/unit/test_feature_card.py": {
+      "cases": 16,
+      "wall_seconds": 0.2048,
+      "source_sha256": "b62828dbf9ae289cb6adeed2343783abbc283cee52a36b6e5df8714b51adcf27"
+    },
+    "tests/unit/test_governed_foundation.py": {
+      "cases": 31,
+      "wall_seconds": 17.035686,
+      "source_sha256": "5e6474146230bcdeb80d188a6657f2136a09c572c845afc3bd47a76ee44bb370"
+    },
+    "tests/unit/test_grouped_collinearity.py": {
+      "cases": 43,
+      "wall_seconds": 1.844977,
+      "source_sha256": "9294bc0aeef590102ae04198d09afdbaefb85be34c88b0c023722f16587c1d6a"
+    },
+    "tests/unit/test_holdout_evidence.py": {
+      "cases": 23,
+      "wall_seconds": 3.998422,
+      "source_sha256": "14ec6a94e85320e7f5fd4410758a15849cf09baf0079988f2281662b0184ff23"
+    },
+    "tests/unit/test_hyperparam.py": {
+      "cases": 42,
+      "wall_seconds": 27.280116,
+      "source_sha256": "18f8d9da9f9b28d099df135195cb8d21bfe5a70591bf0bf5678a49c13502cd76"
+    },
+    "tests/unit/test_hyperparam_failure_recovery.py": {
+      "cases": 30,
+      "wall_seconds": 0.679383,
+      "source_sha256": "9e6f7d6f0b794611fb4b8372a3a23ca44a6463a72e7b03da0e9f47ad0702712b"
+    },
+    "tests/unit/test_hyperparam_immutable_history.py": {
+      "cases": 36,
+      "wall_seconds": 1.666571,
+      "source_sha256": "55bdcfc5d8bb01f9dccb454fe084e3122af0627778a90ab427563966a4703eef"
+    },
+    "tests/unit/test_job_expiry_fencing.py": {
+      "cases": 25,
+      "wall_seconds": 20.381326,
+      "source_sha256": "051ca50277306b23f5b17718560185d874e96fe8fbacc68cdeed1c1f8e849187"
+    },
+    "tests/unit/test_job_lock_waits.py": {
+      "cases": 17,
+      "wall_seconds": 18.641146,
+      "source_sha256": "c71811f2b720681f375d23b22645400de5ef28c2ee3bb8579f94c162e24c315f"
+    },
+    "tests/unit/test_job_preflight.py": {
+      "cases": 12,
+      "wall_seconds": 0.124143,
+      "source_sha256": "6a706ed040cf56881288129fea49e4e1f2eb51d78d8145cc52f2edbafcfe9bec"
+    },
+    "tests/unit/test_lineage_serialization.py": {
+      "cases": 3,
+      "wall_seconds": 0.723253,
+      "source_sha256": "7f5ad90c83968a900c6d34af6d0a681b72bd5ae5791044352ce9f873979a0b4a"
+    },
+    "tests/unit/test_managed_storage_boundary.py": {
+      "cases": 66,
+      "wall_seconds": 28.372701,
+      "source_sha256": "2b9f592442dff8d96a1f590de84e88f5ae371aefd036a2c995c5f493cb63a1d2"
+    },
+    "tests/unit/test_mcp_access_boundary.py": {
+      "cases": 37,
+      "wall_seconds": 9.958132,
+      "source_sha256": "bd1abd6e74b0d5d76ec7bc5dda7f36b5f67955073d072da790ea7584b2e75742"
+    },
+    "tests/unit/test_mcp_auth_and_commands.py": {
+      "cases": 11,
+      "wall_seconds": 0.108482,
+      "source_sha256": "bc2936abd5d0790f290f8efc2707ef46b8718fce5b871863b6c8b8e95c145ec0"
+    },
+    "tests/unit/test_modeling.py": {
+      "cases": 60,
+      "wall_seconds": 0.531411,
+      "source_sha256": "a6d274a0e4543fb1a040a704f125f558d043d53afd1fcdeca0f90594834748e4"
+    },
+    "tests/unit/test_multiclass_metric_runtime.py": {
+      "cases": 75,
+      "wall_seconds": 10.735243,
+      "source_sha256": "aa952e8b27de8895a42d16994069978818e909a748e2be7e9a7e33706bca93ff"
+    },
+    "tests/unit/test_multiclass_selected_diagnostics.py": {
+      "cases": 24,
+      "wall_seconds": 0.353609,
+      "source_sha256": "8a0ae7ce9a58a555f379e6d6933650014a68e820fbd77f14f8dfe1a94df845bc"
+    },
+    "tests/unit/test_native_adoption_read_timeout.py": {
+      "cases": 26,
+      "wall_seconds": 40.691697,
+      "source_sha256": "4536048ab3a10097ae89f72943acf113099058007de4823d0dcbf4aa5179566e"
+    },
+    "tests/unit/test_native_adoption_receipts.py": {
+      "cases": 123,
+      "wall_seconds": 122.447986,
+      "source_sha256": "477a475f9a2a10bbbef64d9c3fc6cabbff480d2c782977d542ec11f0a722eb87"
+    },
+    "tests/unit/test_native_assessment_preview_authority.py": {
+      "cases": 18,
+      "wall_seconds": 20.806118,
+      "source_sha256": "7cfd4e756c76dcd855987a23205656a305d627fa8c1a9f70c818c31410ee94c5"
+    },
+    "tests/unit/test_native_authority_metadata.py": {
+      "cases": 57,
+      "wall_seconds": 17.646239,
+      "source_sha256": "47806fd3f527aae2daad60b98635d00451adb5f702fd667436c3d04fa7c534a3"
+    },
+    "tests/unit/test_native_cancellation_safety.py": {
+      "cases": 74,
+      "wall_seconds": 19.720328,
+      "source_sha256": "949b8bc94f98505549417f2940edbc519c8a92ad7f8bfb9191d2e327d142ddf3"
+    },
+    "tests/unit/test_native_case_costs.py": {
+      "cases": 49,
+      "wall_seconds": 0.740281,
+      "source_sha256": "089a1c9ebf2d20f140cc5a33d9280029abc8fcd97aca5093435ef5770eb561e8"
+    },
+    "tests/unit/test_native_checkpoint_payloads.py": {
+      "cases": 25,
+      "wall_seconds": 6.170682,
+      "source_sha256": "a366bcce9cd62a3a9ebcd1398e79bf875110a7e2c49863cb64db7ca1033cb569"
+    },
+    "tests/unit/test_native_checkpoint_refresh.py": {
+      "cases": 49,
+      "wall_seconds": 11.160197,
+      "source_sha256": "1629ab8524c4bc3617093d140f1a393f086240e5715215f584c7173588f515cf"
+    },
+    "tests/unit/test_native_claim_attempt_budget.py": {
+      "cases": 32,
+      "wall_seconds": 9.106441,
+      "source_sha256": "db5559b6a60d4979104cf0338dc7d35182b4f481ae989cb1495cdf3ddcb69eeb"
+    },
+    "tests/unit/test_native_claim_specification.py": {
+      "cases": 37,
+      "wall_seconds": 9.658956,
+      "source_sha256": "ffbb25b05f0cf9b8d7d2718f0bee8e468214d9301f66c0a894c5dc46ca8deeef"
+    },
+    "tests/unit/test_native_cpu_diagnostics.py": {
+      "cases": 25,
+      "wall_seconds": 1.170417,
+      "source_sha256": "1617b77e0aa699c373bdc9c7c643fe894a9dda29bae23b11325d724852a9b1d2"
+    },
+    "tests/unit/test_native_csv_input_files.py": {
+      "cases": 22,
+      "wall_seconds": 0.398566,
+      "source_sha256": "3a02849cbc3ca709a63e3bec6a7a8608d0f3f5c757fc888d8f18311ee2fd55ac"
+    },
+    "tests/unit/test_native_csv_parent_descriptors.py": {
+      "cases": 54,
+      "wall_seconds": 0.446395,
+      "source_sha256": "85914af2d91b9483f74b32ab36572dd086202691cd6753c64ef6845493c31228"
+    },
+    "tests/unit/test_native_detail_read_timeout.py": {
+      "cases": 15,
+      "wall_seconds": 9.572003,
+      "source_sha256": "640f650fcb6c7af91bb592df266668194dadd46039b05dd8e19ae768a8f64f22"
+    },
+    "tests/unit/test_native_dispatch_order.py": {
+      "cases": 16,
+      "wall_seconds": 3.650394,
+      "source_sha256": "53679932403dc330264909358cdb6e1b28bda0c968335f4cd711215c722ab935"
+    },
+    "tests/unit/test_native_evidence_metric_work.py": {
+      "cases": 44,
+      "wall_seconds": 1.968815,
+      "source_sha256": "cea93c8687259885802434a628de7ba0c35a2885003a0449c38c73e2d368956d"
+    },
+    "tests/unit/test_native_execution_costs.py": {
+      "cases": 48,
+      "wall_seconds": 2.703674,
+      "source_sha256": "18c1f09eba14a87dd41a1bb158a03d47eb17cf25194b8113711c4c0e92b77e9a"
+    },
+    "tests/unit/test_native_execution_scope_binding.py": {
+      "cases": 55,
+      "wall_seconds": 15.214613,
+      "source_sha256": "81e5f63220ef92c2de01bed2c23c4ce18693a995651f39cb7f8d8ae5f57b5813"
+    },
+    "tests/unit/test_native_handoff_access_summary.py": {
+      "cases": 31,
+      "wall_seconds": 8.777788,
+      "source_sha256": "317f8286b680c5c1671147d8340ea590ea3b81a8d70afdcbdd1921494cb8252c"
+    },
+    "tests/unit/test_native_handoff_history_counter.py": {
+      "cases": 27,
+      "wall_seconds": 6.519984,
+      "source_sha256": "14c8debc06adfcf0bf2251d920cc699d83093a4ac5ad7837281a89d673d1e46b"
+    },
+    "tests/unit/test_native_handoff_metadata_shapes.py": {
+      "cases": 34,
+      "wall_seconds": 9.289737,
+      "source_sha256": "24f659b15adcfbcf46979f8433681701561164c287bd464f730311306189ebfd"
+    },
+    "tests/unit/test_native_handoff_read_timeout.py": {
+      "cases": 26,
+      "wall_seconds": 11.534694,
+      "source_sha256": "5e7c72e6d1ccea776e6a79731d0005624c14a91fde8fd7e70630b8e7f7276db5"
+    },
+    "tests/unit/test_native_handoff_specification.py": {
+      "cases": 55,
+      "wall_seconds": 14.141588,
+      "source_sha256": "026c4654d1379a993bff4c3102a82180a1da1a6fec4669c28d9a9131f893aca6"
+    },
+    "tests/unit/test_native_history_read_timeout.py": {
+      "cases": 21,
+      "wall_seconds": 10.67308,
+      "source_sha256": "7c7794c1deb28948cd54fead28fbbecf073da37ef798f680a4456b00cff85f82"
+    },
+    "tests/unit/test_native_incomplete_lease.py": {
+      "cases": 34,
+      "wall_seconds": 8.090754,
+      "source_sha256": "1f7620c91c1f0499c4c7bfee5cb1b4fec807c4e229a687e7d944b0dbdb868748"
+    },
+    "tests/unit/test_native_job_list_metadata.py": {
+      "cases": 29,
+      "wall_seconds": 9.820815,
+      "source_sha256": "58ae64b7971d57dbee022e754f79a3cc91c5e7a5a42e447e5cd3448d4b69a405"
+    },
+    "tests/unit/test_native_job_list_read_timeout.py": {
+      "cases": 15,
+      "wall_seconds": 9.169809,
+      "source_sha256": "de4966e4b2a3781291e2bccc48167722b44560b7eb52ae9c22e12e86a19f9298"
+    },
+    "tests/unit/test_native_job_pagination.py": {
+      "cases": 25,
+      "wall_seconds": 8.776294,
+      "source_sha256": "587310c9602277fac81918a55d7df0fb3ba3d156fda52449ccb2d6f371e76c69"
+    },
+    "tests/unit/test_native_jobs.py": {
+      "cases": 36,
+      "wall_seconds": 26.570143,
+      "source_sha256": "0fbc5fdaa5af1e8a96534877db3d383e1733159b7fb09f51b2165800d712fd89"
+    },
+    "tests/unit/test_native_json_storage.py": {
+      "cases": 66,
+      "wall_seconds": 1.683772,
+      "source_sha256": "a528274a83576ab29d58e923c9858583a702a0ade1239cd9f5bf4d9a24fdf39f"
+    },
+    "tests/unit/test_native_metadata_parsing.py": {
+      "cases": 37,
+      "wall_seconds": 11.417644,
+      "source_sha256": "74493feeb1eee01e00e2aee6b86800b123a193768b030e15b86a00494a6bde90"
+    },
+    "tests/unit/test_native_mixed_preparation.py": {
+      "cases": 37,
+      "wall_seconds": 0.583578,
+      "source_sha256": "ea3c6f37505f53897b999967ddec635a690266221b0e9f1ebf3babd4ab54be7f"
+    },
+    "tests/unit/test_native_numeric_prediction.py": {
+      "cases": 39,
+      "wall_seconds": 4.565409,
+      "source_sha256": "a44f529891d1cdffc215eead09fe47e030f38a1f59fa7b257c05686666f38b91"
+    },
+    "tests/unit/test_native_numeric_preparation.py": {
+      "cases": 42,
+      "wall_seconds": 0.38259,
+      "source_sha256": "f55630dd02fbf45b743421387c7daa5df3e7de2fd407622bb8a5deafa89ac5de"
+    },
+    "tests/unit/test_native_operational_handoff.py": {
+      "cases": 23,
+      "wall_seconds": 15.347297,
+      "source_sha256": "84dea7d763622bfa4ce95b363793ae234de4d28b8e8314d6c35ee9909cd411d6"
+    },
+    "tests/unit/test_native_operator_read_budget.py": {
+      "cases": 48,
+      "wall_seconds": 12.088485,
+      "source_sha256": "1711e114a9ba2d8c71dd31356eddd19bb017766045b882bdf5ff50906411437c"
+    },
+    "tests/unit/test_native_operator_state_collation.py": {
+      "cases": 22,
+      "wall_seconds": 9.412302,
+      "source_sha256": "6c7665deb4c3ec293fed97ac84f215b7436db908d1b13ec6f78f9faa806ee8e5"
+    },
+    "tests/unit/test_native_operator_triage.py": {
+      "cases": 10,
+      "wall_seconds": 3.519283,
+      "source_sha256": "452ee6c101a6f40bb1c2e6e26a18805501ca0bfed8878f8840206261ddffa020"
+    },
+    "tests/unit/test_native_package_files.py": {
+      "cases": 34,
+      "wall_seconds": 1.018718,
+      "source_sha256": "052a64a3b9d5310cbaff974f25a2541b1925540240fef41af82006469cdef0f2"
+    },
+    "tests/unit/test_native_package_parent_descriptors.py": {
+      "cases": 103,
+      "wall_seconds": 0.889826,
+      "source_sha256": "52213330258ee92d3cf0d9c0dd7a94f5d4fbcdc69651d462ae5e57773ec73cef"
+    },
+    "tests/unit/test_native_protected_assessment.py": {
+      "cases": 35,
+      "wall_seconds": 53.47935,
+      "source_sha256": "bd7571f93a91611c9ca6ce99c61f9c7361d719f3fbeee93ac0ad07cd12e8f050"
+    },
+    "tests/unit/test_native_publication_deadline.py": {
+      "cases": 41,
+      "wall_seconds": 38.090344,
+      "source_sha256": "cc178080369084873087ca7c3e26b8f0577e55013aeb804e7b077dbe48c08156"
+    },
+    "tests/unit/test_native_queue_history.py": {
+      "cases": 39,
+      "wall_seconds": 13.38558,
+      "source_sha256": "602dff1737f12bbedb335785f211219c7c3561595c018dd8ec86a85239e8f905"
+    },
+    "tests/unit/test_native_read_cache.py": {
+      "cases": 63,
+      "wall_seconds": 61.60895,
+      "source_sha256": "cccacfdc3a0717c3a621fc00aa07354a1837eac125a39976c1ef89af109125e9"
+    },
+    "tests/unit/test_native_reconciliation_metadata.py": {
+      "cases": 37,
+      "wall_seconds": 9.216359,
+      "source_sha256": "ce25346a9c884206dea250c504722917ae1bd4ec5a6c530ad0dc6faba195bc71"
+    },
+    "tests/unit/test_native_retained_receipts.py": {
+      "cases": 39,
+      "wall_seconds": 9.830858,
+      "source_sha256": "3ed9808ce94d34dd3030c4da449ca0c143415d2217a61dbd20548156789a6346"
+    },
+    "tests/unit/test_native_submission_receipts.py": {
+      "cases": 88,
+      "wall_seconds": 23.176106,
+      "source_sha256": "56424d1609cfadaf02f440edb1e68a73000695f9c67003a0d49f61ae2486e535"
+    },
+    "tests/unit/test_native_training_scoring.py": {
+      "cases": 39,
+      "wall_seconds": 41.513969,
+      "source_sha256": "d8ecbde9847d89c2b46aa440e7f8b1b316b1dc9c78a20f863ccc9516d88bb99a"
+    },
+    "tests/unit/test_native_worker_diagnostics.py": {
+      "cases": 37,
+      "wall_seconds": 0.708363,
+      "source_sha256": "f2600d0d5501ac663c44920e922b7a2b7317d8e7a4a6145b6cfd75ad02eacf9a"
+    },
+    "tests/unit/test_native_worker_specification.py": {
+      "cases": 96,
+      "wall_seconds": 23.964592,
+      "source_sha256": "d5a6725698cb520ed515d13aa6b81bf0835e33434c29f11cdcbb6c76f48af43a"
+    },
+    "tests/unit/test_offline_scoring.py": {
+      "cases": 30,
+      "wall_seconds": 11.697467,
+      "source_sha256": "daf1898afb3d750fae357552e11155fa8b529a9d4089d6005cb7105b8a254f72"
+    },
+    "tests/unit/test_operator_probe_capture.py": {
+      "cases": 37,
+      "wall_seconds": 21.000592,
+      "source_sha256": "3dcca0121cfd6e415dbafcc35ad86480c5757115f9b74ad9d2cd87987c2b9dba"
+    },
+    "tests/unit/test_operator_probe_json.py": {
+      "cases": 43,
+      "wall_seconds": 0.98142,
+      "source_sha256": "21f0103002d44b261f0a98123887e72444a30b47d9186082435b0b51a396d650"
+    },
+    "tests/unit/test_optional_observability.py": {
+      "cases": 10,
+      "wall_seconds": 0.063704,
+      "source_sha256": "a056027b02678476943140d513f11986ce8e0478613d4bc2a6156e5f478714fe"
+    },
+    "tests/unit/test_package_handoff.py": {
+      "cases": 19,
+      "wall_seconds": 7.483183,
+      "source_sha256": "4606eeca9f7e718be3aa6354e4d140034cb61a05608bdca5363da61232e94e74"
+    },
+    "tests/unit/test_package_reviews.py": {
+      "cases": 32,
+      "wall_seconds": 28.517027,
+      "source_sha256": "4a3a8ffa9369f12b4ee9c3f4cd0a17756abc57d8f2ff31a3dbee95a901df4443"
+    },
+    "tests/unit/test_preprocessing.py": {
+      "cases": 53,
+      "wall_seconds": 0.540143,
+      "source_sha256": "c9b3f3824e54a49e86fca664a125e93659ab39762a25e776178678580330feca"
+    },
+    "tests/unit/test_private_api_package.py": {
+      "cases": 74,
+      "wall_seconds": 0.59637,
+      "source_sha256": "0728fd6e0bf651678a0038b59cd1f6d0465b122ada036b72cfbf24d6e231dd10"
+    },
+    "tests/unit/test_private_broker_authentication.py": {
+      "cases": 32,
+      "wall_seconds": 1.243465,
+      "source_sha256": "8e20d9940f1f80cd30874907b1da69953a5e02c236193b91e346cd3b3cbcb1f4"
+    },
+    "tests/unit/test_private_broker_tls.py": {
+      "cases": 24,
+      "wall_seconds": 1.788807,
+      "source_sha256": "69b7fc543d3617bab67b39b2bb7e4be98979583710aaf9bdd8e7fd18b54eedf4"
+    },
+    "tests/unit/test_private_cache.py": {
+      "cases": 39,
+      "wall_seconds": 2.452668,
+      "source_sha256": "5a5b5242d38d032a4fc0d42f7120b9277014b94317d821771e57fbd50e78b619"
+    },
+    "tests/unit/test_private_controller_capture.py": {
+      "cases": 13,
+      "wall_seconds": 0.118627,
+      "source_sha256": "45277392202ffef1f14e2603a8e86dfc396ee2a88570b91a16d010c192b793af"
+    },
+    "tests/unit/test_private_delivery_capture.py": {
+      "cases": 29,
+      "wall_seconds": 0.271941,
+      "source_sha256": "a78160c7a41ffad94771696cb9f76f0098fd3ad69977318bd1a8111239d05e8d"
+    },
+    "tests/unit/test_private_dependency_init.py": {
+      "cases": 46,
+      "wall_seconds": 0.601842,
+      "source_sha256": "49b0cf2f74625176651652d80fe8ad5ef23f551d6b2ffc8eb44f691ba3816401"
+    },
+    "tests/unit/test_private_dependency_probe_namespace.py": {
+      "cases": 7,
+      "wall_seconds": 1.574722,
+      "source_sha256": "d3442e988dccd75157adc3f927c09a5ff8768e9f96635b2790aa7a6af136dfc9"
+    },
+    "tests/unit/test_private_dependency_profile.py": {
+      "cases": 18,
+      "wall_seconds": 0.138736,
+      "source_sha256": "66af4fef8503a8b15bba983fdc0c2a90fb74040107b428e2ded6531985bf2584"
+    },
+    "tests/unit/test_private_dependency_start.py": {
+      "cases": 96,
+      "wall_seconds": 3.292072,
+      "source_sha256": "c52f28a21f6a29f81d11102947ee62bb9c94a00b1983d108fc155b35eb73d13a"
+    },
+    "tests/unit/test_private_frontend.py": {
+      "cases": 20,
+      "wall_seconds": 0.206592,
+      "source_sha256": "4f13d557c98903512917937dced0691ec4f4e714817f83311e1c0783735f0d18"
+    },
+    "tests/unit/test_private_image_jobs.py": {
+      "cases": 34,
+      "wall_seconds": 0.257035,
+      "source_sha256": "c4d7b6c5ebd93f81ec6de7cf850bb1cef4d04f64f2a42535e77051cc6aea6416"
+    },
+    "tests/unit/test_private_image_set.py": {
+      "cases": 67,
+      "wall_seconds": 0.98361,
+      "source_sha256": "a0f9bbcd2cdc5d3e226dc0d3d78bc821be4a09861d7acf42c606a80466cf91a9"
+    },
+    "tests/unit/test_private_ingress.py": {
+      "cases": 37,
+      "wall_seconds": 0.344959,
+      "source_sha256": "c1a380c07088d0f4893ffdda269c653222dc51774ffa13537964674e23394f9c"
+    },
+    "tests/unit/test_private_installation_adopt.py": {
+      "cases": 100,
+      "wall_seconds": 3.89976,
+      "source_sha256": "a249c91215b49f9d4906942a3f203cf5ff226656ad7b31d37fc4d6abdf906ab9"
+    },
+    "tests/unit/test_private_installation_check.py": {
+      "cases": 57,
+      "wall_seconds": 1.145394,
+      "source_sha256": "07417709cbe4026b6909bab29bbb67cfe8a86187eedbe23a2869eedb6049aecd"
+    },
+    "tests/unit/test_private_installation_init.py": {
+      "cases": 45,
+      "wall_seconds": 1.085756,
+      "source_sha256": "648bd96987c7c73d6334c8d0b01e02d9173665a7e54c4ec90b9398bd406953ab"
+    },
+    "tests/unit/test_private_installation_plan.py": {
+      "cases": 52,
+      "wall_seconds": 0.529585,
+      "source_sha256": "1435b78f9af82722dd002613842e5217e5f035188a3e0e70086535b4a06f2b06"
+    },
+    "tests/unit/test_private_installation_recovery.py": {
+      "cases": 70,
+      "wall_seconds": 0.528239,
+      "source_sha256": "a4666fb9a906a106bcd374687611756c1c3e853d2f85b236f39a739a62c762e8"
+    },
+    "tests/unit/test_private_installation_resources.py": {
+      "cases": 53,
+      "wall_seconds": 1.45297,
+      "source_sha256": "65d16676d56d15c09c68ad0711e4f5ebfce784844ee28ca89b4dcb6adfb97907"
+    },
+    "tests/unit/test_private_installation_upgrade.py": {
+      "cases": 71,
+      "wall_seconds": 0.503874,
+      "source_sha256": "b918f45686910d4f775d809903e3c81d12a9f14e7af1e316c911c3788151e0ae"
+    },
+    "tests/unit/test_private_lifecycle_readiness.py": {
+      "cases": 32,
+      "wall_seconds": 1.898862,
+      "source_sha256": "79c2550ecfd890a03cda1e36657dba70c6be6bd9d220ed002bb42401d10922a4"
+    },
+    "tests/unit/test_private_metadata_write_mode.py": {
+      "cases": 12,
+      "wall_seconds": 2.732867,
+      "source_sha256": "35e589cdab5603099f3d171bedb9448c8bf5226bb95d4030eead53c901bf2d61"
+    },
+    "tests/unit/test_private_migration_history.py": {
+      "cases": 12,
+      "wall_seconds": 2.76334,
+      "source_sha256": "fbb97074f81ff04e8a45ce2abba2e09e8f9c7b42a4ecde1bfe14fddd36b9cd58"
+    },
+    "tests/unit/test_private_native_suite_runtime.py": {
+      "cases": 14,
+      "wall_seconds": 0.167918,
+      "source_sha256": "2fa537c25827bf36ad50a44ec1b93ff1c0c3508a725c12ebc73989cba16f6f07"
+    },
+    "tests/unit/test_private_operation_lock.py": {
+      "cases": 14,
+      "wall_seconds": 0.742329,
+      "source_sha256": "fa7d303f03acc6c2ec7170d6db85f69c9e89d5bb598049cbd7075644acd06ba8"
+    },
+    "tests/unit/test_private_postgres_ca.py": {
+      "cases": 26,
+      "wall_seconds": 1.664355,
+      "source_sha256": "eec344bedf720d66e44ffe859d2ee109e72402dd7afd8b08039d3b14aee11651"
+    },
+    "tests/unit/test_private_postgres_tls.py": {
+      "cases": 9,
+      "wall_seconds": 0.07144,
+      "source_sha256": "a85383c7f1a8ef38f2bca5587dd982f4d49c2a33e9faeadd1e7faf8be0de0125"
+    },
+    "tests/unit/test_private_queue_consistency.py": {
+      "cases": 37,
+      "wall_seconds": 1.054959,
+      "source_sha256": "b2056daf4941190aef808f8030bfbee9c266934fea6f41d7cf0acd7c27f307a7"
+    },
+    "tests/unit/test_private_queue_evidence.py": {
+      "cases": 40,
+      "wall_seconds": 0.268339,
+      "source_sha256": "2deacf6cb7b5488841c5d757580b071de717f5dc5528fa305c5fdbe68bfab874"
+    },
+    "tests/unit/test_private_queue_incidents.py": {
+      "cases": 27,
+      "wall_seconds": 1.04258,
+      "source_sha256": "53d0d7f58b5c6e009840db6d9ffe1cef3f6635d79921b3398ec009b0eb8f826a"
+    },
+    "tests/unit/test_private_reference_archive.py": {
+      "cases": 16,
+      "wall_seconds": 1.39099,
+      "source_sha256": "d79dfb9f66eb23aed1707368d12797bfa68dfd4e6ec3436dbdd5e2b743cacdc9"
+    },
+    "tests/unit/test_private_role_namespace.py": {
+      "cases": 24,
+      "wall_seconds": 5.067736,
+      "source_sha256": "b85e816482441ce72a37055575ada1de1e0d1951ce39657b3d63f8357eaf34ba"
+    },
+    "tests/unit/test_private_schema_authority_namespace.py": {
+      "cases": 14,
+      "wall_seconds": 3.324092,
+      "source_sha256": "44c120f5c1bb36766a0160f0d3c0a82b70bcdc7e73620e189eeb8cbdd0245d8b"
+    },
+    "tests/unit/test_private_schema_catalog_namespace.py": {
+      "cases": 8,
+      "wall_seconds": 2.528459,
+      "source_sha256": "6603d8dd3d158135cb899c3f71065ce3d99aa8c0513c38736cbb58ee1dd0b4a7"
+    },
+    "tests/unit/test_private_schema_collations.py": {
+      "cases": 16,
+      "wall_seconds": 4.721507,
+      "source_sha256": "29326b677940ce861ef3df266481da713bbc4521414aae4d807dc5bab5c6f81d"
+    },
+    "tests/unit/test_private_schema_compound_unique.py": {
+      "cases": 76,
+      "wall_seconds": 22.710252,
+      "source_sha256": "58d3975d5774669618fc90486b11474cf75226a89fbed19ae5b0e6060dca7114"
+    },
+    "tests/unit/test_private_schema_foreign_keys.py": {
+      "cases": 122,
+      "wall_seconds": 38.02597,
+      "source_sha256": "a05b2c8c51a18fee597325adb5914d36a6d9655c8cf27fc366d0172678340286"
+    },
+    "tests/unit/test_private_schema_generated_columns.py": {
+      "cases": 20,
+      "wall_seconds": 6.268726,
+      "source_sha256": "097041c7b6ecb96275a44a0e632d3ec85c4a54d6041307b2a592530fa320c6f4"
+    },
+    "tests/unit/test_private_schema_identity.py": {
+      "cases": 26,
+      "wall_seconds": 7.508872,
+      "source_sha256": "bd100247d06f9d95963c25ff507dcd95146cf5934f9cfd800cf8ba8b4f63371f"
+    },
+    "tests/unit/test_private_schema_init.py": {
+      "cases": 42,
+      "wall_seconds": 1.59681,
+      "source_sha256": "81b26ca753799d6e51b14de8fccbae3523940c60309a6ef2189e39d0c1da2a79"
+    },
+    "tests/unit/test_private_schema_lock_namespace.py": {
+      "cases": 10,
+      "wall_seconds": 2.432776,
+      "source_sha256": "efc1fa86849d2fd054186b8488db5cb925872cee3137ecfd46d6e68878f30dc9"
+    },
+    "tests/unit/test_private_schema_namespace_prefix.py": {
+      "cases": 9,
+      "wall_seconds": 2.245437,
+      "source_sha256": "1bf7df69d51e06c984bd0f5a0a986c68cd3b46cc69d995547ba7035d56505ec8"
+    },
+    "tests/unit/test_private_schema_nullability.py": {
+      "cases": 20,
+      "wall_seconds": 6.295375,
+      "source_sha256": "a429bd00f3039bf0423b39fd99fa39d1960cfd9c2c1cc48664cf6661a280d8a6"
+    },
+    "tests/unit/test_private_schema_presence.py": {
+      "cases": 28,
+      "wall_seconds": 7.356791,
+      "source_sha256": "45ba9d449d1c2a525049c1624287105b106d45ced149e5ef3d47313479338cf3"
+    },
+    "tests/unit/test_private_schema_primary_keys.py": {
+      "cases": 38,
+      "wall_seconds": 10.94948,
+      "source_sha256": "c3bd9293432c3f0c0241a7e88012e33279fd922ba9659cbbc29699b0b43fe2b3"
+    },
+    "tests/unit/test_private_schema_privileges.py": {
+      "cases": 30,
+      "wall_seconds": 8.653493,
+      "source_sha256": "d6adac9b865bc2e56372918c5e129165b27ed6eeb539a51903ca9cf4fecfe533"
+    },
+    "tests/unit/test_private_schema_row_security.py": {
+      "cases": 30,
+      "wall_seconds": 8.728588,
+      "source_sha256": "4e17dda3b9001ff011731aec3a16ca6c36c9b7885f9a90c88504ebbcdcd14857"
+    },
+    "tests/unit/test_private_schema_state_catalog.py": {
+      "cases": 9,
+      "wall_seconds": 2.218099,
+      "source_sha256": "290db913e057ec26c7891a284936ed9cdf1942b8a2fbdf561bb7b9eb41d691b0"
+    },
+    "tests/unit/test_private_schema_storage_types.py": {
+      "cases": 20,
+      "wall_seconds": 6.380138,
+      "source_sha256": "697c8a63022c73262825d1d85a005d78ea606a01e198f0134850ab921c75d6d1"
+    },
+    "tests/unit/test_private_schema_type_modifiers.py": {
+      "cases": 20,
+      "wall_seconds": 6.204214,
+      "source_sha256": "7fc05614aadfb22d90b58f275ef99d86ef76de03db5be4a3f0879f6dd01ac2ae"
+    },
+    "tests/unit/test_private_schema_unique_fields.py": {
+      "cases": 36,
+      "wall_seconds": 12.135853,
+      "source_sha256": "46e4b970286aa7b10d0e2cfefc11eb1f66a3b6f85c5b1a0247f5f1e9bbfeadc0"
+    },
+    "tests/unit/test_private_secret_capture.py": {
+      "cases": 34,
+      "wall_seconds": 0.438129,
+      "source_sha256": "bb4bea9ec6eed7bd0bd0e6d9b2329015c43a77cf2c0e4942fb443012a0409e7a"
+    },
+    "tests/unit/test_private_service_dns.py": {
+      "cases": 47,
+      "wall_seconds": 2.324804,
+      "source_sha256": "d778efa385d40842d6b07961c12865c10996939efc915779d7b9fa73896e0753"
+    },
+    "tests/unit/test_private_tls_namespace.py": {
+      "cases": 8,
+      "wall_seconds": 1.812599,
+      "source_sha256": "df92f426040a2d93c74232581ada1ab7fe83fac0815bf731d3bc5427837fe74f"
+    },
+    "tests/unit/test_private_tls_snapshot.py": {
+      "cases": 13,
+      "wall_seconds": 0.835678,
+      "source_sha256": "1ed23d34b8ce43299c5e4538c2ef6bd2dba5765d70edf1aa42e93da0f76b2fbe"
+    },
+    "tests/unit/test_private_workload_envelope.py": {
+      "cases": 50,
+      "wall_seconds": 0.472681,
+      "source_sha256": "dde054de3349d0982f6227b4e0f59073ea0957d4e9b37ceaab9206d95758a5a5"
+    },
+    "tests/unit/test_product_roadmap.py": {
+      "cases": 49,
+      "wall_seconds": 0.684945,
+      "source_sha256": "d18157d05e55cf8d99250b49ff3d453d1f78a1de5a9188d5bacdc3f3a245d19e"
+    },
+    "tests/unit/test_project_authority.py": {
+      "cases": 46,
+      "wall_seconds": 50.68073,
+      "source_sha256": "ca1f7cd9fa8d59329f004ec68f7b7d483cd01b112b1fcf60283290af332c69b4"
+    },
+    "tests/unit/test_project_scope_snapshot.py": {
+      "cases": 75,
+      "wall_seconds": 16.189338,
+      "source_sha256": "d5a8efbbb86df7f71061df2cb80d1dad04d1e648107f4bef4eb1533d01c87ba2"
+    },
+    "tests/unit/test_purifier_contract.py": {
+      "cases": 5,
+      "wall_seconds": 0.091919,
+      "source_sha256": "d4efd009271104f095fd2165ff659c5af7ff4c6142978d819721c9823c034aee"
+    },
+    "tests/unit/test_purifier_replay.py": {
+      "cases": 31,
+      "wall_seconds": 9.049069,
+      "source_sha256": "110908aff73289ab330e2cb3b5d7223169dc9343dfc8c9b947a9ea0a73d0f47e"
+    },
+    "tests/unit/test_rag_eval.py": {
+      "cases": 7,
+      "wall_seconds": 0.103308,
+      "source_sha256": "fe47419a3841d38a972d8cd565155bdc14ec9f4b13c9db1b460252de653f29a6"
+    },
+    "tests/unit/test_rag_intent_telemetry.py": {
+      "cases": 18,
+      "wall_seconds": 0.188782,
+      "source_sha256": "3c6fb837ce3dd46a6da6a47645235d638e1ec79ffe10f55c43a647956097a80f"
+    },
+    "tests/unit/test_report_generator.py": {
+      "cases": 4,
+      "wall_seconds": 0.058983,
+      "source_sha256": "ce383aa9ec0eedf18fc0eb9c6b73d613a1d686522186dbebaeda24d70895beca"
+    },
+    "tests/unit/test_review_job_evidence.py": {
+      "cases": 24,
+      "wall_seconds": 26.243099,
+      "source_sha256": "a34a260425b317f05b1a98a8bcf728d0f589a149cb786a2daedd3e5b63f9c082"
+    },
+    "tests/unit/test_roadmap_backlog.py": {
+      "cases": 47,
+      "wall_seconds": 0.262029,
+      "source_sha256": "cfef136e142579b279f3ca71b28845eacf7ca180f1c3bdbeb287ae67b32b9ff5"
+    },
+    "tests/unit/test_roadmap_progress_changes.py": {
+      "cases": 24,
+      "wall_seconds": 0.141206,
+      "source_sha256": "2b4676edce0abad0de57f6e458e1a8ffeb2015e3e7229e6a8139621b201ce672"
+    },
+    "tests/unit/test_roadmap_status_metrics.py": {
+      "cases": 15,
+      "wall_seconds": 0.117372,
+      "source_sha256": "ea1b1077777d59bc726057e6da36fb0dc4e37a31a0624b681d0e6d1589f29946"
+    },
+    "tests/unit/test_runtime_config.py": {
+      "cases": 67,
+      "wall_seconds": 0.671886,
+      "source_sha256": "ea2ad036f139b5d47cf71174001eb54446f99a9b86259ad14b05be8aa952d2e8"
+    },
+    "tests/unit/test_runtime_metadata.py": {
+      "cases": 28,
+      "wall_seconds": 0.227656,
+      "source_sha256": "c490f5dfef9327f125a067b68399d8d8bdd285b01619f4a99a7902c740fd5df1"
+    },
+    "tests/unit/test_scoring_preview_authority.py": {
+      "cases": 26,
+      "wall_seconds": 20.808297,
+      "source_sha256": "78c2e2473f8353a913eb013303130b210373bbea7acb100390ef00d79725bdd1"
+    },
+    "tests/unit/test_scoring_receipt_authority.py": {
+      "cases": 6,
+      "wall_seconds": 5.089205,
+      "source_sha256": "b55a55a0f1bb4dc6f585c160be558903a8fde76dace3b13f679eb067d12ecdf3"
+    },
+    "tests/unit/test_search_capacity.py": {
+      "cases": 17,
+      "wall_seconds": 0.255515,
+      "source_sha256": "9c76d4d0d287712728e5b8bae39fb5e576f7c99adeb5c2aedebeedfb0f78279b"
+    },
+    "tests/unit/test_search_checkpoint_encoding.py": {
+      "cases": 13,
+      "wall_seconds": 0.885883,
+      "source_sha256": "14aecb6739ab778ffd955a5beaea08d9a7d7f4dfed8771397a842ff9bc5b0d1c"
+    },
+    "tests/unit/test_search_progress_ownership.py": {
+      "cases": 28,
+      "wall_seconds": 0.838098,
+      "source_sha256": "8de3770f549f06f49bae7866c032f314c3e2a8970f465736d14971ae1f0af9f8"
+    },
+    "tests/unit/test_search_stop_ownership.py": {
+      "cases": 50,
+      "wall_seconds": 0.499158,
+      "source_sha256": "3eed1b5697a50cd230cdec94c37bb9aa75b5e1dcc74198245be188e08710ad8c"
+    },
+    "tests/unit/test_search_storage_setup.py": {
+      "cases": 17,
+      "wall_seconds": 0.255857,
+      "source_sha256": "3b27c2ebeb53f6c867b56a634a546cde04cd162387cbfe894c98796281f464cd"
+    },
+    "tests/unit/test_search_worker_connections.py": {
+      "cases": 17,
+      "wall_seconds": 0.750228,
+      "source_sha256": "6b0d515219e1408461e2719f3eb478328808ce4806ac20063432c25d92b5eb54"
+    },
+    "tests/unit/test_search_worker_launch.py": {
+      "cases": 20,
+      "wall_seconds": 0.395113,
+      "source_sha256": "ef2bc1284ae102a8ee3443487f87025b898e63b2d9c4d5a88a21d885fd79bc1b"
+    },
+    "tests/unit/test_selected_class_validation.py": {
+      "cases": 62,
+      "wall_seconds": 2.189223,
+      "source_sha256": "1d8401d8c97bffce83da6d0ceb0a8adbefc2bd4c4376709c10e92ae7f50c1a83"
+    },
+    "tests/unit/test_selected_regression_errors.py": {
+      "cases": 42,
+      "wall_seconds": 0.343197,
+      "source_sha256": "fc392c3fb00c732a2288f42b6bc432772c62477b777c48d1a135cc4bbf5d4dbf"
+    },
+    "tests/unit/test_service_role_preflight.py": {
+      "cases": 16,
+      "wall_seconds": 1.44821,
+      "source_sha256": "d514704061cf2eaba91f52d5178126b90854f218dcf1deb9c1bb121149367389"
+    },
+    "tests/unit/test_session_boundary.py": {
+      "cases": 28,
+      "wall_seconds": 7.330923,
+      "source_sha256": "10047e62850a0d6b615355efda7207ddadfc94e372ef48f14c8da4f96f012ed2"
+    },
+    "tests/unit/test_session_governance.py": {
+      "cases": 30,
+      "wall_seconds": 10.235788,
+      "source_sha256": "89b6ca5711ff34f9d5b0453b9f2325a7b7eeae62d99664bcc9896490bc9d100b"
+    },
+    "tests/unit/test_session_role_preflight.py": {
+      "cases": 11,
+      "wall_seconds": 1.665722,
+      "source_sha256": "c710933e41e45d318c211f0539b79d0edbfb974ed4b1bca5af9cd8df7dd78a30"
+    },
+    "tests/unit/test_sfs_async_failures.py": {
+      "cases": 5,
+      "wall_seconds": 0.186073,
+      "source_sha256": "16d7ecc8b5b4a1d89cd73b94ea78d9ad66efc512874e44065e5584fa29ba19f8"
+    },
+    "tests/unit/test_sfs_atomic_evidence.py": {
+      "cases": 10,
+      "wall_seconds": 0.189195,
+      "source_sha256": "45775ea9005fd5d6defad164171d5236bf4ebf277a1fd16603ee0bd4cfd3e48a"
+    },
+    "tests/unit/test_sfs_immutable_history.py": {
+      "cases": 13,
+      "wall_seconds": 0.167642,
+      "source_sha256": "c69ab6c3dc28757f58dbc932734f973eb558f411665c469158452c35c8977093"
+    },
+    "tests/unit/test_sfs_objective.py": {
+      "cases": 42,
+      "wall_seconds": 7.503582,
+      "source_sha256": "d7194cbcd05275f5eb0174cfb7ed830ede94e2828bca126cf75be66d6e4abd39"
+    },
+    "tests/unit/test_sfs_persisted_status.py": {
+      "cases": 19,
+      "wall_seconds": 0.346796,
+      "source_sha256": "271a95e021114d2085928786c330b9ee13910eb4107d7875fd4e79cc3e189c55"
+    },
+    "tests/unit/test_sfs_resume_admission.py": {
+      "cases": 36,
+      "wall_seconds": 3.318637,
+      "source_sha256": "9c529922735125ec9048ab04d9282e3db108cf1d521ccd3fac117c5beef346b7"
+    },
+    "tests/unit/test_sfs_screening_metric_work.py": {
+      "cases": 39,
+      "wall_seconds": 4.516006,
+      "source_sha256": "9f9173ecd27a1368cc870152fddfd06764f54d54ea516eb8f8d82a6eff1347c0"
+    },
+    "tests/unit/test_sfs_utils.py": {
+      "cases": 15,
+      "wall_seconds": 2.6968,
+      "source_sha256": "6d78e3373ee3ed4d8a9b2d1c1d0150d6f96cef9eabe354b330be651e75b6764d"
+    },
+    "tests/unit/test_sqlite_writer_reservation.py": {
+      "cases": 1,
+      "wall_seconds": 5.189499,
+      "source_sha256": "664618aadedbc0985940d2beb09560e7cd30606d74ec55f1ebc726d4ef3ba6c3"
+    },
+    "tests/unit/test_threshold_table_parity.py": {
+      "cases": 28,
+      "wall_seconds": 4.756432,
+      "source_sha256": "670285f1082f2ffe1142d31eb807af67f265c021cb697e81f98f3513220050ef"
+    },
+    "tests/unit/test_training_preview_authority.py": {
+      "cases": 18,
+      "wall_seconds": 6.67071,
+      "source_sha256": "38fff8c66b35d7da53a9253294730a678247f7154e8c3e42e213eed72d167b12"
+    },
+    "tests/unit/test_tuning_evidence.py": {
+      "cases": 38,
+      "wall_seconds": 9.618356,
+      "source_sha256": "0b8aea5f68cc32785a25842580eb2b3dc4f4f2222b281d1998afd3729011e348"
+    }
+  }
+}
