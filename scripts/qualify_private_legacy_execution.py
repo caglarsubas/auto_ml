@@ -250,6 +250,9 @@ def qualify(session, value, accounts, parent, prepared, adopted, command):
         "legacy_selected_status",
     )
     require(len(records) == 21, "legacy_matrix_incomplete")
+    from qualify_private_selection_race import qualify as qualify_race
+
+    race = qualify_race(session, value, parent, searches)
     report = {
         "schema": "private_legacy_execution_qualification_v1",
         "installation_id": value["request"]["installation_id"],
@@ -263,6 +266,7 @@ def qualify(session, value, accounts, parent, prepared, adopted, command):
         "max_native_seconds": 120,
         "client_disconnect_independent": True,
         "explicit_development_selection_and_replay": "passed",
+        "concurrent_selection": race,
         "elapsed_seconds": time.monotonic() - began,
     }
     (parent / "legacy-execution.json").write_text(
@@ -351,6 +355,10 @@ class LossProbe:
             data=json.dumps({"id": self.orphan}).encode(),
         )
         self.loss = json.loads(raw)
+        from qualify_private_native_loss import NativeLossProbe
+
+        self.native = NativeLossProbe()
+        self.native.before_stop(session, accounts, adopted, command)
         # Cancel another request without assuming that a dispatcher race cannot
         # claim it. Both queued and in-flight cancellation must remain terminal.
         self.cancelled = launch(
@@ -402,6 +410,7 @@ class LossProbe:
         )
         return {
             "schema": "private_legacy_worker_loss_v1",
+            "native_worker_loss": self.native.after_restore(session, api, boundary),
             "synthetic_only": True,
             "parent_loss": self.loss,
             "original_lease_seconds": 180,

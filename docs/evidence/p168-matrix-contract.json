@@ -1,0 +1,80 @@
+{
+  "schema": "private_failure_matrix_contract_v1",
+  "source_base": "d376b7ba7d3e095a48d4e721575b062e1028c3b6",
+  "task": "D07-T06",
+  "supported_profile": "synthetic Ubuntu 24.04 Linux ARM64",
+  "families": [
+    "package_integrity",
+    "package_csv_scoring",
+    "native_training_search",
+    "native_candidate_scoring",
+    "protected_assessment",
+    "legacy_training",
+    "legacy_sfs",
+    "legacy_hpo",
+    "legacy_champion"
+  ],
+  "faults": [
+    "queued_cancel",
+    "running_cancel",
+    "duplicate_claim",
+    "expired_request",
+    "stale_token",
+    "expired_lease",
+    "missing_lease",
+    "exhausted_attempts",
+    "runtime_changed",
+    "limits_changed",
+    "revoked",
+    "expired_during_work",
+    "deadline_elapsed",
+    "scope_changed"
+  ],
+  "positive_boundary": "publication_ack_loss_and_duplicate_delivery",
+  "expected_family_boundary_cases": 135,
+  "additional_native_tests": 4,
+  "unchanged_native_limits": {
+    "seconds": 900,
+    "workers": 2,
+    "worker_restarts": 0,
+    "scheduling": "loadfile"
+  },
+  "unchanged_job_limits": {
+    "max_active": 2,
+    "lease_seconds": 180,
+    "attempts": 3,
+    "seconds": 120
+  },
+  "existing_kernel_cases": 21,
+  "installed_race": {
+    "independent_https_clients": 2,
+    "responses": [
+      200,
+      409
+    ],
+    "attributable_completed_selections": 1,
+    "winner_replay": "idempotent"
+  },
+  "installed_worker_loss": [
+    "actual legacy parent SIGKILL with child termination",
+    "actual native Celery prefork SIGKILL at an observed publication role-lock wait"
+  ],
+  "clock_policy": "Unit expiry faults modify synthetic metadata; installed loss/recovery keeps natural leases and all original limits. Missing lease metadata is held for attributable operator reconciliation, never silently repaired.",
+  "source_preservation": {
+    "file": "p168-source-preservation.json",
+    "files": 312
+  },
+  "reused_passed_native_tests": [
+    "test_broker_failure_keeps_committed_request_and_republishes_only_identifier",
+    "test_changed_inputs_or_authority_and_invalid_csv_never_publish",
+    "test_changed_input_or_runtime_cannot_execute_under_old_approval",
+    "test_stale_or_unauthorized_execution_never_publishes",
+    "test_stale_or_tampered_scope_never_publishes",
+    "test_lost_lease_and_late_revocation_cannot_publish_after_label_access",
+    "test_interrupted_access_is_retained_and_recovery_records_reuse",
+    "test_cancelled_sfs_resumes_only_an_exact_recorded_checkpoint",
+    "test_child_does_not_announce_readiness_before_model_handlers_import"
+  ],
+  "release_qualified": false,
+  "customer_accepted": false
+}

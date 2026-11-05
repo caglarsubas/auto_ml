@@ -1,6 +1,6 @@
 # DeclarAI product development roadmap
 
-Updated 2026-11-03. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
+Updated 2026-11-05. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
 
 Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.
 
@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 9 (13.6%); in_progress: 0 (0.0%); waiting: 43 (65.2%); blocked: 7 (10.6%); done: 7 (10.6%).
+Inventory: 66 tasks; ready: 8 (12.1%); in_progress: 1 (1.5%); waiting: 43 (65.2%); blocked: 7 (10.6%); done: 7 (10.6%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -300,7 +300,7 @@ Move remaining supported legacy training/search paths to shared durable jobs and
 
 ### D07-T06 — Qualify full concurrency, cancellation and failure matrix
 
-**Priority / status:** P0 / ready. **Owner:** Platform. **Outcomes:** D07.
+**Priority / status:** P0 / in_progress. **Owner:** Platform. **Outcomes:** D07.
 
 Integrate remaining workflows with supported-profile interruption and recovery drills.
 
@@ -309,6 +309,8 @@ Integrate remaining workflows with supported-profile interruption and recovery d
 **Acceptance:** Worker/broker loss, duplicate delivery and cancellation produce one attributable outcome.; Recovery and publication are idempotent under bounded concurrency.
 
 **Source / rationale:** Remaining acceptance scope from D07; existing tested foundation is reused, not rebuilt.
+
+**Packet / evidence:** P168; [Failure-matrix qualification](PRIVATE_FAILURE_MATRIX.md)
 
 ### D07-T07 — Profile workload envelopes and operational limits
 
@@ -2557,6 +2559,16 @@ Move supported legacy training, feature selection and tuning onto shared durable
 **Evidence:** [Legacy execution protocol](PRIVATE_LEGACY_EXECUTION.md); [PR #270](https://github.com/caglarsubas/auto_ml/pull/270); [Strengthened retention contract source audit](evidence/p167-test-contract-delta.json); [Index-only qualification fixture contract](evidence/p167-upgrade-fixture-contract.json); [P167 legacy execution qualification](evidence/p167-qualification-2026-11-04.json); [Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41875398757)
 
 **Remaining:** D07-T05 is accepted for the disclosed synthetic ARM64 registered-native profile. Governed training/search and accepted refits use frozen shared jobs, detached native children, exact source/result references, immutable candidate publication and explicit attributable development selection. Browser closure, assistant launch, cancellation/checkpoint recovery, worker-parent loss and natural-lease restored replay are qualified. Broader D07-T06 failure-matrix coverage, customer operational acceptance, expert code, full D07, release and customer acceptance remain separate.
+
+### P168 — Full concurrency, cancellation and failure-matrix qualification
+
+**Packet status:** in_progress. **Mapped outcomes:** D07.
+
+Qualify the distinct execution families against shared admission, cancellation, authority, lease, publication, recovery and concurrent-selection boundaries without changing scientific workloads or test limits.
+
+**Evidence:** [Failure-matrix qualification](PRIVATE_FAILURE_MATRIX.md); [Finite failure-matrix contract](evidence/p168-matrix-contract.json); [312-source preservation baseline](evidence/p168-source-preservation.json)
+
+**Remaining:** Implementation, exact-head CI, source/inventory audit, independent main and acceptance publication remain pending. Task distribution remains 7 done / 52 open / 7 blocked across the fixed 66 tasks.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 

@@ -41,21 +41,18 @@ def main():
     import django
 
     django.setup()
-    (control / "started.tmp").write_text(
-        json.dumps(
-            {
-                "job_id": request["job_id"],
-                "parent_pid": parent,
-                "pid": os.getpid(),
-                "database": "dummy",
-                "entrypoint": "registered_native",
-            }
-        )
-    )
-    os.replace(control / "started.tmp", control / "started.json")
+    # Announce kernel readiness only after expensive handler imports. A
+    # cancellation following this event can then reach the kernel's existing
+    # stop/checkpoint protocol within its unchanged termination grace.
     from modeling import views
 
     operation, options = request["operation"], request["options"]
+    if operation != "sfs":
+        from execution_jobs.legacy_context import active
+
+        active().ready()
+    # SFS announces readiness at its first recorded, validated search basis.
+    # Import completion alone does not make an empty search resumable.
     handlers = {
         "training": views.execute_legacy_training,
         "sfs": views.execute_legacy_sfs,
