@@ -355,10 +355,6 @@ class LossProbe:
             data=json.dumps({"id": self.orphan}).encode(),
         )
         self.loss = json.loads(raw)
-        from qualify_private_native_loss import NativeLossProbe
-
-        self.native = NativeLossProbe()
-        self.native.before_stop(session, accounts, adopted, command)
         # Cancel another request without assuming that a dispatcher race cannot
         # claim it. Both queued and in-flight cancellation must remain terminal.
         self.cancelled = launch(
@@ -410,7 +406,6 @@ class LossProbe:
         )
         return {
             "schema": "private_legacy_worker_loss_v1",
-            "native_worker_loss": self.native.after_restore(session, api, boundary),
             "synthetic_only": True,
             "parent_loss": self.loss,
             "original_lease_seconds": 180,

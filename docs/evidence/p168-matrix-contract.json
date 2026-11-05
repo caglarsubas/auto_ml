@@ -76,5 +76,8 @@
     "test_child_does_not_announce_readiness_before_model_handlers_import"
   ],
   "release_qualified": false,
-  "customer_accepted": false
+  "customer_accepted": false,
+  "installed_native_loss_reuses_original_orphan": true,
+  "original_recovery_require_assertions": 43,
+  "original_legacy_require_assertions": 17
 }

@@ -24,8 +24,11 @@ from execution_jobs.tasks import run_native_job
 from execution_jobs import service
 v=json.load(sys.stdin);job=NativeJob.objects.get(pk=v['id'])
 assert job.state=='queued' and job.attempts==0 and job.result is None
-assert job.specification['kind']==service.training_search.KIND
-assert job.specification['training_sha256']==v['training_sha256']
+assert job.specification['kind'] in {service.training_search.KIND,service.training_scoring.KIND}
+assert job.specification==v['specification']
+pin_key='training_sha256' if job.specification['kind']==service.training_search.KIND else 'scoring_sha256'
+execution_pin=job.specification[pin_key]
+specification_pin=service.digest(job.specification)
 assert service.LIMITS['lease_seconds']==180 and service.LIMITS['max_active']==2
 with transaction.atomic():
     ProjectMembership.objects.select_for_update().get(project=job.project,actor_id=job.authority['actor_id'])
@@ -90,12 +93,27 @@ assert not job.events.filter(event_type='succeeded').exists()
 print(json.dumps({'schema':'private_native_worker_loss_v1','job_id':str(job.pk),'actual_prefork_SIGKILL':True,
                   'publication_role_lock_wait_observed':True,'request_sha256':job.request_sha256,
                   'pid_binding':'blocked_database_client_port_socket_inode_owner','celery_remote_control_enabled':False,
-                  'training_sha256':v['training_sha256'],'lease_seconds':180,'lease_clock_modified':False,
+                  'execution_kind':job.specification['kind'],'execution_pin_key':pin_key,'execution_sha256':execution_pin,
+                  'specification_sha256':specification_pin,'job_state':job.state,'lease_until':job.lease_until.isoformat(),
+                  'attempts':job.attempts,'lease_seconds':180,'lease_clock_modified':False,
                   'partial_publication':False,'synthetic_only':True}))
 """
 
 
 class NativeLossProbe:
+    def capture_existing(self, session, identifier, adopted, command):
+        dispatcher = adopted["services"]["dispatcher"]["container_id"]
+        paused = command(["container", "inspect", "--format", "{{json .State.Paused}}", dispatcher])
+        require(json.loads(paused) is True, "native_loss_dispatcher_not_paused")
+        self.queued = session.data("GET", f"/api/jobs/{identifier}/")
+        require(self.queued["state"] == "queued" and self.queued["attempts"] == 0, "native_loss_not_queued")
+        output = command(["exec", "-i", adopted["services"]["worker"]["container_id"], "python", "-c", LOSS],
+                         data=json.dumps({"id": identifier, "specification": self.queued["specification"]}).encode())
+        self.loss = json.loads(output)
+        self.loss["controller_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+        return {"state": self.loss["job_state"], "lease_until": self.loss["lease_until"],
+                "attempts": self.loss["attempts"], "lease_seconds": self.loss["lease_seconds"]}
+
     def before_stop(self, session, accounts, adopted, command):
         from qualify_private_legacy_execution import upload
 
@@ -111,12 +129,9 @@ class NativeLossProbe:
         dispatcher = adopted["services"]["dispatcher"]["container_id"]
         command(["container", "pause", dispatcher])
         try:
-            self.queued = session.data("POST", base, data, 202)
-            require(session.data("POST", base, data)["id"] == self.queued["id"], "native_loss_admission_replay")
-            output = command(["exec", "-i", adopted["services"]["worker"]["container_id"], "python", "-c", LOSS],
-                             data=json.dumps({"id": self.queued["id"], "training_sha256": preview["training_sha256"]}).encode())
-            self.loss = json.loads(output)
-            self.loss["controller_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+            queued = session.data("POST", base, data, 202)
+            require(session.data("POST", base, data)["id"] == queued["id"], "native_loss_admission_replay")
+            self.capture_existing(session, queued["id"], adopted, command)
         finally:
             command(["container", "unpause", dispatcher])
 
@@ -130,7 +145,7 @@ class NativeLossProbe:
             require(time.monotonic() < deadline, "native_loss_restore_deadline")
             time.sleep(.2)
         require(row["state"] == "succeeded" and row["attempts"] == 2
-                and row["result"]["training_sha256"] == self.loss["training_sha256"]
+                and row["result"][self.loss["execution_pin_key"]] == self.loss["execution_sha256"]
                 and row["specification"] == self.queued["specification"]
                 and len([e for e in row["events"] if e["event_type"] == "succeeded"]) == 1,
                 "native_loss_recovery_binding")

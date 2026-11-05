@@ -192,10 +192,21 @@ class Scenario:
             self.source_evidence = boundary(adopted["services"]["api"]["container_id"], "evidence", ids=self.completed)
             if self.legacy is not None:
                 self.legacy.before_stop(session, accounts, adopted, invoke)
-            for role in ("worker", "dispatcher"):
-                identifier = adopted["services"][role]["container_id"]
-                invoke(["container", "stop", "--time", "30", identifier])
-                invoke(["container", "rm", "--volumes", identifier])
+
+            def stop_workers():
+                for role in ("worker", "dispatcher"):
+                    identifier = adopted["services"][role]["container_id"]
+                    invoke(["container", "stop", "--time", "30", identifier])
+                    invoke(["container", "rm", "--volumes", identifier])
+
+            dispatcher = adopted["services"]["dispatcher"]["container_id"]
+            if self.legacy is None:
+                stop_workers()
+            else:
+                # Reuse the original orphan scoring request for the actual
+                # native kill. Two orphan attempts still occupy exactly the
+                # existing two slots; no third active request is manufactured.
+                invoke(["container", "pause", dispatcher])
             row = handles[0]
 
             def submit():
@@ -205,10 +216,22 @@ class Scenario:
                 request = {k: preview[k] for k in ("kind", "training_job_id", "training_result_sha256", "input_file_id", "input_sha256", "scoring_sha256")}
                 request["request_id"] = str(uuid.uuid4())
                 return session.data("POST", f'/api/jobs/datasets/{row["dataset_id"]}/?project_id={accounts["project_id"]}', request, 202)["id"]
-            self.queued, self.orphan, self.cancelled = submit(), submit(), submit()
-            require(session.data("POST", f'/api/jobs/{self.cancelled}/', {"action": "cancel"})["state"] == "cancelled", "recovery_cancel")
-            self.claimed = boundary(adopted["services"]["api"]["container_id"], "claim", id=self.orphan)
-            require(self.claimed["state"] == "running" and self.claimed["lease_seconds"] == 180, "recovery_claim")
+            try:
+                self.queued, self.orphan, self.cancelled = submit(), submit(), submit()
+                require(session.data("POST", f'/api/jobs/{self.cancelled}/', {"action": "cancel"})["state"] == "cancelled", "recovery_cancel")
+                if self.legacy is None:
+                    self.claimed = boundary(adopted["services"]["api"]["container_id"], "claim", id=self.orphan)
+                else:
+                    from qualify_private_native_loss import NativeLossProbe
+
+                    self.native_loss = NativeLossProbe()
+                    self.claimed = self.native_loss.capture_existing(session, self.orphan, adopted, invoke)
+                require(self.claimed["state"] == "running" and self.claimed["lease_seconds"] == 180, "recovery_claim")
+            finally:
+                if self.legacy is not None:
+                    invoke(["container", "unpause", dispatcher])
+            if self.legacy is not None:
+                stop_workers()
             # Keep a separate valid session alive across the backup. The normal
             # workflow logs out its own session after this callback.
             old = Session(value, parent)
@@ -359,6 +382,12 @@ class Scenario:
         require(evidence[self.orphan]["attempts"] == 2 and evidence[self.queued]["attempts"] == 1
                 and evidence[self.cancelled]["attempts"] == 0, "recovery_attempts")
         legacy_evidence = self.legacy.after_restore(session, api, boundary) if self.legacy is not None else None
+        native_evidence = self.native_loss.after_restore(session, api, boundary) if self.legacy is not None else None
+        if native_evidence is not None:
+            require(native_evidence["job_id"] == self.orphan
+                    and native_evidence["execution_kind"] == "native_training_scoring_v1",
+                    "native_loss_original_orphan")
+            native_evidence["reuses_original_orphan"] = True
         duplicate_started = time.monotonic()
         boundary(api, "duplicates", ids=ids)
         deadline = time.monotonic() + 30
@@ -371,7 +400,8 @@ class Scenario:
         # Idempotent restore remains read-only after legitimate new work.
         require(recovery.restore(self.archive, self.key, plan, expected, approved, spec["restore_plan_sha256"])["reused"] is True,
                 "recovery_post_use_replay")
-        return {"legacy_worker_loss": legacy_evidence, "schema": "private_installed_recovery_v1", "observed_costs": {
+        return {"legacy_worker_loss": legacy_evidence, "native_worker_loss": native_evidence,
+                "schema": "private_installed_recovery_v1", "observed_costs": {
                     "source_backup_seconds": self.backup_seconds, "source_archive_bytes": self.archive.stat().st_size,
                     "source_workloads": [{"task": h["task"], "features": len(h["training"]["result"]["features"]),
                         "rows": len({i for fold in h["training"]["specification"]["training"]["folds"]

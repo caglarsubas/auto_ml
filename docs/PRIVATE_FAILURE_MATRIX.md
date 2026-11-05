@@ -41,6 +41,9 @@ port to a socket inode and owning PID inside the owned worker container.
 Celery remote control remains disabled. This complements the detached legacy
 parent/child kill, then recovers both immutable requests under their natural
 leases in the existing coordinated restore drill.
+It strengthens the fixture's original orphan scoring request rather than
+adding another orphan. The queued/cancelled requests, both natural leases,
+original scoring-parity assertions and two active slots are preserved.
 
 Operator handoff: inspect the exact job ID, attempt, source/result hashes,
 terminal event and any retained label-access record. Queued/running cancellation
