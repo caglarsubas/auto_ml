@@ -779,9 +779,12 @@
         "[Automatic push-main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41782352443)",
         "[P167 legacy execution qualification](evidence/p167-qualification-2026-11-04.json)",
         "[PR #270](https://github.com/caglarsubas/auto_ml/pull/270)",
-        "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41875398757)"
+        "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41875398757)",
+        "[P168 failure-matrix qualification](evidence/p168-qualification-2026-11-05.json)",
+        "[PR #273](https://github.com/caglarsubas/auto_ml/pull/273)",
+        "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42005490645)"
       ],
-      "progress": "P167 / PR #270 closes D07-T05 durable legacy training/SFS/HPO and accepted native refits on the disclosed synthetic Ubuntu 24.04 ARM64 profile, after all-six PR and independent main qualification. The 21-case installed kernel matrix, browser/API workflows, exact source/results, explicit selection, worker-parent loss, natural 180-second lease and restored replay are qualified. Fixed 66-task progress: done 6 to 7 (9.1% to 10.6%, +1.515 percentage points), open 53 to 52, blocked 7 unchanged. D07-T06 full concurrency/cancellation/failure matrix is next ready; broader D07, operator/customer operational acceptance, expert execution and release remain open."
+      "progress": "P168 / PR #273 closes D07-T06 on the synthetic Ubuntu 24.04 ARM64 profile. Nine families pass 135 boundary combinations; real native-prefork and legacy parent/child loss recover under natural 180-second leases, and concurrent HTTPS development selection yields one winner and one stale refusal. Source-bound whole-file duration ordering preserves every collected node and file group. Declaration lists use fresh querysets and retain current project authorization. Original scientific cases, 21 installed kernel cases, two workers and all fixed limits remain. Fixed 66-task progress: done 7 to 8 (10.6% to 12.1%, +1.515 percentage points), open 52 to 51, blocked 7 unchanged. D07-T08 still requires named customer/operator/environment inputs and D06-T03 prerequisites. D07-T09 / P162 is independent P1 work. Full D07 and customer/release acceptance remain open."
     },
     {
       "id": "D08",
@@ -1350,7 +1353,7 @@
     "Keep R3 before R1 within D10; integrate D10/D11 and R1/R2/R3 into D23 after the baseline pilot. D17 remains behind scientific qualification.",
     "Proposed value gate is >=30% less combined development/review effort across two partner workflows against guided and single-agent baselines with equal data, policies and budgets, without more validation defects. Record oversight/intervention/compute cost and decision comprehension; agent count is not success."
   ],
-  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions. The implementation_queue below is the sole dependency-ordered planning queue; it maps existing outcomes and does not instantiate another runtime. P08 is documentation adoption only. Assign explicitly owned bounded implementation packets before dispatch; compatible work may run concurrently without weakening prerequisite gates. Keep the canonical ledger and deterministic Markdown current at each packet transition. Refresh the HTML tracker with the same source/evidence snapshot after implementation, qualification, PR/merge and independent main verification; never infer outcome/release/customer acceptance from a tested packet. D07-T02 clean installation and D07-T04 coordinated recovery are accepted for the qualified synthetic ARM64 profile. D07-T03 staged index-release upgrade/rollback is accepted for the qualified synthetic ARM64 profile. D07-T07 native workload observations are accepted for the disclosed synthetic ARM64 envelope. D07-T05 durable legacy native execution is accepted on the disclosed synthetic ARM64 profile. Continue D07-T06 full concurrency/cancellation/failure-matrix qualification and customer operational acceptance; arbitrary schema/application upgrades require a separately qualified compatibility recipe. P162 is a separate P1 read optimization and does not block this sequence. Batch work around task acceptance; preserve the fixed 66-task denominator and original qualification gates.",
+  "delivery": "Every milestone includes implementation, regression tests, observable workflow, documentation and release evidence. Customer discovery and capacity profiling run alongside M1. One ledger retains stable IDs, dependencies, owner roles, status and source mappings; no calendar commitments derive from provider staffing assumptions. The implementation_queue below is the sole dependency-ordered planning queue; it maps existing outcomes and does not instantiate another runtime. P08 is documentation adoption only. Assign explicitly owned bounded implementation packets before dispatch; compatible work may run concurrently without weakening prerequisite gates. Keep the canonical ledger and deterministic Markdown current at each packet transition. Refresh the HTML tracker with the same source/evidence snapshot after implementation, qualification, PR/merge and independent main verification; never infer outcome/release/customer acceptance from a tested packet. D07-T02 clean installation and D07-T04 coordinated recovery are accepted for the qualified synthetic ARM64 profile. D07-T03 staged index-release upgrade/rollback is accepted for the qualified synthetic ARM64 profile. D07-T07 native workload observations are accepted for the disclosed synthetic ARM64 envelope. D07-T05 durable legacy native execution is accepted on the disclosed synthetic ARM64 profile. D07-T06 full concurrency/cancellation/failure-matrix qualification is accepted on the disclosed synthetic ARM64 profile. Continue D06-T03 prerequisites and D07-T08 customer operational acceptance; keep D07-T09 / P162 independent P1 work; arbitrary schema/application upgrades require a separately qualified compatibility recipe. P162 is a separate P1 read optimization and does not block this sequence. Batch work around task acceptance; preserve the fixed 66-task denominator and original qualification gates.",
   "history": [
     {
       "date": "2026-10-07",
@@ -2068,6 +2071,11 @@
       "date": "2026-11-05",
       "packet": "P168",
       "change": "Retain PR273 run41989266789: full7737 cases completed839.559s, but an unchanged declaration-list assertion failed. Fix the cached class-level queryset through framework cloning; preserve project filtering and every original test body. Add one upload/scoping/revocation regression with old-method failure and54 targeted passing cases. Fresh native count7738; no task credit before all gates."
+    },
+    {
+      "date": "2026-11-05",
+      "packet": "P168",
+      "change": "Accept D07-T06 after exact-head all-six PR checks, guarded merge and independent automatic main artifact audit. Preserve 311 byte-identical prior sources and every original observer body through one append-only ordering hook; all original assertions/fits/folds/cases/skips and fixed limits remain. Qualify 135 family boundaries, actual worker/child loss, natural-lease coordinated restore and simultaneous HTTPS selection. Fixed 66 tasks: 8 done / 51 open / 7 blocked (12.1% / 77.3% / 10.6%); done +1.515 percentage points. Full D07, P162 P1 evaluation and customer/release acceptance remain separate."
     }
   ],
   "implementation_packets": [
@@ -5023,7 +5031,7 @@
         "[P167 legacy execution qualification](evidence/p167-qualification-2026-11-04.json)",
         "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/41875398757)"
       ],
-      "remaining": "D07-T05 is accepted for the disclosed synthetic ARM64 registered-native profile. Governed training/search and accepted refits use frozen shared jobs, detached native children, exact source/result references, immutable candidate publication and explicit attributable development selection. Browser closure, assistant launch, cancellation/checkpoint recovery, worker-parent loss and natural-lease restored replay are qualified. Broader D07-T06 failure-matrix coverage, customer operational acceptance, expert code, full D07, release and customer acceptance remain separate.",
+      "remaining": "D07-T05 is accepted for the disclosed synthetic ARM64 registered-native profile. Governed training/search and accepted refits use frozen shared jobs, detached native children, exact source/result references, immutable candidate publication and explicit attributable development selection. Browser closure, assistant launch, cancellation/checkpoint recovery, worker-parent loss and natural-lease restored replay are qualified. D07-T06 is now separately qualified by P168 on the same disclosed synthetic ARM64 profile. Customer operational acceptance, expert code, full D07 and release remain separate.",
       "description": "Move supported legacy training, feature selection and tuning onto shared durable jobs with frozen inputs, isolated native attempts, typed launch/result controls and explicit immutable candidate selection."
     },
     {
@@ -5034,13 +5042,16 @@
         "D07"
       ],
       "owner": "Platform",
-      "status": "in_progress",
+      "status": "tested",
       "evidence": [
         "[Failure-matrix qualification](PRIVATE_FAILURE_MATRIX.md)",
         "[Finite failure-matrix contract](evidence/p168-matrix-contract.json)",
-        "[312-source preservation baseline](evidence/p168-source-preservation.json)"
+        "[312-source preservation baseline](evidence/p168-source-preservation.json)",
+        "[P168 failure-matrix qualification](evidence/p168-qualification-2026-11-05.json)",
+        "[PR #273](https://github.com/caglarsubas/auto_ml/pull/273)",
+        "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42005490645)"
       ],
-      "remaining": "Qualification remains open. PR272 merged, but main41977718401 exceeded its unchanged900s process cap after all7736 cases completed. PR273 whole-file ordering finished7737 cases in839.559s but exposed one original stale declaration-list assertion. The view now clones a fresh queryset while preserving all project filters; a new before/after regression verifies upload visibility and revocation.311 sources remain byte-identical plus one append-only observer hook; every original test body/fold/fit/skip and all limits remain. Fresh inventory7738 includes two additive non-scientific regressions. All-six exact-head correction PR and independent-main audits plus acceptance publication are still required; counts remain7/52/7.",
+      "remaining": "D07-T06 is accepted on the disclosed synthetic ARM64 profile after all-six exact-head PR and independent main qualification. All 135 family/boundary combinations, original scientific and RI inventories, 21 installed kernel cases, mixed-family admission, actual native-prefork and legacy-child loss, natural-lease restore and installed HTTPS selection race pass. Customer operational acceptance, D06-T03 prerequisites, P162's independent P1 read evaluation, expert code, full D07 and release remain separate.",
       "description": "Qualify the distinct execution families against shared admission, cancellation, authority, lease, publication, recovery and concurrent-selection boundaries without changing scientific workloads or test limits."
     }
   ],
@@ -5702,7 +5713,7 @@
         ],
         "priority": "P0",
         "owner": "Platform",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [
           "D07-T03",
           "D07-T04",
@@ -5714,7 +5725,10 @@
         ],
         "blockers": [],
         "evidence": [
-          "[Failure-matrix qualification](PRIVATE_FAILURE_MATRIX.md)"
+          "[Failure-matrix qualification](PRIVATE_FAILURE_MATRIX.md)",
+          "[P168 failure-matrix qualification](evidence/p168-qualification-2026-11-05.json)",
+          "[PR #273](https://github.com/caglarsubas/auto_ml/pull/273)",
+          "[Automatic main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42005490645)"
         ],
         "packet_refs": [
           "P168"
