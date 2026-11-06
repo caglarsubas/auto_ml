@@ -1,0 +1,58 @@
+<section aria-labelledby="membership-title">
+  <h3 id="membership-title">Project membership</h3>
+  <p>Manage access for an enrolled account in the selected project.</p>
+  <form (ngSubmit)="lookUp()">
+    <label for="membership-username">Account username</label>
+    <input
+      id="membership-username"
+      name="username"
+      [(ngModel)]="username"
+      (ngModelChange)="clearReview()"
+      [disabled]="busy || pending !== null"
+      maxlength="150"
+      autocomplete="off"
+      required
+    />
+    <button type="submit" [disabled]="busy || !username.trim() || pending !== null">
+      Review membership
+    </button>
+  </form>
+  @if (review; as account) {
+    <p>
+      {{ account.username }} currently has
+      {{ account.role === 'none' ? 'no project access' : 'the ' + account.role + ' role' }}.
+      @if (!account.active) {
+        The account is inactive.
+      }
+    </p>
+    <form (ngSubmit)="save()">
+      <label for="membership-role">New project role</label>
+      <select
+        id="membership-role"
+        name="role"
+        [(ngModel)]="role"
+        [disabled]="busy || pending !== null"
+      >
+        <option value="none">No project access</option>
+        <option value="developer" [disabled]="!account.active">Developer</option>
+        <option value="reviewer" [disabled]="!account.active">Reviewer</option>
+        <option value="admin" [disabled]="!account.active">Project administrator</option>
+      </select>
+      <button type="submit" [disabled]="busy || role === account.role">
+        {{ pending ? 'Retry membership change' : 'Apply membership change' }}
+      </button>
+      @if (pending && !busy) {
+        <button type="button" (click)="lookUp()">Review current membership</button>
+      }
+    </form>
+  }
+  @if (busy) {
+    <p role="status">Checking project membership…</p>
+  }
+  @if (receipt) {
+    <p role="status">Membership change recorded. Receipt {{ receipt }}.</p>
+  }
+  @if (error) {
+    <p role="alert">{{ error }}</p>
+  }
+</section>

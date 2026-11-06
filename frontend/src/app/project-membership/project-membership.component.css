@@ -1,0 +1,24 @@
+section {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--neutral-300);
+  border-radius: 6px;
+}
+form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+input,
+select,
+button {
+  max-width: 100%;
+  padding: 0.6rem;
+  color: inherit;
+  font: inherit;
+}
+:focus-visible {
+  outline: 3px solid var(--info-600);
+  outline-offset: 3px;
+}

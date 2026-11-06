@@ -143,3 +143,35 @@ This closes an early-read gap: full native rows were previously fetched merely t
 Existing read/write role rules, exact resource identity, dataset/project selector consistency, missing-resource diagnostics, audit events, final authority rechecks, cache policy, and downstream execution remain in force. Database failure during routing fails closed with the existing sanitized authority-unavailable response. The adoption listing/detail GET handlers preserve that diagnostic if their initial full-record lookup fails after authorization; downstream service failures retain their existing handling.
 
 Additive regressions inspect actual SQL and forbid native model materialization. They cover all nine native resource routes, three project roles, foreign and revoked memberships, missing resources, conflicting selectors, and database failures. Existing scientific, private-runtime, recovery, restore, browser, schema, and operational qualifications remain required without changed limits. D07 release and customer acceptance remain open.
+
+## P170 project membership review
+
+The selected project workspace gives administrators an exact-username membership
+review. Enroll a local account through the existing installation operator
+command, then use **Project membership** to review the account, select a role,
+and apply the change. **No project access** revokes the membership. Keep the
+event UUID shown after completion when investigating a change. Changing an
+administrator's own role remains an installation operator operation.
+
+The existing membership endpoint accepts a CSRF-protected preview with
+`operation: "preview"` and `username`. The browser submits the returned
+`expected` value with the username, desired role and request UUID. That value
+binds the project, administrator and session revisions, target account identity
+and active status, and target membership revision. The transaction locks the
+two account rows in order, then the project. It rechecks the active
+administrator, password and session revision, and admitted project scope
+before looking up a receipt or changing the membership. A stale target review
+returns HTTP 409 with `project_membership_changed`. After an uncertain result,
+retry the same payload and UUID to retrieve its receipt, or look up the current
+membership. Legacy clients can still submit their original three fields. They
+receive the same live administrator and session checks.
+
+The existing membership transaction changes the revision, cancels unused
+typed approvals and records the authenticated actor. Existing REST, media and
+MCP checks enforce the new role on subsequent access. A focused disposable TLS
+PostgreSQL run passed 188 cases, including one commit and one conflict from two
+concurrent submissions. A disposable Chromium test exercised a real grant,
+read and revocation. Six backend cases and one browser case extend the
+qualification inventory. Independent CI records the merged-source result.
+The scope covers operator-managed local accounts. External identity provider
+integration and D06 deployment threat-model acceptance are separate work.

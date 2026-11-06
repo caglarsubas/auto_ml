@@ -156,3 +156,45 @@ test('directory failure leaves no stale project records or development authority
   await expect(page).toHaveURL(/\/home$/);
   await expect(page.getByRole('alert')).toContainText('Retry to load');
 });
+
+test('project administrator reviews, grants and revokes an enrolled account', async ({ page, browser }) => {
+  const credentials = requireTestCredentials();
+  const subject = credentials.username + '-review-developer';
+  await signIn(page);
+  const picker = page.getByLabel('Current project');
+  await picker.selectOption({ label: 'Workspace Review — reviewer' });
+  const membership = page.getByRole('region', { name: 'Project membership' });
+  await expect(membership).toHaveCount(0);
+  await picker.selectOption({ label: 'Workspace Admin — admin' });
+  const projectId = await picker.inputValue();
+  const subjectContext = await browser.newContext();
+  try {
+    await membership.getByLabel('Account username').fill(subject);
+    await membership.getByRole('button', { name: 'Review membership', exact: true }).click();
+    await expect(membership).toContainText('currently has no project access');
+    await membership.getByLabel('New project role').selectOption('reviewer');
+    await membership.getByRole('button', { name: 'Apply membership change' }).click();
+    await expect(membership.getByRole('status')).toContainText('Membership change recorded.');
+
+    const subjectPage = await subjectContext.newPage();
+    await subjectPage.goto('/login');
+    await subjectPage.getByLabel('Username', { exact: true }).fill(subject);
+    await subjectPage.getByLabel('Password', { exact: true }).fill(credentials.password);
+    await subjectPage.getByRole('button', { name: 'Sign In', exact: true }).click();
+    await expect(subjectPage).toHaveURL(/\/home$/);
+    const subjectPicker = subjectPage.getByLabel('Current project');
+    await subjectPicker.selectOption(projectId);
+    await expect(subjectPage.getByLabel('Project datasets')).toContainText('Workspace Admin.csv');
+
+    await membership.getByRole('button', { name: 'Review membership', exact: true }).click();
+    await expect(membership).toContainText('currently has the reviewer role');
+    await membership.getByLabel('New project role').selectOption('none');
+    await membership.getByRole('button', { name: 'Apply membership change' }).click();
+    await expect(membership.getByRole('status')).toContainText('Membership change recorded.');
+    await subjectPage.getByRole('button', { name: 'Refresh access', exact: true }).click();
+    await expect(subjectPicker.getByRole('option', { name: 'Workspace Admin — reviewer' })).toHaveCount(0);
+    await expect(subjectPage.getByLabel('Project datasets')).toHaveCount(0);
+  } finally {
+    await subjectContext.close();
+  }
+});
