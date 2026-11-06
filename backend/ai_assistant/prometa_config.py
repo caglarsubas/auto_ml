@@ -72,7 +72,11 @@ def _resolve_agent_id(agent_name: str, stage: str) -> tuple[str, str]:
 
 def get_prometa():
     """Return the singleton Prometa instance, or None if not configured."""
+    from access_control.data_policy import allows
+
     global _prometa, _initialized
+    if not allows("telemetry"):
+        return None
     if _initialized:
         return _prometa
     _initialized = True

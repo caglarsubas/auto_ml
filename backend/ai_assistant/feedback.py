@@ -20,6 +20,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from access_control.data_policy import allows, refusal
+
 from .prometa_config import (
     flush as prometa_flush,
     has_active_span,
@@ -134,6 +136,8 @@ def normalize_feedback_payload(data: dict[str, Any], request=None) -> AssistantF
 
 def submit_feedback_to_prometa(feedback: AssistantFeedback,
                                *, prefer_active_span: bool = False) -> dict[str, Any]:
+    if not allows('feedback'):
+        return {**refusal(), 'status': 'denied', 'prometa_recorded': False}
     kwargs = feedback.prometa_kwargs()
     recorded = False
     method = 'record_user_feedback'
@@ -298,6 +302,8 @@ class AIFeedbackView(APIView):
     """POST /api/ai-assistant/feedback/"""
 
     def post(self, request, *args, **kwargs):
+        if not allows('feedback'):
+            return Response(refusal(), status=403)
         try:
             feedback = normalize_feedback_payload(request.data, request=request)
             result = submit_feedback_to_prometa(feedback, prefer_active_span=False)

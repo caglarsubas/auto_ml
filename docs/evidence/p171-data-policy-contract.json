@@ -1,0 +1,42 @@
+{
+  "schema": "private_data_policy_qualification_v1",
+  "packet": "P171",
+  "task": "D06-T02",
+  "base": "222d9a973d110d7d4d6df013ed3cec762996ee27",
+  "sources": {
+    "backend/access_control/audit_checkpoint.py": "d132f51c85a747ec13ed289c6b76e50f2160dd0ee012c58a1e53d6fd10308e17",
+    "backend/access_control/data_policy.py": "fe58cb43090a1550c79d495ff3d33bc9681c2b5bada3f2e4038ce13c4cdc72b7",
+    "backend/access_control/management/commands/private_data_policy.py": "ece8ecc67eb71288697e95ca380c77c1e16cd266f3c6d27c13b39ef8e8a6294a",
+    "backend/access_control/retention.py": "4de113abeed7ea6f83a28bae5fef0439ae31eff813a1efff07cb75bd60f5864f",
+    "backend/ai_assistant/feedback.py": "3c41011957500be02cf5745df6bff9b89e1c085b700845da8e332a99e9671935",
+    "backend/ai_assistant/model_registry.py": "83d6fb4362505e268e602e7ca63eb954128044d997a7994fc858f23117ffb14b",
+    "backend/ai_assistant/prometa_config.py": "d2a15c52c40b894c1a34442f858384f0e903527c3ed7cff9bf544e38b7f99bc1",
+    "backend/ai_assistant/prometa_runner/client.py": "c76b5153556d56711bec63f470c1422c5fed37b982e4b4b7093021abe2d3549f",
+    "backend/ai_assistant/rag/embeddings.py": "ad70e2c4785f825bb4769660b6991b1cab3b6975382306d2ec2c621efa765529",
+    "backend/ai_assistant/views.py": "709418f691139c0357d25baf92aadfdf945e830014721da39e35e4a4d51cff5a",
+    "backend/declaration/views.py": "dd895a122a4ef132b26078ce7a3d439f29e2a0855ecf4f8be79aa3409e528fb1",
+    "backend/modeling/views.py": "49c714f794777c693306deba1bbc41136b8fa3fce77de65845934f62df261efc",
+    "backend/tests/unit/test_private_data_policy.py": "e92a5c644b2b0ad18428d57f42e1d5836e66d7b959ece8c357a27fb190c85232",
+    "scripts/private_ingress_package.py": "f9cdcbea4de27475c102660cd430cdc5f15ef88895de2886e2e9938b3dfc60c1",
+    "scripts/private_service.py": "6e630f14aa4adf8e40af4070359e392087b7c86eb1642bda3ce7a06e385472b8"
+  },
+  "local": {
+    "scope": "focused_private_data_policy_and_authority",
+    "tests": 195,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "pytest_seconds": 44.308,
+    "fixture": "actual_TLS_non_superuser_CREATEDB_owner",
+    "network_difference": "owned_internal_instead_of_Linux_CI_host"
+  },
+  "backend_pr_cases": 7612,
+  "native_and_main_backend_cases": 7757,
+  "backend_cases_added": 7,
+  "browser_cases": 49,
+  "native_skip_count": 6,
+  "native_process_cap_seconds": 900,
+  "native_workers": 2,
+  "native_worker_restarts": 0,
+  "job_cap_seconds": 3600
+}

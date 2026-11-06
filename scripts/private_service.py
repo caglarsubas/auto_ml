@@ -12,7 +12,15 @@ from private_runtime_manifest import ManifestError, verify
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def launch(args):
+def _exec(executable, arguments, discard_logs):
+    if discard_logs:
+        with open(os.devnull, "wb") as sink:
+            os.dup2(sink.fileno(), 1)
+            os.dup2(sink.fileno(), 2)
+    os.execv(executable, arguments)
+
+
+def launch(args, *, discard_logs=False):
     if len(args) != 1 or args[0] not in ("api", "worker", "dispatcher", "preflight"):
         raise ManifestError("private_service_role_required")
     if os.environ.get("DECLARAI_RUNTIME_PROFILE") != "private":
@@ -45,7 +53,7 @@ def launch(args):
         print("private_service_preflight_passed")
         return
     if args[0] != "api":
-        os.execv("/bin/sh", ["sh", str(ROOT / "docker/private-job-entrypoint.sh"), args[0]])
+        _exec("/bin/sh", ["sh", str(ROOT / "docker/private-job-entrypoint.sh"), args[0]], discard_logs)
     directory = Path("/run/declarai")
     try:
         info = directory.lstat()
@@ -53,7 +61,7 @@ def launch(args):
             raise ManifestError("private_service_socket_directory_required")
     except OSError:
         raise ManifestError("private_service_socket_directory_required") from None
-    os.execv(
+    _exec(
         sys.executable,
         [
             sys.executable,
@@ -63,12 +71,13 @@ def launch(args):
             str(ROOT / "docker/private-gunicorn.py"),
             "backend.wsgi:application",
         ],
+        discard_logs,
     )
 
 
 if __name__ == "__main__":
     try:
-        launch(sys.argv[1:])
+        launch(sys.argv[1:], discard_logs=True)
     except (ManifestError, OSError, subprocess.TimeoutExpired) as error:
         print(str(error) if isinstance(error, ManifestError) else "private_service_start_failed", file=sys.stderr)
         sys.exit(1)

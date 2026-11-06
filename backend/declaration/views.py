@@ -190,12 +190,29 @@ class DeclarationViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         from django.db.models.deletion import ProtectedError
+        from access_control.data_policy import private, refusal
+
+        if private():
+            return Response({
+                **refusal('private_retention_review_required'),
+                'error': 'Use the installation retention procedure to review this upload.',
+            }, status=409)
         try:
             return super().destroy(request, *args, **kwargs)
         except ProtectedError:
             return Response({'error_code': 'dataset_retained_for_review',
                              'error': 'This dataset has retained review evidence. Deletion requires a governed retention procedure.'},
                             status=409)
+
+    def update(self, request, *args, **kwargs):
+        from access_control.data_policy import private, refusal
+
+        if private():
+            return Response({
+                **refusal('private_upload_immutable'),
+                'error': 'Create a new upload to change a private dataset.',
+            }, status=409)
+        return super().update(request, *args, **kwargs)
 
     def get_queryset(self):
         from access_control.projects import governed, allowed_datasets
@@ -315,9 +332,16 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                     has_header=not first_line_is_not_header,
                 )
 
-                from access_control.projects import governed, bind_dataset
+                from access_control.data_policy import private
+                from access_control.projects import audit, governed, bind_dataset
+
                 if governed():
-                    bind_dataset(declaration, request._request._project_scopes[0]['project_id'], request.user)
+                    binding = bind_dataset(declaration, request._request._project_scopes[0]['project_id'], request.user)
+                    if private():
+                        audit(request.user, 'upload_registered', {
+                            'file_id': declaration.pk, 'relative_path': merged_file_path,
+                            'binding_revision': str(binding.revision),
+                        }, binding.project_id, source='native_declaration')
 
             serializer = self.get_serializer(declaration)
             response_data = serializer.data

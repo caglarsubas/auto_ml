@@ -23,6 +23,9 @@ def fetch_bundle(
     timeout: float = 30.0,
 ) -> dict[str, Any]:
     """Fetch ``GET /api/agent-manifests/{id}/bundle`` from Prometa."""
+    from access_control.data_policy import require_egress
+
+    require_egress("deployment_bundles")
     root = base_url.rstrip("/") + "/"
     path = f"api/agent-manifests/{quote(manifest_id, safe='')}/bundle"
     url = urljoin(root, path)

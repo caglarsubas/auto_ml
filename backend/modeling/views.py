@@ -2971,6 +2971,13 @@ class PipelineRunDetailView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk, *args, **kwargs):
+        from access_control.data_policy import private, refusal
+
+        if private():
+            return Response({
+                **refusal('private_retention_review_required'),
+                'error': 'Private pipeline evidence is retained.',
+            }, status=409)
         try:
             run = PipelineRun.objects.get(pk=pk)
             run.delete()
