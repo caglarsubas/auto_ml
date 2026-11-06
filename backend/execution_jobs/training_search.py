@@ -85,7 +85,7 @@ def prepare(actor_id, file_id, options, check=lambda: None, expected=None):
         raise ValueError("Supply the development-only declaration, features and validation specification.")
     if len(json.dumps(options, allow_nan=False).encode()) > 32768:
         raise JobConflict("job_training_spec_budget_exceeded")
-    raw, source, authority = csv_scoring.input_bytes(actor_id, file_id, check, expected)
+    raw, source, authority = csv_scoring.unprotected_input_bytes(actor_id, file_id, check, expected)
     # This first raw-input profile cannot consume a legacy dataset's mixed
     # development/final partitions. Inspect metadata existence only; never open
     # a protected fitted-state or final-outcome file to decide eligibility.

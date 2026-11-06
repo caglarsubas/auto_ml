@@ -297,7 +297,7 @@ def submit(actor, file_id, data):
             input_scope = lock_authority(actor, input_id, None)
             if input_scope["project_id"] != current["project_id"]:
                 raise projects.ProjectDenied("job_input_project_mismatch")
-            _, source, input_scope = csv_scoring.input_bytes(actor.pk, input_id)
+            _, source, input_scope = csv_scoring.unprotected_input_bytes(actor.pk, input_id)
             if input_scope["project_id"] != current["project_id"]:
                 raise projects.ProjectDenied("job_input_project_mismatch")
             if source["sha256"] != require_digest(data["input_sha256"]):
@@ -673,6 +673,10 @@ def finish(identifier, token, state, reason="", result=None, *, deadline=None):
             return
         if state == "succeeded" and deadline is not None and time.monotonic() >= deadline:
             close(job, "blocked", "job_time_budget_exceeded", metadata_only=True)
+            return
+        if (job.specification["kind"] == native_assessment.KIND and prepared_result
+                and prepared_result.get("confirmatory") and not native_assessment.publish_confirmation(job, prepared_result)):
+            close(job, "blocked", "job_confirmation_receipt_changed", metadata_only=True)
             return
         job.result, job.result_sha256 = prepared_result, prepared_digest
         close(job, state, reason)

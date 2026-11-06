@@ -194,4 +194,29 @@ describe('Reviewed native adoption and protected assessment', () => {
     expect(c.adoption).toBeNull();
     expect(c.error).toContain('native_adoption_review_changed');
   });
+  it('binds prospective first-use attestation to an explicit custody request', () => {
+    c.role = 'reviewer';
+    c.choose(accepted);
+    c.file = new File(['x,z,outcome,date,end\n1,2,bad,2026-10-21,2026-10-22\n'], 'private.csv');
+    c.custodyRationale = 'prospective window in independent custody';
+    c.asOf = '2026-10-23T00:00:00Z';
+    c.prospectiveConfirmed = true;
+    c.changed();
+    expect(c.prospectiveConfirmed).toBeFalse();
+    c.custodyConfirmed = true;
+    c.prospectiveConfirmed = true;
+    c.seal();
+    const req = http.expectOne(
+      '/api/native-adoptions/adopt-1/protected-inputs/?project_id=project',
+    );
+    expect(req.request.body.get('prospective_first_use_attested')).toBe('true');
+    req.error(new ProgressEvent('error'));
+    c.retry();
+    const retry = http.expectOne(
+      '/api/native-adoptions/adopt-1/protected-inputs/?project_id=project',
+    );
+    expect(retry.request.body).toBe(req.request.body);
+    retry.flush({ ...accepted, protected_inputs: [] });
+    expect(c.prospectiveConfirmed).toBeFalse();
+  });
 });

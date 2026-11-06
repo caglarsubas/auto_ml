@@ -198,7 +198,13 @@ def training_files(actor, file_id, options):
     root = Path(settings.MEDIA_ROOT).resolve()
     name = str(path.relative_to(root))
     options["processed_file"] = name
+    import hashlib
+
+    from modeling.holdout_evidence import prospective_payload
+
     files = {name: read(path)}
+    if prospective_payload(hashlib.sha256(files[name]).hexdigest()):
+        conflict("prospective_outcomes_protected")
     try:
         rows = csv.reader(io.StringIO(files[name].decode("utf-8-sig")), strict=True)
         header = next(rows)
@@ -227,13 +233,14 @@ def training_files(actor, file_id, options):
         raw_path = root / raw_name
         projects.path_authority(actor.pk, raw_path, file_id=file_id)
         files[raw_name] = read(raw_path)
-        import hashlib
-
+        raw_sha256 = hashlib.sha256(files[raw_name]).hexdigest()
+        if prospective_payload(raw_sha256):
+            conflict("prospective_outcomes_protected")
         if (
             value.get("schema_version") != 2
             or value.get("processed_input", {}).get("path") != name
             or value.get("processed_input", {}).get("sha256") != hashlib.sha256(files[name]).hexdigest()
-            or value["raw_input"].get("sha256") != hashlib.sha256(files[raw_name]).hexdigest()
+            or value["raw_input"].get("sha256") != raw_sha256
         ):
             conflict("recipe_changed")
     for name in (

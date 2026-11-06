@@ -135,9 +135,11 @@
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
         "[Local qualification record](evidence/foundation-2026-10-07.json)",
         "[P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md)",
-        "[P10 source qualification](evidence/p10-qualification-2026-10-09.json)"
+        "[P10 source qualification](evidence/p10-qualification-2026-10-09.json)",
+        "[Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)",
+        "[P172 qualification contract](evidence/p172-assessment-protocol-contract.json)"
       ],
-      "progress": "Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Evidence is always exploratory; confirmatory/reuse protocols remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open."
+      "progress": "Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Evidence is always exploratory; confirmatory/reuse protocols remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. Qualification remains in progress."
     },
     {
       "id": "D04",
@@ -2108,6 +2110,10 @@
     {
       "date": "2026-11-06",
       "change": "Accept D06-T02 for the sealed local-only private profile after all six PR #278 checks and independent main 42192200496 pass source and artifact audits. Keep 66 backlog tasks. Done/open/blocked move 9/50/7 to 10/49/7."
+    },
+    {
+      "date": "2026-11-06",
+      "change": "Implement P172 as the ready protected-assessment prerequisite on the D06-T03 independent-review path. D03-T01 is in progress against the 66-task baseline of 10 done, 49 open and 7 blocked."
     }
   ],
   "implementation_packets": [
@@ -5139,6 +5145,22 @@
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42192200496)"
       ],
       "remaining": "D06-T02 is accepted for the sealed local-only private profile. Customer-specific provider, retention and backup policies, integrated threat-model qualification, and release and customer acceptance retain separate gates."
+    },
+    {
+      "id": "P172",
+      "kind": "product_implementation",
+      "title": "Prospective protected assessment and first-use protocol",
+      "items": [
+        "D03"
+      ],
+      "owner": "Backend/ML",
+      "status": "implemented",
+      "description": "Qualify bounded first-use temporal assessment with independent pre-window approval, attested custody, frozen scoring, recorded outcome access, reuse decisions and protected development boundaries.",
+      "evidence": [
+        "[Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)",
+        "[P172 qualification contract](evidence/p172-assessment-protocol-contract.json)"
+      ],
+      "remaining": "Qualify exact PR and independent main. D03-T02 lineage invalidation, independent reproduction and D06-T03 integrated threat-model qualification retain separate gates."
     }
   ],
   "release_qualification": {
@@ -5444,15 +5466,20 @@
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [],
         "acceptance": [
           "Assessment access is attributable and version-bound.",
           "Calibration, threshold choice and feature search cannot consume final outcomes."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)",
+          "[P172 qualification contract](evidence/p172-assessment-protocol-contract.json)"
+        ],
+        "packet_refs": [
+          "P172"
+        ],
         "order": 6,
         "basis": "Remaining acceptance scope from D03; existing tested foundation is reused, not rebuilt."
       },
@@ -7060,16 +7087,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P171 private data policy",
+      "label": "Before P172 prospective protected assessment",
       "recorded_on": "2026-11-06",
-      "inventory_source_commit": "222d9a973d110d7d4d6df013ed3cec762996ee27",
+      "inventory_source_commit": "7549f3e053402c04139112f835aee0029f249e2e",
       "total": 66,
       "counts": {
-        "ready": 7,
+        "ready": 6,
         "in_progress": 0,
         "waiting": 43,
         "blocked": 7,
-        "done": 9
+        "done": 10
       }
     },
     "baseline_history": [
@@ -7183,6 +7210,20 @@
           "waiting": 43,
           "blocked": 7,
           "done": 8
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P171 private data policy",
+        "recorded_on": "2026-11-06",
+        "inventory_source_commit": "222d9a973d110d7d4d6df013ed3cec762996ee27",
+        "total": 66,
+        "counts": {
+          "ready": 7,
+          "in_progress": 0,
+          "waiting": 43,
+          "blocked": 7,
+          "done": 9
         }
       }
     ]

@@ -110,7 +110,9 @@ class JobDetailView(NativeReadView):
 class JobInputView(NativeReadView):
     def get(self, request, file_id):
         try:
-            return Response(csv_scoring.prepare(request.user, file_id))
+            receipt = csv_scoring.prepare(request.user, file_id)
+            csv_scoring.require_unprotected_input(receipt["sha256"])
+            return Response(receipt)
         except ERRORS as exc:
             return failure(exc)
 

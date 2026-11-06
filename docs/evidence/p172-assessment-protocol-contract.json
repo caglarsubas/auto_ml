@@ -1,0 +1,56 @@
+{
+  "schema": "prospective_protected_assessment_qualification_v1",
+  "packet": "P172",
+  "task": "D03-T01",
+  "base": "7549f3e053402c04139112f835aee0029f249e2e",
+  "supports": "D06-T03 through D03-T02, D09-T01 and D09-T02",
+  "sources": {
+    "backend/declaration/views.py": "ec1829dc13a6b04262a57ea9528928c9302d6a0baf125b98befcf8104f126803",
+    "backend/execution_jobs/csv_scoring.py": "1bb168d7f3b568e7e69eb8ceadd2d206907af320ce015509e613f3fa7a68f5a4",
+    "backend/execution_jobs/legacy_execution.py": "ca770ee13562d2195c34cafb3a1585461016395cd1468b3caf3e1d389a282635",
+    "backend/execution_jobs/native_assessment.py": "edb62bae5e7deb0331273a35e2f4a11b8ddadbc4cbb77f9126dc2bdd9cdd8904",
+    "backend/execution_jobs/service.py": "25115f2bda0a16ce14d8d56a34ef1ee4056355b9fbd10f6b16ee0385a4e1943b",
+    "backend/execution_jobs/training_scoring.py": "161da7d13d22f5d75ba2cbe1caa7147fe4398d90779c8e13ca0f618a688cfbda",
+    "backend/execution_jobs/training_search.py": "e082e92b82b61853d2c3e41fb32bc2edb7ffdb04d02450cee66dd42d721b06f3",
+    "backend/execution_jobs/views.py": "c928eb5b3549046d5cc34fd436569d06dc9848ffaecd84be3614f842f80ed8df",
+    "backend/modeling/holdout_evidence.py": "64d587266afd05617b8107de9ad4ca24e2a6b8c7c057b7cfa2b50fe0b6dbe369",
+    "backend/tests/unit/test_prospective_assessment.py": "d0e8a60b7b5315ea465937217501489eaf33cbc7b72aadcb7049b6e63b9b3ee9",
+    "frontend/src/app/native-adoption/native-adoption.component.html": "62e61510089b81040dd809b955b054aade8acd4120c99d2206ed3e41df588e42",
+    "frontend/src/app/native-adoption/native-adoption.component.spec.ts": "6256f7158a963c1a9266a0098428cd184c6c5579607f2c660da6260c9949a1a0",
+    "frontend/src/app/native-adoption/native-adoption.component.ts": "8f0b73ed7dbc78ed007fcac659d24dfdbe9f0159cfdd3826133e87685b4727af",
+    "frontend/src/app/package-jobs/package-jobs.component.html": "441154252feeb35334cc89ff4b098d46893fc894eb6d82c4f1e07ac8da008728"
+  },
+  "local": {
+    "scope": "focused_prospective_and_protected_assessment",
+    "tests": 266,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "pytest_seconds": 55.017,
+    "fixture": "actual_TLS_non_superuser_CREATEDB_owner",
+    "network_difference": "owned_internal_instead_of_Linux_CI_host"
+  },
+  "frontend_regression": {
+    "path": "frontend/src/app/native-adoption/native-adoption.component.spec.ts",
+    "before_sha256": "abb40be840b29e846554f51b04bec840f30cbe7832f7dba0ce116868dd2cf89b",
+    "after_sha256": "6256f7158a963c1a9266a0098428cd184c6c5579607f2c660da6260c9949a1a0",
+    "added_tests": 1,
+    "local_component_cases": 13
+  },
+  "backend_pr_cases": 7615,
+  "native_and_main_backend_cases": 7760,
+  "backend_cases_added": 3,
+  "frontend_cases": 732,
+  "browser_cases": 49,
+  "native_skip_count": 6,
+  "native_process_cap_seconds": 900,
+  "native_workers": 2,
+  "native_worker_restarts": 0,
+  "job_cap_seconds": 3600,
+  "rejected_head": {
+    "sha": "786dc7c0c37f467a7f9b2a7996fcf721ca4dcc6a",
+    "run": 42218401669,
+    "cause": "The CSV capture helper acquired a database dependency and failed 18 existing descriptor cases.",
+    "correction": "Enforce custody at the authorized preview, admission and execution paths. Preserve the original descriptor capture contract and tests."
+  }
+}

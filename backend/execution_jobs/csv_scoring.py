@@ -11,6 +11,7 @@ from django.conf import settings
 from declaration.models import Declaration
 from access_control import projects
 from deployment.scoring_receipts import csv_input, scoring_runtime
+from modeling.holdout_evidence import prospective_payload
 
 KIND = "native_csv_scoring_v1"
 BUDGET = {"max_input_bytes": 5 * 1024**2, "max_rows": 10000, "max_columns": 256, "max_output_bytes": 16 * 1024**2}
@@ -98,6 +99,21 @@ def input_bytes(actor_id, file_id, check=lambda: None, expected=None):
     return result
 
 
+def require_unprotected_input(sha256):
+    from execution_jobs.service import JobConflict
+
+    if prospective_payload(sha256):
+        raise JobConflict("job_prospective_outcomes_protected")
+
+
+def unprotected_input_bytes(actor_id, file_id, check=lambda: None, expected=None):
+    """Capture the authorized bytes and verify custody before handing them to a job."""
+    raw, receipt, authority = input_bytes(actor_id, file_id, check, expected)
+    require_unprotected_input(receipt["sha256"])
+    projects.recheck(authority)
+    return raw, receipt, authority
+
+
 def prepare(actor, file_id):
     if not projects.governed():
         raise projects.ProjectDenied("job_requires_project_governance")
@@ -112,7 +128,7 @@ def score(job, manifest, out, hashed, check, metadata_bytes=None):
 
     if manifest.get("algorithm") not in NATIVE_ALGORITHMS:
         raise JobConflict("job_native_package_required")
-    raw, receipt, _ = input_bytes(job.authority["actor_id"], job.source_dataset_id, check, job.specification["source"])
+    raw, receipt, _ = unprotected_input_bytes(job.authority["actor_id"], job.source_dataset_id, check, job.specification["source"])
     # Reject pathological width/record counts before pandas allocates a frame.
     # This bounded UTF-8 profile uses the default CSV dialect and field limit.
     try:

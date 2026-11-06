@@ -57,7 +57,7 @@ def prepare(actor, file_id, identifier, expected, input_id, check=lambda: None, 
     if trained.dataset_id != file_id or str(trained.project_id) != authority["project_id"]:
         raise projects.ProjectDenied("job_training_project_mismatch")
     raw_export = _export(actor, identifier, expected)
-    raw, source, source_authority = csv_scoring.input_bytes(actor.pk, input_id, check, expected_source)
+    raw, source, source_authority = csv_scoring.unprotected_input_bytes(actor.pk, input_id, check, expected_source)
     if source_authority["project_id"] != authority["project_id"]:
         raise projects.ProjectDenied("job_input_project_mismatch")
     # Do not turn known protected/evaluated populations into prediction input.
