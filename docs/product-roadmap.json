@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-11-06",
+  "updated": "2026-11-07",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -137,9 +137,12 @@
         "[P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md)",
         "[P10 source qualification](evidence/p10-qualification-2026-10-09.json)",
         "[Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)",
-        "[P172 qualification contract](evidence/p172-assessment-protocol-contract.json)"
+        "[P172 qualification contract](evidence/p172-assessment-protocol-contract.json)",
+        "[P172 prospective protected assessment qualification](evidence/p172-qualification.json)",
+        "[Implementation PR #280](https://github.com/caglarsubas/auto_ml/pull/280)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)"
       ],
-      "progress": "Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Evidence is always exploratory; confirmatory/reuse protocols remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. Qualification remains in progress."
+      "progress": "Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Foundation evidence was exploratory. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. P10 evidence remained exploratory. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. PR and independent main qualification pass for the prospective native temporal profile. D03-T02 retains broader lineage invalidation and reuse adjudication."
     },
     {
       "id": "D04",
@@ -2114,6 +2117,10 @@
     {
       "date": "2026-11-06",
       "change": "Implement P172 as the ready protected-assessment prerequisite on the D06-T03 independent-review path. D03-T01 is in progress against the 66-task baseline of 10 done, 49 open and 7 blocked."
+    },
+    {
+      "date": "2026-11-07",
+      "change": "Accept D03-T01 for the prospective native temporal profile after all six PR #280 checks and independent main 42231084353 pass source and artifact audits. Keep 66 backlog tasks. Done/open/blocked move 10/49/7 to 11/48/7."
     }
   ],
   "implementation_packets": [
@@ -5154,13 +5161,16 @@
         "D03"
       ],
       "owner": "Backend/ML",
-      "status": "implemented",
+      "status": "tested",
       "description": "Qualify bounded first-use temporal assessment with independent pre-window approval, attested custody, frozen scoring, recorded outcome access, reuse decisions and protected development boundaries.",
       "evidence": [
         "[Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)",
-        "[P172 qualification contract](evidence/p172-assessment-protocol-contract.json)"
+        "[P172 qualification contract](evidence/p172-assessment-protocol-contract.json)",
+        "[P172 prospective protected assessment qualification](evidence/p172-qualification.json)",
+        "[Implementation PR #280](https://github.com/caglarsubas/auto_ml/pull/280)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)"
       ],
-      "remaining": "Qualify exact PR and independent main. D03-T02 lineage invalidation, independent reproduction and D06-T03 integrated threat-model qualification retain separate gates."
+      "remaining": "D03-T01 is accepted for the prospective native temporal profile. Broader lineage invalidation, independent reproduction and review, expert-code qualification, and the integrated D06-T03 threat model retain separate gates."
     }
   ],
   "release_qualification": {
@@ -5466,7 +5476,7 @@
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [],
         "acceptance": [
           "Assessment access is attributable and version-bound.",
@@ -5475,7 +5485,10 @@
         "blockers": [],
         "evidence": [
           "[Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)",
-          "[P172 qualification contract](evidence/p172-assessment-protocol-contract.json)"
+          "[P172 qualification contract](evidence/p172-assessment-protocol-contract.json)",
+          "[P172 prospective protected assessment qualification](evidence/p172-qualification.json)",
+          "[Implementation PR #280](https://github.com/caglarsubas/auto_ml/pull/280)",
+          "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)"
         ],
         "packet_refs": [
           "P172"

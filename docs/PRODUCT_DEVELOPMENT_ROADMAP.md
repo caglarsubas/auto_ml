@@ -1,6 +1,6 @@
 # DeclarAI product development roadmap
 
-Updated 2026-11-06. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
+Updated 2026-11-07. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
 
 Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.
 
@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 5 (7.6%); in_progress: 1 (1.5%); waiting: 43 (65.2%); blocked: 7 (10.6%); done: 10 (15.2%).
+Inventory: 66 tasks; ready: 5 (7.6%); in_progress: 0 (0.0%); waiting: 43 (65.2%); blocked: 7 (10.6%); done: 11 (16.7%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -122,7 +122,7 @@ Keep currently unsupported constrained target encoding unavailable until a fold-
 
 ### D03-T01 — Define protected confirmatory assessment and reuse protocol
 
-**Priority / status:** P0 / in_progress. **Owner:** Backend/ML. **Outcomes:** D03.
+**Priority / status:** P0 / done. **Owner:** Backend/ML. **Outcomes:** D03.
 
 Separate exploratory evidence from protected final assessment and document the access/reuse rules.
 
@@ -132,7 +132,7 @@ Separate exploratory evidence from protected final assessment and document the a
 
 **Source / rationale:** Remaining acceptance scope from D03; existing tested foundation is reused, not rebuilt.
 
-**Packet / evidence:** P172; [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json)
+**Packet / evidence:** P172; [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json); [P172 prospective protected assessment qualification](evidence/p172-qualification.json); [Implementation PR #280](https://github.com/caglarsubas/auto_ml/pull/280); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)
 
 ### D03-T02 — Qualify evidence invalidation after holdout inspection
 
@@ -2608,13 +2608,13 @@ Apply the local-only policy to application transports and raw service output. Re
 
 ### P172 — Prospective protected assessment and first-use protocol
 
-**Packet status:** implemented. **Mapped outcomes:** D03.
+**Packet status:** tested. **Mapped outcomes:** D03.
 
 Qualify bounded first-use temporal assessment with independent pre-window approval, attested custody, frozen scoring, recorded outcome access, reuse decisions and protected development boundaries.
 
-**Evidence:** [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json)
+**Evidence:** [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json); [P172 prospective protected assessment qualification](evidence/p172-qualification.json); [Implementation PR #280](https://github.com/caglarsubas/auto_ml/pull/280); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)
 
-**Remaining:** Qualify exact PR and independent main. D03-T02 lineage invalidation, independent reproduction and D06-T03 integrated threat-model qualification retain separate gates.
+**Remaining:** D03-T01 is accepted for the prospective native temporal profile. Broader lineage invalidation, independent reproduction and review, expert-code qualification, and the integrated D06-T03 threat model retain separate gates.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
@@ -2670,9 +2670,9 @@ Separate development, calibration, and threshold choice from final holdout asses
 
 **Source mapping:** Claude CC-6; GPT P03; Gemini C3.
 
-**Progress:** Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Evidence is always exploratory; confirmatory/reuse protocols remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. Qualification remains in progress.
+**Progress:** Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Foundation evidence was exploratory. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. P10 evidence remained exploratory. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. PR and independent main qualification pass for the prospective native temporal profile. D03-T02 retains broader lineage invalidation and reuse adjudication.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md); [P10 source qualification](evidence/p10-qualification-2026-10-09.json); [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md); [P10 source qualification](evidence/p10-qualification-2026-10-09.json); [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json); [P172 prospective protected assessment qualification](evidence/p172-qualification.json); [Implementation PR #280](https://github.com/caglarsubas/auto_ml/pull/280); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)
 
 ### D04 Immutable runs and reliable scoring
 
