@@ -60,7 +60,7 @@ def text(value):
 def candidate(actor, job_id, expected):
     job = NativeJob.objects.get(pk=job_id)
     raw = training_scoring._export(actor, job_id, require_digest(expected))
-    _, source, authority = csv_scoring.input_bytes(
+    _, source, authority = csv_scoring.unprotected_input_bytes(
         actor.pk, job.dataset_id, expected=job.specification["training"]["source"]
     )
     if (
@@ -595,7 +595,7 @@ def assess(job, check):
             conflict("native_protected_payload_changed")
         frame = training_search.parsed_frame(raw)
         training = sealed.adoption.training_job
-        development_raw, _, _ = csv_scoring.input_bytes(
+        development_raw, _, _ = csv_scoring.unprotected_input_bytes(
             actor.pk, job.dataset_id, check, training.specification["training"]["source"]
         )
         development = training_search.parsed_frame(development_raw)

@@ -297,7 +297,7 @@ def submit(actor, file_id, data):
             input_scope = lock_authority(actor, input_id, None)
             if input_scope["project_id"] != current["project_id"]:
                 raise projects.ProjectDenied("job_input_project_mismatch")
-            _, source, input_scope = csv_scoring.input_bytes(actor.pk, input_id)
+            _, source, input_scope = csv_scoring.unprotected_input_bytes(actor.pk, input_id)
             if input_scope["project_id"] != current["project_id"]:
                 raise projects.ProjectDenied("job_input_project_mismatch")
             if source["sha256"] != require_digest(data["input_sha256"]):

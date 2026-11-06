@@ -91,14 +91,27 @@ def input_bytes(actor_id, file_id, check=lambda: None, expected=None):
         os.close(descriptor)
     check()
     projects.recheck(authority)
-    if prospective_payload(raw):
-        raise JobConflict("job_prospective_outcomes_protected")
     receipt = {"file_id": file_id, "name": dataset.original_name, "relative_path": relative, **csv_input(raw)}
     if not raw or expected and any(receipt[k] != expected[k] for k in ["sha256", "bytes", "parser", "pandas_version"]):
         raise JobConflict("job_input_changed")
     result = bytes(raw), receipt, authority
     projects.recheck(authority)
     return result
+
+
+def require_unprotected_input(sha256):
+    from execution_jobs.service import JobConflict
+
+    if prospective_payload(sha256):
+        raise JobConflict("job_prospective_outcomes_protected")
+
+
+def unprotected_input_bytes(actor_id, file_id, check=lambda: None, expected=None):
+    """Capture the authorized bytes and verify custody before handing them to a job."""
+    raw, receipt, authority = input_bytes(actor_id, file_id, check, expected)
+    require_unprotected_input(receipt["sha256"])
+    projects.recheck(authority)
+    return raw, receipt, authority
 
 
 def prepare(actor, file_id):
@@ -115,7 +128,7 @@ def score(job, manifest, out, hashed, check, metadata_bytes=None):
 
     if manifest.get("algorithm") not in NATIVE_ALGORITHMS:
         raise JobConflict("job_native_package_required")
-    raw, receipt, _ = input_bytes(job.authority["actor_id"], job.source_dataset_id, check, job.specification["source"])
+    raw, receipt, _ = unprotected_input_bytes(job.authority["actor_id"], job.source_dataset_id, check, job.specification["source"])
     # Reject pathological width/record counts before pandas allocates a frame.
     # This bounded UTF-8 profile uses the default CSV dialect and field limit.
     try:

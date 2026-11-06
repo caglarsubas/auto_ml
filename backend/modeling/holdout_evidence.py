@@ -31,13 +31,13 @@ def _digest(value):
         allow_nan=False, separators=(',', ':')).encode()).hexdigest()
 
 
-def prospective_payload(raw):
+def prospective_payload(source_sha256):
     """Recognize a byte-identical copy without opening sealed outcome storage."""
     from execution_jobs.models import NativeProtectedInput
 
     return NativeProtectedInput.objects.filter(
         specification__has_key="confirmation_protocol",
-        specification__input_sha256=hashlib.sha256(raw).hexdigest(),
+        specification__input_sha256=source_sha256,
     ).exists()
 
 

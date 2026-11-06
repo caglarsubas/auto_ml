@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from access_control.storage import managed_path
 # data_collection/views.py
@@ -247,7 +248,7 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             for file_key in files:
                 file = files[file_key]
                 file_content = file.read()
-                if governed() and prospective_payload(file_content):
+                if governed() and prospective_payload(hashlib.sha256(file_content).hexdigest()):
                     return Response({
                         'error_code': 'prospective_outcomes_protected',
                         'error': 'Use the protected assessment workspace for these outcomes.',
