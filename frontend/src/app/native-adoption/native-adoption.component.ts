@@ -38,6 +38,7 @@ export class NativeAdoptionComponent implements OnChanges, OnDestroy {
   proposalConfirmed = false;
   reviewConfirmed = false;
   custodyConfirmed = false;
+  prospectiveConfirmed = false;
   executionConfirmed = false;
   file: File | null = null;
   busy = false;
@@ -78,6 +79,7 @@ export class NativeAdoptionComponent implements OnChanges, OnDestroy {
     this.proposalConfirmed =
       this.reviewConfirmed =
       this.custodyConfirmed =
+      this.prospectiveConfirmed =
       this.executionConfirmed =
       this.busy =
         false;
@@ -116,8 +118,10 @@ export class NativeAdoptionComponent implements OnChanges, OnDestroy {
     this.preview = null;
     this.executionConfirmed = this.reviewConfirmed = this.custodyConfirmed = false;
     this.file = null;
+    this.prospectiveConfirmed = false;
   }
   changed(): void {
+    this.prospectiveConfirmed = false;
     this.proposalConfirmed =
       this.reviewConfirmed =
       this.custodyConfirmed =
@@ -127,7 +131,7 @@ export class NativeAdoptionComponent implements OnChanges, OnDestroy {
   }
   selectFile(event: Event): void {
     this.file = (event.target as HTMLInputElement).files?.[0] || null;
-    this.custodyConfirmed = false;
+    this.custodyConfirmed = this.prospectiveConfirmed = false;
     this.preview = null;
     this.executionConfirmed = false;
   }
@@ -194,6 +198,7 @@ export class NativeAdoptionComponent implements OnChanges, OnDestroy {
     body.set('rationale', this.custodyRationale);
     body.set('assessment_as_of', this.asOf);
     body.set('population_and_maturity_attested', 'true');
+    if (this.prospectiveConfirmed) body.set('prospective_first_use_attested', 'true');
     body.set('file', this.file);
     this.action(`native-adoptions/${this.adoption.id}/protected-inputs`, body, 'seal');
   }
@@ -283,7 +288,7 @@ export class NativeAdoptionComponent implements OnChanges, OnDestroy {
           else this.directory[index] = value;
           if (action.kind === 'seal') {
             this.file = null;
-            this.custodyConfirmed = false;
+            this.custodyConfirmed = this.prospectiveConfirmed = false;
             this.selected = value.protected_inputs.find(
               (p: any) => p.id === action.body.get('request_id'),
             );
@@ -299,6 +304,7 @@ export class NativeAdoptionComponent implements OnChanges, OnDestroy {
     this.busy = false;
     this.preview = null;
     this.executionConfirmed = this.reviewConfirmed = this.custodyConfirmed = false;
+    this.prospectiveConfirmed = false;
     if (mutation && ![400, 404, 409].includes(error.status)) {
       this.error =
         'The action outcome is unconfirmed. Retry the identical pending request after access or service recovery.';

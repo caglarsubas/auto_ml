@@ -674,6 +674,10 @@ def finish(identifier, token, state, reason="", result=None, *, deadline=None):
         if state == "succeeded" and deadline is not None and time.monotonic() >= deadline:
             close(job, "blocked", "job_time_budget_exceeded", metadata_only=True)
             return
+        if (job.specification["kind"] == native_assessment.KIND and prepared_result
+                and prepared_result.get("confirmatory") and not native_assessment.publish_confirmation(job, prepared_result)):
+            close(job, "blocked", "job_confirmation_receipt_changed", metadata_only=True)
+            return
         job.result, job.result_sha256 = prepared_result, prepared_digest
         close(job, state, reason)
 

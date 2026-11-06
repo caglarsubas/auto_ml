@@ -2,8 +2,7 @@
   <h4 id="native-adoption-title">Reviewed candidate adoption and protected assessment</h4>
   <p>
     Adoption selects one frozen development candidate for protected assessment. An independent
-    reviewer must accept it before sealing outcomes. Production use and confirmatory evidence
-    require separate approval and qualification.
+    reviewer must accept it before sealing outcomes. Production use requires separate approval.
   </p>
   <button type="button" (click)="refresh()" [disabled]="busy || !!pending">
     Refresh native adoptions
@@ -129,6 +128,12 @@
           population is appropriate, disjoint from development and has mature labels; I disclose
           prior access in my rationale.</label
         >
+        <label>
+          <input type="checkbox" [(ngModel)]="prospectiveConfirmed" />
+          Request prospective first-use assessment. I attest independent custody and no prior use of
+          these outcomes. This requires explicit temporal outcome windows and approval before the
+          first prediction date.
+        </label>
         <button
           type="button"
           (click)="seal()"
@@ -165,8 +170,13 @@
         </details>
         <label
           ><input type="checkbox" [(ngModel)]="executionConfirmed" />I authorize this exact frozen
-          assessment and execution budget; results remain exploratory.</label
-        >
+          assessment and execution budget.
+          @if (preview.confirmation_protocol) {
+            Confirmation depends on the frozen prospective window and recorded prior access.
+          } @else {
+            Results remain exploratory.
+          }
+        </label>
         <button
           type="button"
           (click)="submit()"

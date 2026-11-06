@@ -1,4 +1,4 @@
-"""Independent native adoption and sealed, access-accounted exploratory assessment.
+"""Independent native adoption and sealed, access-accounted assessment.
 
 Protected custody prevents the native training/search/scoring entrypoints from
 reading these labels. Unknown upstream histories never become confirmatory.
@@ -17,6 +17,7 @@ from django.db.models.functions import Substr
 from django.utils import timezone
 
 from access_control import projects
+from access_control.models import ProjectDataset
 from access_control.authority import actor_snapshot
 from deployment import native_candidate
 from deployment.reviews import digest, lock_authority
@@ -26,10 +27,17 @@ from execution_jobs.models import NativeAdoption, NativeAdoptionEvent, NativeJob
 from modeling.declared_metric import metric_spec, metric_value
 from modeling.development_assessment import development_metrics
 from modeling.holdout_evidence import holdout_spec, reserve_holdout_access
+from modeling.models import HoldoutAccess
 
 KIND = "native_protected_assessment_v1"
 BUDGET = {**training_search.BUDGET, "chunk_size": 500}
 SCOPE = "development_candidate_for_protected_assessment_only"
+PROSPECTIVE = "prospective_temporal_v1"
+PROSPECTIVE_LIMITATION = (
+    "Prospective temporal protocol. The exact independent approval precedes the prediction window. "
+    "First use and external custody are reviewer attestations. Reuse, uncertain access and incomplete "
+    "provenance withhold confirmation. The worker scores the frozen candidate without refitting."
+)
 LIMITATION = (
     "Exploratory protected assessment. Upstream history, independent population identity and maturity "
     "are not established by an upload. Reuse or post-inspection changes cannot inherit confirmatory status. "
@@ -263,7 +271,7 @@ def controls(job):
     )
 
 
-def sealed_header(raw, job):
+def sealed_header(raw, job, time_columns=()):
     required = [*job.result["features"], job.result["prediction_contract"]["target_column"], *controls(job)]
     try:
         rows = csv.reader(io.StringIO(raw.decode("utf-8-sig")), strict=True)
@@ -271,28 +279,65 @@ def sealed_header(raw, job):
         count = 0
         if len(set(header)) != len(header) or set(header) != set(required) or len(header) != len(required):
             raise ValueError
+        positions = [header.index(name) for name in time_columns]
+        times = [[] for _ in positions]
         for row in rows:
             if row:
                 count += 1
                 if len(row) != len(header) or count > BUDGET["max_rows"]:
                     raise ValueError
+                for values, index in zip(times, positions):
+                    values.append(row[index])
         if not 30 <= count <= BUDGET["max_rows"]:
             raise ValueError
     except (ValueError, csv.Error, UnicodeError, StopIteration):
         raise ValueError(
             "Protected CSV requires 30–1000 rows and exactly the frozen features, target and validation controls."
         ) from None
-    return {"header": header, "rows": count}
+    schema = {"header": header, "rows": count}
+    if not times:
+        return schema, None
+    dates, ends = (pd.to_datetime(values, format="ISO8601", errors="coerce", utc=True) for values in times)
+    if dates.isna().any() or ends.isna().any() or (ends <= dates).any():
+        conflict("native_confirmation_invalid_outcome_window")
+    return schema, {
+        "start": dates.min().isoformat(timespec="nanoseconds"),
+        "end": ends.max().isoformat(timespec="nanoseconds"),
+    }
+
+
+def prospective_window(window, approval, as_of):
+    if pd.Timestamp(window["start"]) <= pd.Timestamp(approval.created_at):
+        conflict("native_confirmation_candidate_not_frozen_before_prediction")
+    if pd.Timestamp(window["end"]) > pd.Timestamp(as_of) or as_of > timezone.now():
+        conflict("native_confirmation_outcomes_not_mature")
+    return {"version": PROSPECTIVE, "approved_at": approval.created_at.isoformat(), "window": window,
+            "external_first_use": "attested_by_independent_reviewer"}
+
+
+def prior_prospective_use(job, window):
+    # Same-project legacy or uncertain history cannot establish a first use.
+    files = ProjectDataset.objects.filter(project_id=job.project_id).values("dataset_id")
+    history = HoldoutAccess.objects.filter(file_id__in=files)
+    if history.exclude(parameters__has_key="prospective_window").exists():
+        return "prior_unclassified_project_access"
+    # All admitted windows use fixed-width UTC timestamps. Block intersecting
+    # windows across candidates, dataset IDs, row order and custody uploads.
+    if history.filter(parameters__prospective_window__start__lte=window["end"],
+                      parameters__prospective_window__end__gte=window["start"]).exists():
+        return "prior_overlapping_project_access"
+    return None
 
 
 def seal(actor, adoption_id, data, upload):
     from execution_jobs import service
 
-    if (
-        set(data)
-        != {"request_id", "proposal_sha256", "rationale", "assessment_as_of", "population_and_maturity_attested"}
-        or data["population_and_maturity_attested"] != "true"
-    ):
+    base_fields = {"request_id", "proposal_sha256", "rationale", "assessment_as_of",
+                   "population_and_maturity_attested"}
+    prospective = "prospective_first_use_attested" in data
+    if (set(data) - {"prospective_first_use_attested"} != base_fields
+            or data["population_and_maturity_attested"] != "true"
+            or prospective and data["prospective_first_use_attested"] != "true"):
         raise ValueError("Attest the population/maturity and supply the displayed protected input fields.")
     identifier, rationale = uuid.UUID(str(data["request_id"])), text(data["rationale"])
     as_of = datetime.fromisoformat(data["assessment_as_of"].replace("Z", "+00:00"))
@@ -320,7 +365,13 @@ def seal(actor, adoption_id, data, upload):
         job, _, approval = current(adoption)
         if data["proposal_sha256"] != adoption.proposal_sha256 or authority != approval.payload["authority"]:
             conflict("native_adoption_review_changed")
-        schema = sealed_header(raw, job)
+        validation = job.specification["training"]["options"]["validation"]
+        columns = ()
+        if prospective:
+            if validation["strategy"] != "oot" or not validation.get("label_end_column"):
+                conflict("native_confirmation_requires_explicit_temporal_windows")
+            columns = (validation["date_column"], validation["label_end_column"])
+        schema, window = sealed_header(raw, job, columns)
         spec = {
             "schema_version": 1,
             "scope": "sealed_native_outcomes_v1",
@@ -338,6 +389,9 @@ def seal(actor, adoption_id, data, upload):
             "upstream_history": "unverified",
             "confirmatory": False,
         }
+        if prospective:
+            spec["confirmation_protocol"] = prospective_window(window, approval, as_of)
+            spec["upstream_history"] = "reviewer_attested_first_use"
         NativeProtectedInput.objects.create(
             id=identifier,
             adoption=adoption,
@@ -385,6 +439,11 @@ def plan(actor, protected_id):
         "runtime": service.runtime(KIND),
         "limits": service.limits(KIND),
     }
+    protocol = spec.get("confirmation_protocol")
+    if protocol is not None:
+        if protocol != prospective_window(protocol["window"], approval, datetime.fromisoformat(spec["assessment_as_of"])):
+            conflict("native_confirmation_protocol_changed")
+        result["confirmation_protocol"] = protocol
     return result, protected, raw_export, authority
 
 
@@ -394,7 +453,7 @@ def preview(actor, protected_id):
         **prepared,
         "assessment_sha256": digest(prepared),
         "input_metadata": protected.specification,
-        "limitation": LIMITATION,
+        "limitation": PROSPECTIVE_LIMITATION if "confirmation_protocol" in prepared else LIMITATION,
     }
     projects.recheck(authority)
     return result
@@ -495,19 +554,31 @@ def assess(job, check):
         identity = holdout_spec(
             spec["input_sha256"], contract["target_column"], list(range(spec["rows"])), "raw_snapshot"
         )
+        protocol = prepared.get("confirmation_protocol")
+        parameters = {
+            "scope": KIND,
+            "job_id": str(job.pk),
+            "adoption_id": prepared["adoption_id"],
+            "protected_input_id": str(sealed.pk),
+            "assessment_sha256": digest(prepared),
+        }
+        reason = None
+        if protocol:
+            window = protocol["window"]
+            reason = prior_prospective_use(job, window)
+            if HoldoutAccess.objects.filter(dataset_sha256=spec["input_sha256"]).exists():
+                reason = "prior_exact_input_access"
+            parameters["prospective_window"] = window
+            parameters["confirmation_protocol"] = protocol["version"]
         access, history = reserve_holdout_access(
             identity,
             job.dataset_id,
             sealed.adoption.training_job_id,
             actor,
-            {
-                "scope": KIND,
-                "job_id": str(job.pk),
-                "adoption_id": prepared["adoption_id"],
-                "protected_input_id": str(sealed.pk),
-                "assessment_sha256": digest(prepared),
-            },
+            parameters,
         )
+        if protocol and history["total_related_accesses"] and not reason:
+            reason = "prior_related_access"
     try:
         check()
         raw = bytes(
@@ -560,7 +631,8 @@ def assess(job, check):
         check()
         access.attempt_state = "completed"
         access.save(update_fields=["attempt_state"])
-        return {
+        confirmed = bool(protocol and not reason)
+        result = {
             "schema_version": 1,
             "scope": KIND,
             "job_id": str(job.pk),
@@ -577,14 +649,28 @@ def assess(job, check):
             "scores_sha256": digest(scored["scores"]),
             "candidate_adopted_for_assessment": True,
             "final_holdout_accessed": True,
-            "evidence_status": "exploratory",
-            "confirmatory": False,
-            "limitation": LIMITATION,
+            "evidence_status": "confirmatory" if confirmed else "exploratory",
+            "confirmatory": confirmed,
+            "limitation": PROSPECTIVE_LIMITATION if protocol else LIMITATION,
             "review_approved": False,
             "production_use_approved": False,
             "legacy_projection_updated": False,
         }
+        if protocol:
+            result["confirmation_reason"] = reason or "first_prospective_assessment_completed"
+        return result
     except BaseException:
         access.attempt_state = "failed"
         access.save(update_fields=["attempt_state"])
         raise
+
+
+def publish_confirmation(job, result):
+    """Record confirmation in the same transaction as the fenced job result."""
+    return HoldoutAccess.objects.filter(
+        pk=result["outcome_access_id"], execution_id=job.specification["training_job_id"],
+        file_id=job.dataset_id, actor_id=job.actor_id, attempt_state="completed",
+        evidence_status="exploratory", parameters__job_id=str(job.pk),
+        parameters__assessment_sha256=job.specification["assessment_sha256"],
+        parameters__confirmation_protocol=PROSPECTIVE,
+    ).update(evidence_status="confirmatory") == 1

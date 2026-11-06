@@ -211,6 +211,9 @@
           {{ job.result.evidence_status }}
         </p>
         <p>{{ job.result.limitation }}</p>
+        @if (job.result.confirmation_reason) {
+          <p>Confirmation decision: {{ job.result.confirmation_reason }}</p>
+        }
         <p>
           Outcome access {{ job.result.outcome_access_id }} · Prior related accesses
           {{ job.result.prior_related_accesses }}. No production approval.

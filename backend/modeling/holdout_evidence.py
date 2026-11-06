@@ -3,7 +3,7 @@
 Identity uses the frozen source and row membership, never predictions, objective,
 selected features or encoded positive-class meaning. Hashes are not signatures.
 The shared-filesystem lock qualifies the current single-installation profile;
-distributed audit durability and confirmatory protocols remain separate work.
+prospective native assessment adds a separate first-use protocol.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from django.db.models import Q
 from modeling.models import HoldoutAccess
 
 
-LIMITATION = ('All assessments are exploratory. Reusing final outcomes, including overlapping '
+LIMITATION = ('Unqualified assessment remains exploratory. Reusing final outcomes, including overlapping '
     'rows and failed access attempts, cannot establish independent confirmation. Unknown '
     'historical access is not evidence of an unused holdout. Source edits/reordered imports '
     'are not linked automatically; independent review and confirmatory protocols remain required.')
@@ -29,6 +29,16 @@ LIMITATION = ('All assessments are exploratory. Reusing final outcomes, includin
 def _digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
         allow_nan=False, separators=(',', ':')).encode()).hexdigest()
+
+
+def prospective_payload(raw):
+    """Recognize a byte-identical copy without opening sealed outcome storage."""
+    from execution_jobs.models import NativeProtectedInput
+
+    return NativeProtectedInput.objects.filter(
+        specification__has_key="confirmation_protocol",
+        specification__input_sha256=hashlib.sha256(raw).hexdigest(),
+    ).exists()
 
 
 def holdout_spec(source_sha256, target_column, rows, source_kind):

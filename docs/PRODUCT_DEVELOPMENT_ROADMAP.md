@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 6 (9.1%); in_progress: 0 (0.0%); waiting: 43 (65.2%); blocked: 7 (10.6%); done: 10 (15.2%).
+Inventory: 66 tasks; ready: 5 (7.6%); in_progress: 1 (1.5%); waiting: 43 (65.2%); blocked: 7 (10.6%); done: 10 (15.2%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -122,7 +122,7 @@ Keep currently unsupported constrained target encoding unavailable until a fold-
 
 ### D03-T01 — Define protected confirmatory assessment and reuse protocol
 
-**Priority / status:** P0 / ready. **Owner:** Backend/ML. **Outcomes:** D03.
+**Priority / status:** P0 / in_progress. **Owner:** Backend/ML. **Outcomes:** D03.
 
 Separate exploratory evidence from protected final assessment and document the access/reuse rules.
 
@@ -131,6 +131,8 @@ Separate exploratory evidence from protected final assessment and document the a
 **Acceptance:** Assessment access is attributable and version-bound.; Calibration, threshold choice and feature search cannot consume final outcomes.
 
 **Source / rationale:** Remaining acceptance scope from D03; existing tested foundation is reused, not rebuilt.
+
+**Packet / evidence:** P172; [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json)
 
 ### D03-T02 — Qualify evidence invalidation after holdout inspection
 
@@ -2604,6 +2606,16 @@ Apply the local-only policy to application transports and raw service output. Re
 
 **Remaining:** D06-T02 is accepted for the sealed local-only private profile. Customer-specific provider, retention and backup policies, integrated threat-model qualification, and release and customer acceptance retain separate gates.
 
+### P172 — Prospective protected assessment and first-use protocol
+
+**Packet status:** implemented. **Mapped outcomes:** D03.
+
+Qualify bounded first-use temporal assessment with independent pre-window approval, attested custody, frozen scoring, recorded outcome access, reuse decisions and protected development boundaries.
+
+**Evidence:** [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json)
+
+**Remaining:** Qualify exact PR and independent main. D03-T02 lineage invalidation, independent reproduction and D06-T03 integrated threat-model qualification retain separate gates.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.
@@ -2658,9 +2670,9 @@ Separate development, calibration, and threshold choice from final holdout asses
 
 **Source mapping:** Claude CC-6; GPT P03; Gemini C3.
 
-**Progress:** Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Evidence is always exploratory; confirmatory/reuse protocols remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open.
+**Progress:** Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Evidence is always exploratory; confirmatory/reuse protocols remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. Qualification remains in progress.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md); [P10 source qualification](evidence/p10-qualification-2026-10-09.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md); [P10 source qualification](evidence/p10-qualification-2026-10-09.json); [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json)
 
 ### D04 Immutable runs and reliable scoring
 

@@ -1,0 +1,47 @@
+{
+  "schema": "prospective_protected_assessment_qualification_v1",
+  "packet": "P172",
+  "task": "D03-T01",
+  "base": "7549f3e053402c04139112f835aee0029f249e2e",
+  "supports": "D06-T03 through D03-T02, D09-T01 and D09-T02",
+  "sources": {
+    "backend/declaration/views.py": "306ad32e677da22de55aa7d1d3d90ea45656a548f0d9fc5a43beeb3bb3da4691",
+    "backend/execution_jobs/csv_scoring.py": "618f1520d8abe7c1a841da7fcd30e1886882be7df994a6955acbd2ceb71fe6e6",
+    "backend/execution_jobs/legacy_execution.py": "c54cbd2be7c9e0237bdf0d1f741e2f3284ceb6a06de76e28ce5fa251a187a926",
+    "backend/execution_jobs/native_assessment.py": "3c321fccfc10923e2dd9a9e3be676e13325b918bf0e6db02ca60ab5eb2a60f61",
+    "backend/execution_jobs/service.py": "3344a2b763d8d2385bfe21874df0ea4fe1cb52872637a11028a2679f4d16c2bd",
+    "backend/modeling/holdout_evidence.py": "a194aa96ac7366903c4a14020c9e127adc0042d040882bfeebcca2368bf15e60",
+    "backend/tests/unit/test_prospective_assessment.py": "d0e8a60b7b5315ea465937217501489eaf33cbc7b72aadcb7049b6e63b9b3ee9",
+    "frontend/src/app/native-adoption/native-adoption.component.html": "62e61510089b81040dd809b955b054aade8acd4120c99d2206ed3e41df588e42",
+    "frontend/src/app/native-adoption/native-adoption.component.spec.ts": "6256f7158a963c1a9266a0098428cd184c6c5579607f2c660da6260c9949a1a0",
+    "frontend/src/app/native-adoption/native-adoption.component.ts": "8f0b73ed7dbc78ed007fcac659d24dfdbe9f0159cfdd3826133e87685b4727af",
+    "frontend/src/app/package-jobs/package-jobs.component.html": "441154252feeb35334cc89ff4b098d46893fc894eb6d82c4f1e07ac8da008728"
+  },
+  "local": {
+    "scope": "focused_prospective_and_protected_assessment",
+    "tests": 190,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "pytest_seconds": 56.5,
+    "fixture": "actual_TLS_non_superuser_CREATEDB_owner",
+    "network_difference": "owned_internal_instead_of_Linux_CI_host"
+  },
+  "frontend_regression": {
+    "path": "frontend/src/app/native-adoption/native-adoption.component.spec.ts",
+    "before_sha256": "abb40be840b29e846554f51b04bec840f30cbe7832f7dba0ce116868dd2cf89b",
+    "after_sha256": "6256f7158a963c1a9266a0098428cd184c6c5579607f2c660da6260c9949a1a0",
+    "added_tests": 1,
+    "local_component_cases": 13
+  },
+  "backend_pr_cases": 7615,
+  "native_and_main_backend_cases": 7760,
+  "backend_cases_added": 3,
+  "frontend_cases": 732,
+  "browser_cases": 49,
+  "native_skip_count": 6,
+  "native_process_cap_seconds": 900,
+  "native_workers": 2,
+  "native_worker_restarts": 0,
+  "job_cap_seconds": 3600
+}

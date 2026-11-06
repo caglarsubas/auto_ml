@@ -198,7 +198,11 @@ def training_files(actor, file_id, options):
     root = Path(settings.MEDIA_ROOT).resolve()
     name = str(path.relative_to(root))
     options["processed_file"] = name
+    from modeling.holdout_evidence import prospective_payload
+
     files = {name: read(path)}
+    if prospective_payload(files[name]):
+        conflict("prospective_outcomes_protected")
     try:
         rows = csv.reader(io.StringIO(files[name].decode("utf-8-sig")), strict=True)
         header = next(rows)
@@ -227,6 +231,8 @@ def training_files(actor, file_id, options):
         raw_path = root / raw_name
         projects.path_authority(actor.pk, raw_path, file_id=file_id)
         files[raw_name] = read(raw_path)
+        if prospective_payload(files[raw_name]):
+            conflict("prospective_outcomes_protected")
         import hashlib
 
         if (

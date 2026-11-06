@@ -227,6 +227,9 @@ class DeclarationViewSet(viewsets.ModelViewSet):
         return rows
     
     def create(self, request, *args, **kwargs):
+        from access_control.projects import governed
+        from modeling.holdout_evidence import prospective_payload
+
         files = request.FILES
         first_line_is_not_header = request.POST.get('first_line_is_not_header') == 'true'
         first_sheet_has_not_dataset = request.POST.get('first_sheet_has_not_dataset') == 'true'
@@ -244,6 +247,11 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             for file_key in files:
                 file = files[file_key]
                 file_content = file.read()
+                if governed() and prospective_payload(file_content):
+                    return Response({
+                        'error_code': 'prospective_outcomes_protected',
+                        'error': 'Use the protected assessment workspace for these outcomes.',
+                    }, status=409)
 
                 is_csv = file.name.lower().endswith('.csv')
                 is_excel = file.name.lower().endswith(('.xls', '.xlsx'))
@@ -333,7 +341,7 @@ class DeclarationViewSet(viewsets.ModelViewSet):
                 )
 
                 from access_control.data_policy import private
-                from access_control.projects import audit, governed, bind_dataset
+                from access_control.projects import audit, bind_dataset
 
                 if governed():
                     binding = bind_dataset(declaration, request._request._project_scopes[0]['project_id'], request.user)

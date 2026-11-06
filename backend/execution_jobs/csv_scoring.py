@@ -11,6 +11,7 @@ from django.conf import settings
 from declaration.models import Declaration
 from access_control import projects
 from deployment.scoring_receipts import csv_input, scoring_runtime
+from modeling.holdout_evidence import prospective_payload
 
 KIND = "native_csv_scoring_v1"
 BUDGET = {"max_input_bytes": 5 * 1024**2, "max_rows": 10000, "max_columns": 256, "max_output_bytes": 16 * 1024**2}
@@ -90,6 +91,8 @@ def input_bytes(actor_id, file_id, check=lambda: None, expected=None):
         os.close(descriptor)
     check()
     projects.recheck(authority)
+    if prospective_payload(raw):
+        raise JobConflict("job_prospective_outcomes_protected")
     receipt = {"file_id": file_id, "name": dataset.original_name, "relative_path": relative, **csv_input(raw)}
     if not raw or expected and any(receipt[k] != expected[k] for k in ["sha256", "bytes", "parser", "pandas_version"]):
         raise JobConflict("job_input_changed")
