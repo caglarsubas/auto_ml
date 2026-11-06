@@ -2333,6 +2333,10 @@ class AIAssistantView(APIView):
     """
 
     def post(self, request, *args, **kwargs):
+        from access_control.data_policy import allows, refusal
+
+        if not allows('inference'):
+            return Response(refusal(), status=403)
         try:
             data = request.data
             user_message = data.get('message', '').strip()
@@ -4043,6 +4047,13 @@ class AIModelListView(APIView):
     """
 
     def get(self, request, *args, **kwargs):
+        from access_control.data_policy import allows, refusal
+
+        if not allows('inference'):
+            return Response({
+                **refusal(), 'models': [], 'default': None,
+                'engine': {'available': False, 'model_count': 0, 'last_error': None, 'checked_at': None},
+            })
         # Evaluate list_models() first: it triggers the engine-discovery refresh
         # whose outcome engine_status() then reports, so the two stay consistent
         # within a single response.

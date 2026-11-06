@@ -7,6 +7,7 @@ import logging
 import os
 from typing import Sequence
 
+from access_control.data_policy import allows, require_egress
 from ai_assistant.cache import _get_redis
 from ai_assistant.prometa_config import cache_lookup, set_span_attr
 
@@ -53,7 +54,7 @@ def _cache_ttl() -> int:
 
 def embeddings_available() -> bool:
     """Return True when an OpenAI API key is configured for embeddings."""
-    return bool(_api_key())
+    return allows("embeddings") and bool(_api_key())
 
 
 def _normalize_text(text: str) -> str:
@@ -117,6 +118,7 @@ def embed_texts(
     ``cache_lookup(kind='embedding')`` hit/miss signals. Fail-open when
     Redis is unavailable.
     """
+    require_egress("embeddings")
     api_key = _api_key()
     if not api_key:
         raise EnvironmentError(

@@ -285,6 +285,10 @@ def _fetch_engine_models() -> dict[str, dict] | None:
     the previous cached snapshot rather than wiping the UI when the engine
     is briefly unreachable.
     """
+    from access_control.data_policy import allows
+
+    if not allows('discovery'):
+        return None
     base_url = os.environ.get('LLM_ENGINE_BASE_URL', 'http://llm-engine:8080/v1')
     api_key = os.environ.get('LLM_ENGINE_API_KEY', 'sk-engine-local')
     url = base_url.rstrip('/') + '/models'
@@ -371,6 +375,10 @@ def _registry_snapshot() -> dict[str, dict]:
     engine is unlikely to ever advertise a key starting with ``gpt-``; we
     enforce it anyway as defense-in-depth.
     """
+    from access_control.data_policy import allows
+
+    if not allows('inference'):
+        return {}
     snapshot = dict(_refresh_engine_models())
     snapshot.update(MODEL_REGISTRY)
     return snapshot
@@ -475,6 +483,9 @@ def invalidate_engine_cache() -> None:
 def call_openai(api_key: str, messages: list, model_cfg: dict,
                 tools: list = None) -> dict:
     """Call OpenAI chat completions API."""
+    from access_control.data_policy import require_egress
+
+    require_egress('inference')
     from openai import OpenAI
     client = OpenAI(api_key=api_key, timeout=90.0)
 
@@ -688,6 +699,9 @@ def call_engine(messages: list, model_cfg: dict, tools: list = None) -> dict:
     ``max_tokens`` before closing ``</think>``.  Filed as engine feedback
     in ``docs/engine-feedback/nemotron-cot-leak-blocking-normalizer.md``.
     """
+    from access_control.data_policy import require_egress
+
+    require_egress('inference')
     import httpx
     from openai import OpenAI
 

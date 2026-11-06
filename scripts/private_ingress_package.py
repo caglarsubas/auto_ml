@@ -121,7 +121,7 @@ def configuration(public_authority, body_mib=50, frontend_files=None):
     return f"""# Fixed private API ingress; generated from validated installation authority.
 worker_processes 1;
 pid /tmp/nginx.pid;
-error_log /dev/stderr crit;
+error_log /dev/null crit;
 events {{ worker_connections 128; }}
 http {{
     include /etc/nginx/mime.types;
