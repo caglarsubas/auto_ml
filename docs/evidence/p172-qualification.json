@@ -1,0 +1,281 @@
+{
+  "schema": "prospective_protected_assessment_acceptance_v1",
+  "packet": "P172",
+  "task": "D03-T01",
+  "scope": "Prospective temporal confirmation for native binary classification and regression on the synthetic private ARM64 profile",
+  "pr": 280,
+  "qualified_head": "eb48cade9180bcac8b127fe20f8b4f6661574b4f",
+  "merge": "d0338b54a9b774cb45c5d2935f874adfbbe7ffcb",
+  "ci_run": 42222970595,
+  "main_run": 42231084353,
+  "merged_tree_matches_qualified_pr": true,
+  "application_source_sha256": "2614459aa49906f00f6c5bf10c77157498aa1feaa9850ea56bdbfd1f4be7962b",
+  "main_qualified": true,
+  "previous_counts": {
+    "done": 10,
+    "open": 49,
+    "blocked": 7,
+    "total": 66
+  },
+  "accepted_counts": {
+    "done": 11,
+    "open": 48,
+    "blocked": 7,
+    "total": 66
+  },
+  "done_percentage_point_change": 1.5151515151515151,
+  "pr_qualification": {
+    "run": 42222970595,
+    "head": "eb48cade9180bcac8b127fe20f8b4f6661574b4f",
+    "event": "pull_request",
+    "six_jobs_passed": true,
+    "backend": {
+      "tests": 7615,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 5,
+      "time": 587.636,
+      "passed": 7610
+    },
+    "native": {
+      "tests": 7760,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 886.488,
+      "passed": 7754
+    },
+    "browser": {
+      "total": 49,
+      "expected": 49,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend": 732,
+    "original_browser_cases_preserved": 48,
+    "original_ri_case_inventory": {
+      "cases": 809,
+      "baseline_sha256": "da4b48a526f040f4341fef58424a79c9fb15a3c28ffc8c7fb94ab2aa87de0140",
+      "identities_unchanged": true
+    },
+    "original_test_inventory": {
+      "backend": {
+        "original_cases_preserved": 7256,
+        "additional_cases": 359,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "1800eee947d7e7ade1d36e97670b3c290d852ea996d58de15eeb7b944ebf7811"
+      },
+      "native": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 359,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "b179e13329f84365144062da7b951aed376f795146b422e141f0474c260f4b75"
+      }
+    },
+    "original_p171_case_skip_identities_preserved": true,
+    "prospective_assessment_native_cases": [
+      "test_confirmation_requires_pre_prediction_approval_and_maturity",
+      "test_first_use_is_published_once_and_reordered_overlap_is_exploratory",
+      "test_interrupted_access_cannot_be_retried_into_confirmation"
+    ],
+    "prospective_assessment_qualified": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13505351136,
+        "sha256": "9c76db69bc0842e247e60da34edc38ced1685a485d4b2843d800d5e68527ee6f"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13509345514,
+        "sha256": "960c727fadbd0b9b0432c4bd686fe3b83416c75e2780fe47155e6c192753d92f"
+      },
+      "playwright-report": {
+        "artifact_id": 13504618338,
+        "sha256": "91da33063d9b591cf78dc94205efed4fc32411bb062280e85d95e3aa6e95ab8c"
+      }
+    },
+    "run_attempt": 1,
+    "scoped_browser_retry": null,
+    "failure_matrix_case_count": 135,
+    "source_baselines": {
+      "historical-297-source-preservation.json": {
+        "files": 297,
+        "byte_identical": 294,
+        "explicit_contract_delta": [
+          {
+            "path": "backend/tests/postgresql_parallel.py",
+            "before_sha256": "a0e4076b272742f0fc2251f8a50e3e54791ae3425cd2727279d91fbfe90ad38f",
+            "after_sha256": "f9b2784c6cd2a285cccc365a178f53b5b2903062b5fb81e145a0e1efe84fc62e"
+          },
+          {
+            "path": "frontend/e2e/raw-replay-api.spec.ts",
+            "before_sha256": "58597c85b56416334dfc7b30fe9c5777dcf9d26506e1e729032236f7aa1f6a4f",
+            "after_sha256": "26a56ad3d553beb627b8bb72e4a38bf392c644cecf9a0a9f6efb8e5906791efe"
+          },
+          {
+            "path": "frontend/e2e/project-workspace.spec.ts",
+            "before_sha256": "2aeb2f6cd39af8c25fb82acf01ce64aace6a8e20f0a6ce772ae9670709405aaf",
+            "after_sha256": "d0dc40dc3ca978c5c367cf44d6b673bc120570583def343419efb245448cfd4f",
+            "suffix_sha256": "e8b98e833aea069c1f1d47b559f6848cdabd6a0d7372163b262c5fe25eb7c610",
+            "new_case": "project administrator reviews, grants and revokes an enrolled account"
+          }
+        ],
+        "append_only_ordering_hook": true
+      },
+      "original-test-source-preservation.json": {
+        "files": 236,
+        "byte_identical": 235,
+        "explicit_contract_delta": [
+          {
+            "path": "backend/tests/postgresql_parallel.py",
+            "before_sha256": "a0e4076b272742f0fc2251f8a50e3e54791ae3425cd2727279d91fbfe90ad38f",
+            "after_sha256": "f9b2784c6cd2a285cccc365a178f53b5b2903062b5fb81e145a0e1efe84fc62e"
+          }
+        ],
+        "append_only_ordering_hook": true
+      }
+    },
+    "main_qualified": false,
+    "scoped_native_retry": null
+  },
+  "main_qualification": {
+    "run": 42231084353,
+    "head": "d0338b54a9b774cb45c5d2935f874adfbbe7ffcb",
+    "event": "push",
+    "six_jobs_passed": true,
+    "backend": {
+      "tests": 7760,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 797.711,
+      "passed": 7754
+    },
+    "native": {
+      "tests": 7760,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 853.511,
+      "passed": 7754
+    },
+    "browser": {
+      "total": 49,
+      "expected": 49,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend": 732,
+    "original_browser_cases_preserved": 48,
+    "original_ri_case_inventory": {
+      "cases": 809,
+      "baseline_sha256": "da4b48a526f040f4341fef58424a79c9fb15a3c28ffc8c7fb94ab2aa87de0140",
+      "identities_unchanged": true
+    },
+    "original_test_inventory": {
+      "backend": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 359,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "f78b26dca906f0fbf585350678ba54632bc2d2866fc9e1835721ed2ee688d02f"
+      },
+      "native": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 359,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "b179e13329f84365144062da7b951aed376f795146b422e141f0474c260f4b75"
+      }
+    },
+    "original_p171_case_skip_identities_preserved": true,
+    "prospective_assessment_native_cases": [
+      "test_confirmation_requires_pre_prediction_approval_and_maturity",
+      "test_first_use_is_published_once_and_reordered_overlap_is_exploratory",
+      "test_interrupted_access_cannot_be_retried_into_confirmation"
+    ],
+    "prospective_assessment_qualified": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13510202626,
+        "sha256": "e0047a8a9a4945dfa7f6d79f0c03b088979988d30ad7926892e238658b3ecb1c"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13518353733,
+        "sha256": "2c983046b6b2d576d085eb112f1f9a0ae88f762a4fb5ce0099e0a8cff4d7d916"
+      },
+      "playwright-report": {
+        "artifact_id": 13511146840,
+        "sha256": "ff9277045ef53214d902639ec9b90b01c5c38143cc5f9bbb4e14d46c1355e96b"
+      }
+    },
+    "run_attempt": 2,
+    "scoped_browser_retry": null,
+    "failure_matrix_case_count": 135,
+    "source_baselines": {
+      "historical-297-source-preservation.json": {
+        "files": 297,
+        "byte_identical": 294,
+        "explicit_contract_delta": [
+          {
+            "path": "backend/tests/postgresql_parallel.py",
+            "before_sha256": "a0e4076b272742f0fc2251f8a50e3e54791ae3425cd2727279d91fbfe90ad38f",
+            "after_sha256": "f9b2784c6cd2a285cccc365a178f53b5b2903062b5fb81e145a0e1efe84fc62e"
+          },
+          {
+            "path": "frontend/e2e/raw-replay-api.spec.ts",
+            "before_sha256": "58597c85b56416334dfc7b30fe9c5777dcf9d26506e1e729032236f7aa1f6a4f",
+            "after_sha256": "26a56ad3d553beb627b8bb72e4a38bf392c644cecf9a0a9f6efb8e5906791efe"
+          },
+          {
+            "path": "frontend/e2e/project-workspace.spec.ts",
+            "before_sha256": "2aeb2f6cd39af8c25fb82acf01ce64aace6a8e20f0a6ce772ae9670709405aaf",
+            "after_sha256": "d0dc40dc3ca978c5c367cf44d6b673bc120570583def343419efb245448cfd4f",
+            "suffix_sha256": "e8b98e833aea069c1f1d47b559f6848cdabd6a0d7372163b262c5fe25eb7c610",
+            "new_case": "project administrator reviews, grants and revokes an enrolled account"
+          }
+        ],
+        "append_only_ordering_hook": true
+      },
+      "original-test-source-preservation.json": {
+        "files": 236,
+        "byte_identical": 235,
+        "explicit_contract_delta": [
+          {
+            "path": "backend/tests/postgresql_parallel.py",
+            "before_sha256": "a0e4076b272742f0fc2251f8a50e3e54791ae3425cd2727279d91fbfe90ad38f",
+            "after_sha256": "f9b2784c6cd2a285cccc365a178f53b5b2903062b5fb81e145a0e1efe84fc62e"
+          }
+        ],
+        "append_only_ordering_hook": true
+      }
+    },
+    "main_qualified": true,
+    "scoped_native_retry": {
+      "run": 42231084353,
+      "head": "d0338b54a9b774cb45c5d2935f874adfbbe7ffcb",
+      "native_job": 127936830160,
+      "status": "rejected_native_timeout",
+      "artifact_id": 13515430705,
+      "artifact_sha256": "8aee741567c3052893672a4e92d63a31f92edd0c79fbac2b2a669e72bcec686c",
+      "case_progress_at_last_worker_snapshot": 7758,
+      "collected_cases": 7760,
+      "native_cap_seconds": 900,
+      "original_suite_receipt_present": false,
+      "accepted": false,
+      "accepted_job": 127966957368,
+      "accepted_job_started_at": "2026-11-06T15:06:04Z",
+      "accepted_attempt": 2,
+      "other_jobs_reused_from_attempt": 1
+    }
+  },
+  "native_process_cap_seconds": 900,
+  "native_workers": 2,
+  "native_worker_restarts": 0,
+  "job_cap_seconds": 3600,
+  "broader_lineage_invalidation_qualified": false,
+  "full_D06_qualified": false,
+  "release_qualified": false,
+  "customer_accepted": false
+}
