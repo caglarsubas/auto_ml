@@ -45,6 +45,12 @@
       }
     </p>
     @if (workspace.state.selected; as project) {
+      @if (project.role === 'admin') {
+        <app-project-membership
+          [projectId]="project.id"
+          [membershipRevision]="project.membership_revision"
+        />
+      }
       @if (project.role === 'developer') {
         <a class="workspace-open" [href]="'/model-development?project_id=' + project.id"
           >Open development workspace</a

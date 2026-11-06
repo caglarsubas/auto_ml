@@ -9,6 +9,7 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import connections, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from access_control.authority import actor_snapshot
@@ -21,6 +22,7 @@ from access_control.models import (
     ProjectArtifact,
     ProjectAuthorityEvent,
     AssistantActionApproval,
+    SessionAuthority,
 )
 from access_control.storage import managed_path, positive_file_id
 
@@ -315,23 +317,72 @@ def change_member(project, user, role):
     return {"subject_user_id": user.pk, "membership_revision": str(member.revision), "cancelled_actions": cancelled}
 
 
-def admin_change(actor, project_id, username, role, request_id):
+def _lock_membership_admin(actor, project_id, username):
+    users = get_user_model().objects
+    # Session revocation locks the user row. Lock both accounts in ID order
+    # before the project and permit concurrent foreign-key references.
+    accounts = list(users.select_for_update(no_key=connections[users.db].features.has_select_for_no_key_update)
+                    .filter(Q(pk=actor.pk) | Q(username=username)).order_by("pk"))
+    acting = next((user for user in accounts if user.pk == actor.pk and user.is_active), None)
+    bound = getattr(actor, "_declarai_session_revision", None)
+    revision = SessionAuthority.objects.filter(user_id=actor.pk).values_list("revision", flat=True).first()
+    if not acting or acting.password != actor.password or not bound or bound != str(revision):
+        raise ProjectDenied("project_session_authority_changed")
+    project = Project.objects.select_for_update().get(pk=project_id)
+    scope = membership(acting.pk, project.pk, "admin")
+    for earlier in getattr(actor, "_declarai_project_scopes", []):
+        if earlier["project_id"] == str(project.pk) and earlier["operation"] == "admin" and earlier != scope:
+            raise ProjectDenied("project_authority_changed")
+    subject = next((user for user in accounts if user.username == username), None)
+    return project, scope, bound, subject
+
+
+def _member_state(project, scope, session_revision, subject):
+    if subject is None or subject.pk == scope["actor_id"]:
+        raise ValueError("Supply an existing username other than your own.")
+    member = ProjectMembership.objects.filter(project=project, actor=subject).first()
+    revision = str(member.revision) if member else None
+    role = member.role if member and member.active else "none"
+    state = [scope, session_revision, subject.pk, subject.username, subject.is_active, role, revision]
+    return {
+        "username": subject.username,
+        "active": subject.is_active,
+        "role": role,
+        "expected": hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest(),
+    }
+
+
+class MembershipConflict(Exception):
+    pass
+
+
+@transaction.atomic
+def admin_preview(actor, project_id, username):
+    return _member_state(*_lock_membership_admin(actor, project_id, username))
+
+
+def admin_change(actor, project_id, username, role, request_id, *, expected=None):
     identifier = uuid.UUID(str(request_id))
     spec = {"project_id": str(project_id), "user": username, "role": role, "actor_id": actor.pk}
+    if expected is not None:
+        spec["expected"] = expected
     digest = hashlib.sha256(
         json.dumps(spec, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     ).hexdigest()
     with transaction.atomic():
-        project = Project.objects.select_for_update().get(pk=project_id)
-        membership(actor.pk, project.pk, "admin")
+        project, scope, revision, user = _lock_membership_admin(actor, project_id, username)
         previous = ProjectAuthorityEvent.objects.filter(pk=identifier).first()
         if previous:
             if previous.request_sha256 != digest or previous.authority_source != "browser_session":
                 raise ValueError("Request UUID is bound to a different operation.")
             return previous, True
-        user = get_user_model().objects.get(username=username)
-        if user.pk == actor.pk:
-            raise ValueError("Use the installation operator command to change your own administrator role.")
+        if expected is not None:
+            if user is None or _member_state(project, scope, revision, user)["expected"] != expected:
+                raise MembershipConflict
+            if not user.is_active and role != "none":
+                raise MembershipConflict
+        elif user is None or user.pk == actor.pk:
+            raise ValueError("Supply an existing username other than your own.")
         resource = {**spec, **change_member(project, user, role)}
         event = ProjectAuthorityEvent.objects.create(
             id=identifier,

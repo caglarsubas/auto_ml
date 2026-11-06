@@ -1,0 +1,40 @@
+{
+  "schema": "private_membership_review_qualification_v1",
+  "base": "08cff0849890135eb7995924d10813306faef485",
+  "browser_append": {
+    "path": "frontend/e2e/project-workspace.spec.ts",
+    "before_sha256": "2aeb2f6cd39af8c25fb82acf01ce64aace6a8e20f0a6ce772ae9670709405aaf",
+    "after_sha256": "d0dc40dc3ca978c5c367cf44d6b673bc120570583def343419efb245448cfd4f",
+    "suffix_sha256": "e8b98e833aea069c1f1d47b559f6848cdabd6a0d7372163b262c5fe25eb7c610",
+    "new_case": "project administrator reviews, grants and revokes an enrolled account"
+  },
+  "sources": {
+    "backend/access_control/project_views.py": "90b682a8a88ec8737d0aaa434154d600a18a1a91fce288f56647d22b7f61d8e9",
+    "backend/access_control/projects.py": "10296ff27e17b59a5ef8937223f5031e0958935ffdf87c237cd183d4366cb3b9",
+    "backend/tests/unit/test_project_membership_review.py": "03a8002c8786ffed0912b6aa5d6d42f91adf6f769ef60242fc35ef1a9e66ef5b",
+    "frontend/src/app/project-workspace/project-workspace.component.ts": "dc8d3db3bfd2d484b99f512e47240d11837ec55e68e2acb66ec1dc533849be0e",
+    "frontend/src/app/project-workspace/project-workspace.component.html": "b53eb6bcd5f125a8009f4adef1d78a6191052d65b1b23b1f1d5dd2f2dddfabfb",
+    "frontend/src/app/project-membership/project-membership.component.css": "25d5281dc0b72708ca1077c61481497183699712fc01e4d2f0a955efcc0ed51a",
+    "frontend/src/app/project-membership/project-membership.component.html": "5fd46b35448419f6a58b4e99875e8ccc804ea7321746f1c7237159634e83fa33",
+    "frontend/src/app/project-membership/project-membership.component.ts": "b4c46c528af1f579c437e5470b382f36882148b63ee76a1d525cc89d83bfda6b"
+  },
+  "local": {
+    "pinned_linux_tls_postgresql_cases": 188,
+    "failures": 0,
+    "skips": 0,
+    "browser_cases": 1,
+    "browser_first_candidate_failure": "Duplicate membership panel in role text, corrected before the passing run."
+  },
+  "backend_pr_cases": 7605,
+  "native_and_main_backend_cases": 7750,
+  "backend_cases_added": 6,
+  "browser_cases": 49,
+  "native_skip_count": 6,
+  "native_process_cap_seconds": 900,
+  "native_workers": 2,
+  "native_worker_restarts": 0,
+  "job_cap_seconds": 3600,
+  "qualification_scope": "synthetic operator-managed local accounts, including distinct developer, reviewer and administrator authority",
+  "customer_accepted": false,
+  "release_qualified": false
+}

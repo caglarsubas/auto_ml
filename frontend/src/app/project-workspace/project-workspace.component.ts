@@ -7,13 +7,20 @@ import { forkJoin, of, Subscription } from 'rxjs';
 import { catchError, distinctUntilChanged, map, switchMap } from 'rxjs/operators';
 import { DataService } from '../services/data.service';
 import { ProjectWorkspaceService } from '../services/project-workspace.service';
+import { ProjectMembershipComponent } from '../project-membership/project-membership.component';
 import { PackageReviewComponent } from '../package-review/package-review.component';
 import { TrainingLaunchComponent } from '../training-launch/training-launch.component';
 
 @Component({
   selector: 'app-project-workspace',
   standalone: true,
-  imports: [CommonModule, FormsModule, PackageReviewComponent, TrainingLaunchComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ProjectMembershipComponent,
+    PackageReviewComponent,
+    TrainingLaunchComponent,
+  ],
   templateUrl: './project-workspace.component.html',
   styleUrl: './project-workspace.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,
