@@ -1,0 +1,271 @@
+{
+  "schema": "private_data_policy_acceptance_v1",
+  "packet": "P171",
+  "task": "D06-T02",
+  "scope": "Sealed synthetic Ubuntu 24.04 ARM64 private installation with local-only application data policy",
+  "pr": 278,
+  "qualified_head": "07eab8cfcc14bf681da59d1916b5954f5c7c3a51",
+  "merge": "795a89a81cba4ceef4ee82e9bde0cd4f29b1ab43",
+  "ci_run": 42185155634,
+  "main_run": 42192200496,
+  "merged_tree_matches_qualified_pr": true,
+  "application_source_sha256": "67e3c3d1466082323c91b192d1197c855f9d358ecf3c1475a7f4414b8345f1ca",
+  "main_qualified": true,
+  "previous_counts": {
+    "done": 9,
+    "open": 50,
+    "blocked": 7,
+    "total": 66
+  },
+  "accepted_counts": {
+    "done": 10,
+    "open": 49,
+    "blocked": 7,
+    "total": 66
+  },
+  "done_percentage_point_change": 1.5151515151515151,
+  "pr_qualification": {
+    "run": 42185155634,
+    "head": "07eab8cfcc14bf681da59d1916b5954f5c7c3a51",
+    "event": "pull_request",
+    "six_jobs_passed": true,
+    "backend": {
+      "tests": 7612,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 5,
+      "time": 622.112,
+      "passed": 7607
+    },
+    "native": {
+      "tests": 7757,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 892.78,
+      "passed": 7751
+    },
+    "browser": {
+      "total": 49,
+      "expected": 49,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend": 731,
+    "original_browser_cases_preserved": 48,
+    "original_ri_case_inventory": {
+      "cases": 809,
+      "baseline_sha256": "da4b48a526f040f4341fef58424a79c9fb15a3c28ffc8c7fb94ab2aa87de0140",
+      "identities_unchanged": true
+    },
+    "original_test_inventory": {
+      "backend": {
+        "original_cases_preserved": 7256,
+        "additional_cases": 356,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "1800eee947d7e7ade1d36e97670b3c290d852ea996d58de15eeb7b944ebf7811"
+      },
+      "native": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 356,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "b179e13329f84365144062da7b951aed376f795146b422e141f0474c260f4b75"
+      }
+    },
+    "original_p170_case_skip_identities_preserved": true,
+    "data_policy_native_cases": [
+      "test_audit_checkpoint_accepts_append_and_detects_row_and_checkpoint_changes",
+      "test_private_transport_boundaries_fail_before_using_ambient_credentials",
+      "test_retention_cli_review_and_idempotent_purge",
+      "test_retention_holds_used_and_unclassified_artifacts",
+      "test_retention_refuses_link_and_concurrent_database_client",
+      "test_runtime_log_boundary_discards_raw_descriptors",
+      "test_stale_review_and_interrupted_storage_removal"
+    ],
+    "data_policy_qualified": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13488555118,
+        "sha256": "7e3a226a6ef361b6f5243bd009d662647b44f79df165d152e96f6a2ea6f5bdac"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13489968439,
+        "sha256": "1f3f01e9440256204c810e1a699e2522a577f8bd6f5be1ad41c94b5ad3d3c587"
+      },
+      "playwright-report": {
+        "artifact_id": 13487178400,
+        "sha256": "58432b12d42478123bf7323c3b1ce539c636c9968f935295abaff75a7ea3c9b7"
+      }
+    },
+    "run_attempt": 1,
+    "scoped_browser_retry": null,
+    "failure_matrix_case_count": 135,
+    "source_baselines": {
+      "historical-297-source-preservation.json": {
+        "files": 297,
+        "byte_identical": 294,
+        "explicit_contract_delta": [
+          {
+            "path": "backend/tests/postgresql_parallel.py",
+            "before_sha256": "a0e4076b272742f0fc2251f8a50e3e54791ae3425cd2727279d91fbfe90ad38f",
+            "after_sha256": "f9b2784c6cd2a285cccc365a178f53b5b2903062b5fb81e145a0e1efe84fc62e"
+          },
+          {
+            "path": "frontend/e2e/raw-replay-api.spec.ts",
+            "before_sha256": "58597c85b56416334dfc7b30fe9c5777dcf9d26506e1e729032236f7aa1f6a4f",
+            "after_sha256": "26a56ad3d553beb627b8bb72e4a38bf392c644cecf9a0a9f6efb8e5906791efe"
+          },
+          {
+            "path": "frontend/e2e/project-workspace.spec.ts",
+            "before_sha256": "2aeb2f6cd39af8c25fb82acf01ce64aace6a8e20f0a6ce772ae9670709405aaf",
+            "after_sha256": "d0dc40dc3ca978c5c367cf44d6b673bc120570583def343419efb245448cfd4f",
+            "suffix_sha256": "e8b98e833aea069c1f1d47b559f6848cdabd6a0d7372163b262c5fe25eb7c610",
+            "new_case": "project administrator reviews, grants and revokes an enrolled account"
+          }
+        ],
+        "append_only_ordering_hook": true
+      },
+      "original-test-source-preservation.json": {
+        "files": 236,
+        "byte_identical": 235,
+        "explicit_contract_delta": [
+          {
+            "path": "backend/tests/postgresql_parallel.py",
+            "before_sha256": "a0e4076b272742f0fc2251f8a50e3e54791ae3425cd2727279d91fbfe90ad38f",
+            "after_sha256": "f9b2784c6cd2a285cccc365a178f53b5b2903062b5fb81e145a0e1efe84fc62e"
+          }
+        ],
+        "append_only_ordering_hook": true
+      }
+    },
+    "main_qualified": false
+  },
+  "main_qualification": {
+    "run": 42192200496,
+    "head": "795a89a81cba4ceef4ee82e9bde0cd4f29b1ab43",
+    "event": "push",
+    "six_jobs_passed": true,
+    "backend": {
+      "tests": 7757,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 795.344,
+      "passed": 7751
+    },
+    "native": {
+      "tests": 7757,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 802.938,
+      "passed": 7751
+    },
+    "browser": {
+      "total": 49,
+      "expected": 49,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend": 731,
+    "original_browser_cases_preserved": 48,
+    "original_ri_case_inventory": {
+      "cases": 809,
+      "baseline_sha256": "da4b48a526f040f4341fef58424a79c9fb15a3c28ffc8c7fb94ab2aa87de0140",
+      "identities_unchanged": true
+    },
+    "original_test_inventory": {
+      "backend": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 356,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "f78b26dca906f0fbf585350678ba54632bc2d2866fc9e1835721ed2ee688d02f"
+      },
+      "native": {
+        "original_cases_preserved": 7401,
+        "additional_cases": 356,
+        "skip_identities_unchanged": true,
+        "baseline_sha256": "b179e13329f84365144062da7b951aed376f795146b422e141f0474c260f4b75"
+      }
+    },
+    "original_p170_case_skip_identities_preserved": true,
+    "data_policy_native_cases": [
+      "test_audit_checkpoint_accepts_append_and_detects_row_and_checkpoint_changes",
+      "test_private_transport_boundaries_fail_before_using_ambient_credentials",
+      "test_retention_cli_review_and_idempotent_purge",
+      "test_retention_holds_used_and_unclassified_artifacts",
+      "test_retention_refuses_link_and_concurrent_database_client",
+      "test_runtime_log_boundary_discards_raw_descriptors",
+      "test_stale_review_and_interrupted_storage_removal"
+    ],
+    "data_policy_qualified": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13492050527,
+        "sha256": "6eb87f46fdad667b87365a8b7d07444be6f1f3ef5ca7f4cba9c8c3b11b64207b"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13492742728,
+        "sha256": "60f830d2ba0187052f0acc24b0abb0cf96150fd62a22f5e8f96b4e753356f2de"
+      },
+      "playwright-report": {
+        "artifact_id": 13490413710,
+        "sha256": "fb10ffc400be9cd0415983182ffc383b750243cf184969a68376c10b67de1117"
+      }
+    },
+    "run_attempt": 1,
+    "scoped_browser_retry": null,
+    "failure_matrix_case_count": 135,
+    "source_baselines": {
+      "historical-297-source-preservation.json": {
+        "files": 297,
+        "byte_identical": 294,
+        "explicit_contract_delta": [
+          {
+            "path": "backend/tests/postgresql_parallel.py",
+            "before_sha256": "a0e4076b272742f0fc2251f8a50e3e54791ae3425cd2727279d91fbfe90ad38f",
+            "after_sha256": "f9b2784c6cd2a285cccc365a178f53b5b2903062b5fb81e145a0e1efe84fc62e"
+          },
+          {
+            "path": "frontend/e2e/raw-replay-api.spec.ts",
+            "before_sha256": "58597c85b56416334dfc7b30fe9c5777dcf9d26506e1e729032236f7aa1f6a4f",
+            "after_sha256": "26a56ad3d553beb627b8bb72e4a38bf392c644cecf9a0a9f6efb8e5906791efe"
+          },
+          {
+            "path": "frontend/e2e/project-workspace.spec.ts",
+            "before_sha256": "2aeb2f6cd39af8c25fb82acf01ce64aace6a8e20f0a6ce772ae9670709405aaf",
+            "after_sha256": "d0dc40dc3ca978c5c367cf44d6b673bc120570583def343419efb245448cfd4f",
+            "suffix_sha256": "e8b98e833aea069c1f1d47b559f6848cdabd6a0d7372163b262c5fe25eb7c610",
+            "new_case": "project administrator reviews, grants and revokes an enrolled account"
+          }
+        ],
+        "append_only_ordering_hook": true
+      },
+      "original-test-source-preservation.json": {
+        "files": 236,
+        "byte_identical": 235,
+        "explicit_contract_delta": [
+          {
+            "path": "backend/tests/postgresql_parallel.py",
+            "before_sha256": "a0e4076b272742f0fc2251f8a50e3e54791ae3425cd2727279d91fbfe90ad38f",
+            "after_sha256": "f9b2784c6cd2a285cccc365a178f53b5b2903062b5fb81e145a0e1efe84fc62e"
+          }
+        ],
+        "append_only_ordering_hook": true
+      }
+    },
+    "main_qualified": true
+  },
+  "native_process_cap_seconds": 900,
+  "native_workers": 2,
+  "native_worker_restarts": 0,
+  "job_cap_seconds": 3600,
+  "customer_policy_qualified": false,
+  "full_D06_qualified": false,
+  "release_qualified": false,
+  "customer_accepted": false
+}
