@@ -1,0 +1,23 @@
+{
+  "schema": "expert_fitted_lifecycle_qualification_v1",
+  "packet": "P174",
+  "task": "D08-T02",
+  "base": "f5d509e0e67ed92521292b6dd0369937da7ed65f",
+  "scope": "Operator-mediated expert feature partitions on the dedicated Linux worker",
+  "sources": {
+    "docs/EXPERT_FITTED_STATE_LIFECYCLE.md": "f07f42c02fcf7e969a9e703162487c39cb446abeab5ec858ecae80e22338368b",
+    "docs/PRIVATE_EXPERT_WORKER.md": "de22c49e77e0eff6bad84af63f0abbb269715febe3cf8d951808e01f482b81b8",
+    "scripts/private_expert_worker.py": "0246e2054fc03330ea9c3fa6b177af1959a133d9752ee619a1202625dc24cdd0",
+    "scripts/qualify_private_expert_lifecycle.py": "354ef789256f0b021b83979e885de41bdc7bdf728c0c6f5ca7c46f820876fc22",
+    "scripts/qualify_private_expert_worker.sh": "af0b13eea373b2f0087c304eb3529ad6104b5bc64ab8cbf22c0dcef4b15fa1ec"
+  },
+  "native_cases": 7760,
+  "frontend_cases": 732,
+  "browser_cases": 49,
+  "native_workers": 2,
+  "native_process_cap_seconds": 900,
+  "native_job_cap_seconds": 3600,
+  "required_expert_job": "Private expert worker (gVisor)",
+  "foundation_cases": 11,
+  "lifecycle_cases": 16
+}

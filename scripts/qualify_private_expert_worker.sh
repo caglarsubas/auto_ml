@@ -40,4 +40,4 @@ sudo find "$fixture/environment" -type f -links +1 -exec sh -c '
 sudo install -d -m 0755 "$fixture/environment/rootfs/work"
 sudo chown -hR root:root "$fixture/environment"
 sudo find "$fixture/environment" \( -type d -o -type f \) -exec chmod a-s,a-t,go-w {} +
-sudo /usr/bin/python3 -I -c 'import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_module("qualify_private_expert_worker", run_name="__main__")' "$root/scripts" "$fixture"
+sudo /usr/bin/python3 -I -c 'import runpy, sys; sys.path.insert(0, sys.argv.pop(1)); runpy.run_module("qualify_private_expert_lifecycle", run_name="__main__")' "$root/scripts" "$fixture"

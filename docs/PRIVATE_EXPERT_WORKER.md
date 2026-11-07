@@ -60,3 +60,9 @@ the exact job's bundle and runsc state under operator control before removing
 the marker. Retain the claim and review receipts. The service does not
 automatically retry a consumed request. D08-T03 covers the wider hostile-code
 and failure matrix.
+
+## Fitted artifact stages
+
+The worker also supports the approved fitted-state lifecycle. Fit, apply,
+evaluate, score and clean replay preserve the gVisor boundary and exact
+artifact authority. See [Expert fitted-state lifecycle](EXPERT_FITTED_STATE_LIFECYCLE.md).
