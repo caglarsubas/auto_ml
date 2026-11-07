@@ -2,6 +2,8 @@
 """One approved, offline expert candidate on a dedicated Linux worker."""
 
 import argparse
+import base64
+import binascii
 import fcntl
 import hashlib
 import json
@@ -24,6 +26,8 @@ LIMITS = {
     "rows": 1000, "columns": 32, "seconds": 15, "memory_bytes": 256 * 1024**2,
     "scratch_bytes": 8 * 1024**2, "pids": 32, "cpu_quota": 50000, "cpu_period": 100000,
 }
+ARTIFACT_SCHEMA = "declarai_expert_fitted_v1"
+ARTIFACT_LIMIT = 512 * 1024
 APPROVAL_SECONDS = 900
 LABEL = re.compile(r"[A-Za-z0-9_.-]{1,80}")
 HOST_ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"}
@@ -167,23 +171,95 @@ def table(value, row_ids=None, *, score=False):
 def proposal(request, installed):
     directory(request, private=True)
     selection = decode(checked_file(request / "request.json", 4096))
-    if not isinstance(selection, dict) or set(selection) != {
-        "id", "project_id", "partition_id", "mode", "proposer",
-    }:
+    fields = {"id", "project_id", "partition_id", "mode", "proposer"}
+    if not isinstance(selection, dict) or set(selection) - {"artifact_sha256"} != fields:
         raise Refused("expert_request_invalid")
     for key in ("id", "project_id", "partition_id"):
         identity(selection[key])
-    if selection["mode"] not in ("transform", "score") or not LABEL.fullmatch(selection["proposer"]):
+    mode = selection["mode"]
+    if mode not in ("transform", "score", "fit", "apply", "evaluate", "replay") or not LABEL.fullmatch(selection["proposer"]):
         raise Refused("expert_request_invalid")
     code = checked_file(request / "code.py", LIMITS["code_bytes"])
     code.decode("utf-8")
     raw = checked_file(request / "input.json", LIMITS["input_bytes"])
     data = table(decode(raw))
+    state = None
+    artifact = None
+    if "artifact_sha256" in selection:
+        if mode not in ("apply", "evaluate", "score", "replay"):
+            raise Refused("expert_artifact_mode_invalid")
+        artifact_raw = checked_file(request / "fitted.json", ARTIFACT_LIMIT)
+        if digest(artifact_raw) != selection["artifact_sha256"]:
+            raise Refused("expert_artifact_changed")
+        artifact = decode(artifact_raw)
+        if (not isinstance(artifact, dict) or set(artifact) != {
+                "schema", "fit", "candidate_sha256", "state_sha256", "state_base64"}
+                or artifact["schema"] != ARTIFACT_SCHEMA or canonical(artifact) != artifact_raw):
+            raise Refused("expert_artifact_invalid")
+        fit = artifact["fit"]
+        if (fit["mode"] != "fit" or fit["project_id"] != selection["project_id"]
+                or fit["code_sha256"] != digest(code) or fit["environment"] != installed
+                or fit["limits"] != LIMITS or fit["profile"] != PROFILE):
+            raise Refused("expert_artifact_scope_changed")
+        state = opaque_state(artifact["state_base64"])
+        if digest(state) != artifact["state_sha256"]:
+            raise Refused("expert_artifact_state_changed")
+        if mode == "replay" and (fit["input_sha256"] != digest(raw)
+                or fit["partition_id"] != selection["partition_id"]):
+            raise Refused("expert_replay_requires_exact_fit_partition")
+    elif mode in ("apply", "evaluate", "replay"):
+        raise Refused("expert_fitted_artifact_required")
     manifest = {**selection, "profile": PROFILE, "scope": "feature_partition_candidate_only",
                 "environment": installed, "limits": LIMITS, "code_sha256": digest(code),
                 "input_sha256": digest(raw), "rows": len(data["row_ids"]),
                 "row_order_sha256": digest(canonical(data["row_ids"]))}
-    return manifest, code, raw, data["row_ids"]
+    if artifact is not None:
+        manifest["fit_request_id"] = artifact["fit"]["id"]
+        manifest["fit_partition_id"] = artifact["fit"]["partition_id"]
+        manifest["fitted_state_sha256"] = artifact["state_sha256"]
+        manifest["fit_candidate_sha256"] = artifact["candidate_sha256"]
+    return manifest, code, raw, data["row_ids"], state
+
+
+def opaque_state(value):
+    if not isinstance(value, str) or len(value) > LIMITS["output_bytes"]:
+        raise Refused("expert_state_invalid")
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError):
+        raise Refused("expert_state_invalid") from None
+    if not raw or base64.b64encode(raw).decode() != value:
+        raise Refused("expert_state_invalid")
+    return raw
+
+
+def outcome(raw, manifest, row_ids):
+    mode = manifest["mode"]
+    value = decode(raw)
+    state = None
+    if mode in ("fit", "replay"):
+        if not isinstance(value, dict) or set(value) != {"table", "state_base64"}:
+            raise Refused("expert_fit_output_invalid")
+        state = opaque_state(value["state_base64"])
+        value = value["table"]
+        if mode == "replay" and digest(state) != manifest["fitted_state_sha256"]:
+            raise Refused("expert_replay_state_mismatch")
+    candidate = table(value, row_ids, score=mode in ("score", "evaluate"))
+    result = canonical(candidate)
+    if len(result) > LIMITS["output_bytes"]:
+        raise Refused("expert_output_limit")
+    return result, state
+
+
+def stored_receipt(job):
+    receipt = decode(checked_file(job / "receipt.json", 32768))
+    if receipt["state"] == "succeeded":
+        if digest(checked_file(job / "candidate.json", LIMITS["output_bytes"])) != receipt["candidate_sha256"]:
+            raise Refused("expert_saved_candidate_changed")
+        if "artifact_sha256" in receipt:
+            if digest(checked_file(job / "fitted.json", ARTIFACT_LIMIT)) != receipt["artifact_sha256"]:
+                raise Refused("expert_saved_artifact_changed")
+    return receipt
 
 
 def oci(rootfs, stage):
@@ -269,13 +345,13 @@ def sandbox(env, bundle, identifier):
                 raise Refused("expert_cleanup_unverified")
 
 
-def execute(state, env, manifest, code, raw, row_ids):
+def execute(state, env, manifest, code, raw, row_ids, fitted_state):
     job = directory(state / manifest["id"], private=True)
     approval = decode(checked_file(job / "approval.json", 32768))
     if approval["manifest"] != manifest or approval["sha256"] != digest(canonical(manifest)):
         raise Refused("expert_approval_stale")
     if (job / "receipt.json").exists():
-        return decode(checked_file(job / "receipt.json", 32768))
+        return stored_receipt(job)
     if time.time_ns() >= approval["expires_ns"]:
         raise Refused("expert_approval_expired")
     if (job / "claimed.json").exists():
@@ -288,20 +364,32 @@ def execute(state, env, manifest, code, raw, row_ids):
                "approval_sha256": digest(canonical(approval)), "reviewer": approval["reviewer"]}
     bundle = job / "bundle"
     result = None
+    fitted = None
     try:
         bundle.mkdir(mode=0o700)
         stage = bundle / "staged"
         stage.mkdir(mode=0o755)
-        for name, content in (("code.py", code), ("input.json", raw)):
+        context = {"stage": "fit" if manifest["mode"] == "replay" else manifest["mode"]}
+        staged = [("code.py", code), ("input.json", raw), ("context.json", canonical(context))]
+        if fitted_state is not None and manifest["mode"] != "replay":
+            staged.append(("state.bin", fitted_state))
+        for name, content in staged:
             path = stage / name
             exclusive(path, content)
             path.chmod(0o444)
         exclusive(bundle / "config.json", canonical(oci(env / "rootfs", stage)))
         output = sandbox(env, bundle, manifest["id"])
-        candidate = table(decode(output), row_ids, score=manifest["mode"] == "score")
-        result = canonical(candidate)
-        if len(result) > LIMITS["output_bytes"]:
-            raise Refused("expert_output_limit")
+        result, new_state = outcome(output, manifest, row_ids)
+        if manifest["mode"] == "replay":
+            if digest(result) != manifest["fit_candidate_sha256"]:
+                raise Refused("expert_replay_candidate_mismatch")
+        if manifest["mode"] == "fit":
+            fitted = canonical({
+                "schema": ARTIFACT_SCHEMA, "fit": manifest, "candidate_sha256": digest(result),
+                "state_sha256": digest(new_state), "state_base64": base64.b64encode(new_state).decode(),
+            })
+            if len(fitted) > ARTIFACT_LIMIT:
+                raise Refused("expert_artifact_limit")
     except Refused as exc:
         receipt["reason_code"] = str(exc)
     except (ValueError, OSError, RecursionError, OverflowError):
@@ -314,6 +402,12 @@ def execute(state, env, manifest, code, raw, row_ids):
     clean = receipt.get("reason_code") != "expert_cleanup_unverified"
     if "reason_code" not in receipt:
         exclusive(job / "candidate.json", result)
+        if fitted is not None:
+            exclusive(job / "fitted.json", fitted)
+            receipt["artifact_sha256"] = digest(fitted)
+        elif "artifact_sha256" in manifest:
+            receipt["applied_artifact_sha256"] = manifest["artifact_sha256"]
+            receipt["fit_request_id"] = manifest["fit_request_id"]
         receipt.update(state="succeeded", candidate_sha256=digest(result), scope="unadopted_candidate")
     exclusive(job / "receipt.json", canonical(receipt))
     if clean:
@@ -338,10 +432,23 @@ def serve(args):
         return installed
     if decode(checked_file(pin, 32768)) != installed:
         raise Refused("expert_environment_changed")
-    manifest, code, raw, rows = proposal(args.request, installed)
+    manifest, code, raw, rows, fitted_state = proposal(args.request, installed)
     sha = digest(canonical(manifest))
     if args.operation == "preview":
         return {"manifest": manifest, "sha256": sha}
+    if args.operation == "export":
+        job = directory(state / manifest["id"], private=True)
+        approval = decode(checked_file(job / "approval.json", 32768))
+        receipt = stored_receipt(job)
+        if (approval["manifest"] != manifest or approval["sha256"] != sha
+                or receipt["state"] != "succeeded" or manifest["mode"] != "fit"
+                or receipt["approval_sha256"] != digest(canonical(approval))):
+            raise Refused("expert_export_requires_exact_successful_fit")
+        directory(args.output.parent)
+        fitted = checked_file(job / "fitted.json", ARTIFACT_LIMIT)
+        exclusive(args.output, fitted)
+        return {"id": manifest["id"], "artifact_sha256": digest(fitted),
+                "scope": "opaque_expert_state_requires_gvisor"}
     if args.operation == "approve":
         if not LABEL.fullmatch(args.reviewer) or args.reviewer == manifest["proposer"] or args.expected != sha:
             raise Refused("expert_independent_exact_review_required")
@@ -356,7 +463,7 @@ def serve(args):
     lock_fd = os.open(state / "worker.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     with os.fdopen(lock_fd, "rb") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return execute(state, env, manifest, code, raw, rows)
+        return execute(state, env, manifest, code, raw, rows, fitted_state)
 
 
 def main():
@@ -365,9 +472,11 @@ def main():
     parser.add_argument("--environment", type=Path, required=True)
     modes = parser.add_subparsers(dest="operation", required=True)
     modes.add_parser("pin")
-    for op in ("preview", "approve", "execute"):
+    for op in ("preview", "approve", "execute", "export"):
         mode = modes.add_parser(op)
         mode.add_argument("request", type=Path)
+        if op == "export":
+            mode.add_argument("--output", type=Path, required=True)
         if op == "approve":
             mode.add_argument("--expected", required=True)
             mode.add_argument("--reviewer", required=True)

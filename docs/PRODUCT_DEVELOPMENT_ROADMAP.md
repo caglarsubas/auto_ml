@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 5 (7.6%); in_progress: 0 (0.0%); waiting: 42 (63.6%); blocked: 7 (10.6%); done: 12 (18.2%).
+Inventory: 66 tasks; ready: 4 (6.1%); in_progress: 1 (1.5%); waiting: 42 (63.6%); blocked: 7 (10.6%); done: 12 (18.2%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -348,7 +348,7 @@ Build fixed-dependency Linux workers with scoped read-only inputs, staged output
 
 ### D08-T02 — Keep expert fitted state isolated through replay and scoring
 
-**Priority / status:** P0 / ready. **Owner:** Security/AI. **Outcomes:** D08.
+**Priority / status:** P0 / in_progress. **Owner:** Security/AI. **Outcomes:** D08.
 
 Carry the sandbox requirement with expert transformations and scorers across their lifecycle.
 
@@ -357,6 +357,8 @@ Carry the sandbox requirement with expert transformations and scorers across the
 **Acceptance:** API/controllers never import expert modules or deserialize their fitted state.; Training, evaluation, clean replay and scoring use the approved isolated environment.
 
 **Source / rationale:** Remaining acceptance scope from D08; existing tested foundation is reused, not rebuilt.
+
+**Packet / evidence:** P174; [Expert fitted-state lifecycle](EXPERT_FITTED_STATE_LIFECYCLE.md); [P174 qualification contract](evidence/p174-lifecycle-contract.json)
 
 ### D08-T03 — Qualify hostile-code, cancellation and isolation failures
 
@@ -2628,6 +2630,16 @@ Bind exact code, projected feature bytes, environment, ordered row identity and 
 
 **Remaining:** D08-T01 is accepted for the dedicated operator-mediated Linux worker. Expert fitted-state lifecycle integration and the wider isolation matrix retain separate D08-T02 and D08-T03 gates.
 
+### P174 — Isolated expert fitted-state lifecycle and clean replay
+
+**Packet status:** implemented. **Mapped outcomes:** D08.
+
+Preserve the sandbox requirement with exported expert state. Bind each use to code, environment, project, input partition, artifact and approval. Refit independently in a clean sandbox and compare recorded output and state.
+
+**Evidence:** [Expert fitted-state lifecycle](EXPERT_FITTED_STATE_LIFECYCLE.md); [P174 qualification contract](evidence/p174-lifecycle-contract.json)
+
+**Remaining:** Qualify the complete lifecycle on the PR and independent main. Broader isolation and cancellation failure coverage belongs to D08-T03.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.
@@ -2758,9 +2770,9 @@ Typed actions plus generated/user-authored Python in separate Linux gVisor/runsc
 
 **Source mapping:** Claude CC-3/CC-7/RM-3; GPT FIX-07/P04; Gemini C5; User first-release expert-code requirement.
 
-**Progress:** Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. The pinned Linux gVisor profile passes real runtime qualification on the PR and independent main. D08-T02 carries expert fitted state across training, evaluation, replay and scoring.
+**Progress:** Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. The pinned Linux gVisor profile passes real runtime qualification on the PR and independent main. D08-T02 carries expert fitted state across training, evaluation, replay and scoring. P174 implements opaque expert artifacts and isolated fit, apply, evaluation, scoring and clean replay. Qualification is in progress.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md); [P12 source qualification](evidence/p12-qualification-2026-10-09.json); [Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md); [P13 source qualification](evidence/p13-qualification-2026-10-09.json); [Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md); [P14 source qualification](evidence/p14-qualification-2026-10-09.json); [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json); [P173 dedicated expert worker qualification](evidence/p173-qualification.json); [Implementation PR #282](https://github.com/caglarsubas/auto_ml/pull/282); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42332878412)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md); [P12 source qualification](evidence/p12-qualification-2026-10-09.json); [Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md); [P13 source qualification](evidence/p13-qualification-2026-10-09.json); [Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md); [P14 source qualification](evidence/p14-qualification-2026-10-09.json); [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json); [P173 dedicated expert worker qualification](evidence/p173-qualification.json); [Implementation PR #282](https://github.com/caglarsubas/auto_ml/pull/282); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42332878412); [Expert fitted-state lifecycle](EXPERT_FITTED_STATE_LIFECYCLE.md); [P174 qualification contract](evidence/p174-lifecycle-contract.json)
 
 ### D18 Mission contracts and configurable oversight
 
