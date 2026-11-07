@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 5 (7.6%); in_progress: 0 (0.0%); waiting: 43 (65.2%); blocked: 7 (10.6%); done: 11 (16.7%).
+Inventory: 66 tasks; ready: 4 (6.1%); in_progress: 1 (1.5%); waiting: 43 (65.2%); blocked: 7 (10.6%); done: 11 (16.7%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -334,7 +334,7 @@ Measure representative data/model workloads before publishing capacity promises.
 
 ### D08-T01 — Implement the dedicated gVisor expert execution service
 
-**Priority / status:** P0 / ready. **Owner:** Security/AI. **Outcomes:** D08.
+**Priority / status:** P0 / in_progress. **Owner:** Security/AI. **Outcomes:** D08.
 
 Build fixed-dependency Linux workers with scoped read-only inputs, staged outputs, no network and external resource limits.
 
@@ -343,6 +343,8 @@ Build fixed-dependency Linux workers with scoped read-only inputs, staged output
 **Acceptance:** Exact code/input/environment/partition/resource approval is required.; Unavailable runsc blocks execution with no host-process fallback.
 
 **Source / rationale:** Remaining acceptance scope from D08; existing tested foundation is reused, not rebuilt.
+
+**Packet / evidence:** P173; [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json)
 
 ### D08-T02 — Keep expert fitted state isolated through replay and scoring
 
@@ -2616,6 +2618,16 @@ Qualify bounded first-use temporal assessment with independent pre-window approv
 
 **Remaining:** D03-T01 is accepted for the prospective native temporal profile. Broader lineage invalidation, independent reproduction and review, expert-code qualification, and the integrated D06-T03 threat model retain separate gates.
 
+### P173 — Dedicated gVisor execution worker for reviewed feature partitions
+
+**Packet status:** implemented. **Mapped outcomes:** D08.
+
+Bind exact code, projected feature bytes, environment, ordered row identity and limits to an operator-reviewed request. Run with Systrap isolation and stage typed candidates.
+
+**Evidence:** [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json)
+
+**Remaining:** Qualify the dedicated Linux worker and exact source on the PR and independent main. D08-T02 and D08-T03 retain separate gates.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.
@@ -2746,9 +2758,9 @@ Typed actions plus generated/user-authored Python in separate Linux gVisor/runsc
 
 **Source mapping:** Claude CC-3/CC-7/RM-3; GPT FIX-07/P04; Gemini C5; User first-release expert-code requirement.
 
-**Progress:** Unsafe in-process expert Python was removed; execute_code fails closed before customer data loads. Dedicated Linux gVisor isolation, exact approvals, valid expert operations and replay/scoring remain unimplemented and mandatory for first release. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open. P13 requires client-selected XGBoost explanation models to belong to a hash-verified immutable execution and matching dataset; development-only diagnostics support legitimate native overrides. Exact action approvals and isolated expert execution/replay/scoring remain unimplemented and mandatory. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open.
+**Progress:** Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. Real runtime and exact-source qualification are in progress.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md); [P12 source qualification](evidence/p12-qualification-2026-10-09.json); [Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md); [P13 source qualification](evidence/p13-qualification-2026-10-09.json); [Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md); [P14 source qualification](evidence/p14-qualification-2026-10-09.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md); [P12 source qualification](evidence/p12-qualification-2026-10-09.json); [Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md); [P13 source qualification](evidence/p13-qualification-2026-10-09.json); [Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md); [P14 source qualification](evidence/p14-qualification-2026-10-09.json); [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json)
 
 ### D18 Mission contracts and configurable oversight
 

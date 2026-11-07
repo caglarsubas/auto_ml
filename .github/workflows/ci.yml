@@ -15,6 +15,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  private-expert-worker:
+    name: Private expert worker (gVisor)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Qualify pinned gVisor and synthetic feature partitions
+        run: |
+          mkdir -p test-reports/expert
+          scripts/qualify_private_expert_worker.sh > test-reports/expert/qualification.json
+      - name: Upload expert worker receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-expert-worker-report
+          path: test-reports/expert/
+
   # ---------------------------------------------------------------------------
   # Backend: Django + DRF pytest suite
   # ---------------------------------------------------------------------------
