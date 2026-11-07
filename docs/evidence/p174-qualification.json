@@ -1,0 +1,282 @@
+{
+  "schema": "expert_fitted_lifecycle_acceptance_v1",
+  "packet": "P174",
+  "task": "D08-T02",
+  "scope": "Operator-mediated expert fit, apply, evaluation, scoring and clean replay on the dedicated Linux worker",
+  "pr": 284,
+  "qualified_head": "28afe1d0440ae174458ef95e01dca2dc1563310f",
+  "merge": "b02343358d04123095e576668fda6c9b593d069f",
+  "ci_run": 42362798053,
+  "main_run": 42366832590,
+  "merged_tree_matches_qualified_pr": true,
+  "application_source_sha256": "2614459aa49906f00f6c5bf10c77157498aa1feaa9850ea56bdbfd1f4be7962b",
+  "main_qualified": true,
+  "previous_counts": {
+    "done": 12,
+    "open": 47,
+    "blocked": 7,
+    "total": 66
+  },
+  "accepted_counts": {
+    "done": 13,
+    "open": 46,
+    "blocked": 7,
+    "total": 66
+  },
+  "done_percentage_point_change": 1.5151515151515151,
+  "pr_qualification": {
+    "run": 42362798053,
+    "head": "28afe1d0440ae174458ef95e01dca2dc1563310f",
+    "event": "pull_request",
+    "seven_jobs_passed": true,
+    "native": {
+      "tests": 7760,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 879.905,
+      "passed": 7754
+    },
+    "backend": {
+      "tests": 7615,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 5,
+      "time": 833.421,
+      "passed": 7610
+    },
+    "browser": {
+      "total": 49,
+      "expected": 49,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend": 732,
+    "expert_worker": {
+      "schema": "declarai_expert_worker_qualification_v1",
+      "environment": {
+        "architecture": "x86_64",
+        "profile": "declarai_expert_runsc_v1",
+        "rootfs_sha256": "60930b01ac2cf8ef9a6a47856b5cb2556b18148aeacc3db32c62d482e1839751",
+        "runtime_sha256": "d3983d6f38b8f955c60a03fc63970a0e94e29367846ef4826f54e733d24746d0",
+        "worker_sha256": "0246e2054fc03330ea9c3fa6b177af1959a133d9752ee619a1202625dc24cdd0"
+      },
+      "cases": [
+        "transform",
+        "score",
+        "exact_code_input_partition_review",
+        "read_only_input",
+        "no_host_mount_or_network",
+        "approval_consumed_once",
+        "bounded_output",
+        "host_cgroup_limits_and_cleanup",
+        "wall_limit_cleanup",
+        "typed_candidate",
+        "runtime_unavailable_blocks"
+      ],
+      "synthetic": true,
+      "result": "passed",
+      "limits": {
+        "code_bytes": 65536,
+        "input_bytes": 524288,
+        "output_bytes": 262144,
+        "rows": 1000,
+        "columns": 32,
+        "seconds": 15,
+        "memory_bytes": 268435456,
+        "scratch_bytes": 8388608,
+        "pids": 32,
+        "cpu_quota": 50000,
+        "cpu_period": 100000
+      },
+      "lifecycle": {
+        "schema": "expert_fitted_lifecycle_qualification_v1",
+        "cases": [
+          "sandbox_fit",
+          "opaque_export",
+          "fit_partition_only",
+          "sandbox_apply",
+          "sandbox_evaluate",
+          "sandbox_score",
+          "clean_state_replay",
+          "replay_exact_inputs",
+          "replay_state_mismatch",
+          "same_project",
+          "exact_code",
+          "exact_artifact",
+          "required_state",
+          "state_integrity",
+          "environment_integrity",
+          "controller_never_imports_expert"
+        ],
+        "artifact_sha256": "693984751ed1451620d9d4b9442d39e477a31806e28cf4b051a8e5637408da81",
+        "all_passed": true
+      }
+    },
+    "expert_lifecycle_qualified": true,
+    "original_p173_case_skip_identities_preserved": true,
+    "inherited_ci_jobs_byte_identical": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13571056405,
+        "sha256": "9d0b9ca93477841c1d510f420a2e7957fec0e9885b40aa170d619d81143cfbe4"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13571697661,
+        "sha256": "2274721803ed2b6dc1dff5892511a3f7d35fe7ab99ff66ae551507db2c50d569"
+      },
+      "playwright-report": {
+        "artifact_id": 13570875753,
+        "sha256": "aa35a2dc87544ccdaf8d36b01b22537d96a3139d4fd0cf6f822e70c047dfb438"
+      },
+      "private-expert-worker-report": {
+        "artifact_id": 13570109363,
+        "sha256": "057500072581cc10e053f2dadca110f166737d6e86d270307a2cf31d3b5b24eb"
+      }
+    },
+    "run_attempt": 1,
+    "scoped_native_retry": null,
+    "main_qualified": false
+  },
+  "main_qualification": {
+    "run": 42366832590,
+    "head": "b02343358d04123095e576668fda6c9b593d069f",
+    "event": "push",
+    "seven_jobs_passed": true,
+    "native": {
+      "tests": 7760,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 835.888,
+      "passed": 7754
+    },
+    "backend": {
+      "tests": 7760,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 1046.276,
+      "passed": 7754
+    },
+    "browser": {
+      "total": 49,
+      "expected": 49,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend": 732,
+    "expert_worker": {
+      "schema": "declarai_expert_worker_qualification_v1",
+      "environment": {
+        "architecture": "x86_64",
+        "profile": "declarai_expert_runsc_v1",
+        "rootfs_sha256": "60930b01ac2cf8ef9a6a47856b5cb2556b18148aeacc3db32c62d482e1839751",
+        "runtime_sha256": "d3983d6f38b8f955c60a03fc63970a0e94e29367846ef4826f54e733d24746d0",
+        "worker_sha256": "0246e2054fc03330ea9c3fa6b177af1959a133d9752ee619a1202625dc24cdd0"
+      },
+      "cases": [
+        "transform",
+        "score",
+        "exact_code_input_partition_review",
+        "read_only_input",
+        "no_host_mount_or_network",
+        "approval_consumed_once",
+        "bounded_output",
+        "host_cgroup_limits_and_cleanup",
+        "wall_limit_cleanup",
+        "typed_candidate",
+        "runtime_unavailable_blocks"
+      ],
+      "synthetic": true,
+      "result": "passed",
+      "limits": {
+        "code_bytes": 65536,
+        "input_bytes": 524288,
+        "output_bytes": 262144,
+        "rows": 1000,
+        "columns": 32,
+        "seconds": 15,
+        "memory_bytes": 268435456,
+        "scratch_bytes": 8388608,
+        "pids": 32,
+        "cpu_quota": 50000,
+        "cpu_period": 100000
+      },
+      "lifecycle": {
+        "schema": "expert_fitted_lifecycle_qualification_v1",
+        "cases": [
+          "sandbox_fit",
+          "opaque_export",
+          "fit_partition_only",
+          "sandbox_apply",
+          "sandbox_evaluate",
+          "sandbox_score",
+          "clean_state_replay",
+          "replay_exact_inputs",
+          "replay_state_mismatch",
+          "same_project",
+          "exact_code",
+          "exact_artifact",
+          "required_state",
+          "state_integrity",
+          "environment_integrity",
+          "controller_never_imports_expert"
+        ],
+        "artifact_sha256": "da2201ecc85332dd5fed3e4fbd1c266845dfb78b56d64897fb4c76f09414f211",
+        "all_passed": true
+      }
+    },
+    "expert_lifecycle_qualified": true,
+    "original_p173_case_skip_identities_preserved": true,
+    "inherited_ci_jobs_byte_identical": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13571999610,
+        "sha256": "7577aaf001b57e5be450b6c9e8c02ffa90f03ba6f43f34aca62c706a7c8cabb8"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13575127294,
+        "sha256": "a17996c14d98e04cec9fb4c0324fb3b4b8c18d1ed005a9948676f451158e2082"
+      },
+      "playwright-report": {
+        "artifact_id": 13571838447,
+        "sha256": "1a1a0aac0e5699e2768bd1d9d2cbda3df8b9194051a1968c81e6baddab0fe9b6"
+      },
+      "private-expert-worker-report": {
+        "artifact_id": 13571872574,
+        "sha256": "9d99e73de2d0ba4fbb0d97a7019cfb99977b60fad428f4b02d1383361e6590d5"
+      }
+    },
+    "run_attempt": 2,
+    "scoped_native_retry": {
+      "run": 42366832590,
+      "head": "b02343358d04123095e576668fda6c9b593d069f",
+      "native_job": 128386544297,
+      "status": "rejected_native_timeout",
+      "artifact_id": 13573179301,
+      "artifact_sha256": "440df5ebb846c3cf89e3bdf5a97be3a85c8527f28cfa3a8272f226a8638e9283",
+      "case_progress_at_last_worker_snapshot": 7022,
+      "collected_cases": 7760,
+      "native_cap_seconds": 900,
+      "original_suite_receipt_present": false,
+      "accepted": false,
+      "accepted_job": 128398566310,
+      "accepted_job_started_at": "2026-11-07T12:04:53Z",
+      "accepted_attempt": 2,
+      "other_jobs_reused_from_attempt": 1
+    },
+    "main_qualified": true
+  },
+  "native_process_cap_seconds": 900,
+  "native_workers": 2,
+  "native_worker_restarts": 0,
+  "job_cap_seconds": 3600,
+  "full_D08_qualified": false,
+  "release_qualified": false,
+  "customer_accepted": false
+}
