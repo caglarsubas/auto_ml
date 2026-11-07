@@ -47,7 +47,7 @@ sudo python3 -I private_expert_worker.py --state /var/lib/declarai-expert --envi
 ```
 
 The worker launches the pinned `runsc` executable directly with Systrap and
-network disabled. Each sandbox has a read-only rootfs and input mount, an
+network disabled. Each file-serving gofer has its own empty network namespace. Each sandbox has a read-only rootfs and input mount, an
 unprivileged identity, an 8 MiB scratch filesystem and CPU, PID and memory
 limits. The supervisor enforces a 15-second deadline and a 256 KiB output
 limit. The API and worker controller never import expert modules. The

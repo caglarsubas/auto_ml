@@ -17,7 +17,7 @@ import os
 import socket
 
 assert os.getuid() == 65534
-assert not os.path.exists('/host-sentinel')
+assert not os.path.exists(HOST_SENTINEL)
 assert not os.path.exists('/work/approval.json')
 try:
     open('/work/input.json', 'a')
@@ -62,6 +62,8 @@ def create(home, mode, source):
     selection = {"id": request.name, "project_id": str(uuid.uuid4()), "partition_id": str(uuid.uuid4()),
                  "proposer": "fixture-developer", "mode": mode}
     (request / "request.json").write_bytes(worker.canonical(selection))
+    if b"HOST_SENTINEL" in source:
+        source = source.replace(b"HOST_SENTINEL", repr(str(home / "host-sentinel")).encode())
     (request / "code.py").write_bytes(source)
     (request / "input.json").write_bytes(worker.canonical({
         "columns": ["x"], "row_ids": ["first", "second"], "rows": [[2], [-4]],

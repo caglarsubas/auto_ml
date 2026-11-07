@@ -6,10 +6,10 @@
   "scope": "Operator-mediated feature-only requests on a dedicated Linux worker",
   "sources": {
     ".github/workflows/ci.yml": "c7e75ad960bec6424d59cd5443698e6d5a1c65ebc01abb53fe7542ef5e18af8e",
-    "docs/PRIVATE_EXPERT_WORKER.md": "d5177d312f4ab1c503cec92dc2f3bc8380559e4d8dc368e0f10a79502c01cac6",
-    "scripts/private_expert_worker.py": "e88fec8b3a585a4d41b065fce0bbf16a2a18ba6995b054e868bf814895418503",
-    "scripts/qualify_private_expert_worker.py": "93e4bfd3008fbeadfd27437a31064f18c887a25e4642ac765e070f589aedeb7b",
-    "scripts/qualify_private_expert_worker.sh": "3bc5aff31f0433853da721e12802ca52b1952ad3c1c1c251f69667f96b3d0f4b"
+    "docs/PRIVATE_EXPERT_WORKER.md": "42380e5e0b997ac858936d8dec946144b6d865a70d1af153e2e8176b3ae56490",
+    "scripts/private_expert_worker.py": "903f91a15aee34592c64dc8347ff9f38a23b668d426cdcd44f0fcdb6e95e86b2",
+    "scripts/qualify_private_expert_worker.py": "f48b2ce0bfa77276f05d9cbcee4f1e36b45edc5190afaf249884b4ae70bb4f16",
+    "scripts/qualify_private_expert_worker.sh": "429d27c5b4942ccb06bc302d4c9210c2b81dcca4175b6a3e77deed261ac0ad5e"
   },
   "native_cases": 7760,
   "frontend_cases": 732,
@@ -18,5 +18,11 @@
   "native_process_cap_seconds": 900,
   "native_job_cap_seconds": 3600,
   "required_expert_job": "Private expert worker (gVisor)",
-  "runtime_release": "20261102.0"
+  "runtime_release": "20261102.0",
+  "rejected_head": {
+    "head": "48788b1a87b5ca129fa37364330aed529816d6f4",
+    "run": 42322817720,
+    "reason": "The default gofer network namespace left a shared null-netns bind mount in the per-job runtime state.",
+    "correction": "Use a fresh empty network namespace for each gofer. Require cleanup before publishing candidates."
+  }
 }

@@ -23,6 +23,7 @@ curl --fail --silent --show-error --location --proto '=https' --proto-redir '=ht
   --output "$download/gvisor.tar.zstd"
 printf '%s  %s\n' "$pin" "$download/gvisor.tar.zstd" | sha512sum --check --status
 fixture=$(sudo mktemp -d /var/tmp/declarai-expert-XXXXXXXX)
+sudo chmod 0755 "$fixture"
 sudo install -d -m 0755 "$fixture/environment/runtime" "$fixture/environment/rootfs"
 sudo tar --zstd -xf "$download/gvisor.tar.zstd" -C "$fixture/environment/runtime"
 docker pull "$image" >&2

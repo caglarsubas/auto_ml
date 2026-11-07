@@ -235,7 +235,8 @@ def read_output(proc, deadline):
 
 def sandbox(env, bundle, identifier):
     command = [str(env / "runtime/runsc"), f"--root={bundle / 'runtime-state'}",
-               "--network=none", "--platform=systrap", "--directfs=false", "--ignore-cgroups=false"]
+               "--network=none", "--gofer-network-namespace=new", "--platform=systrap",
+               "--directfs=false", "--ignore-cgroups=false"]
     proc = None
     try:
         proc = subprocess.Popen([*command, "run", "--bundle", str(bundle), identifier],
@@ -285,6 +286,7 @@ def execute(state, env, manifest, code, raw, row_ids):
     receipt = {"id": manifest["id"], "profile": PROFILE, "state": "blocked",
                "approval_sha256": digest(canonical(approval)), "reviewer": approval["reviewer"]}
     bundle = job / "bundle"
+    result = None
     try:
         bundle.mkdir(mode=0o700)
         stage = bundle / "staged"
@@ -299,15 +301,19 @@ def execute(state, env, manifest, code, raw, row_ids):
         result = canonical(candidate)
         if len(result) > LIMITS["output_bytes"]:
             raise Refused("expert_output_limit")
-        exclusive(job / "candidate.json", result)
-        receipt.update(state="succeeded", candidate_sha256=digest(result), scope="unadopted_candidate")
     except Refused as exc:
         receipt["reason_code"] = str(exc)
     except (ValueError, OSError, RecursionError, OverflowError):
         receipt["reason_code"] = "expert_candidate_or_storage_invalid"
+    if receipt.get("reason_code") != "expert_cleanup_unverified" and bundle.exists():
+        try:
+            shutil.rmtree(bundle)
+        except OSError:
+            receipt["reason_code"] = "expert_cleanup_unverified"
     clean = receipt.get("reason_code") != "expert_cleanup_unverified"
-    if clean and bundle.exists():
-        shutil.rmtree(bundle)
+    if "reason_code" not in receipt:
+        exclusive(job / "candidate.json", result)
+        receipt.update(state="succeeded", candidate_sha256=digest(result), scope="unadopted_candidate")
     exclusive(job / "receipt.json", canonical(receipt))
     if clean:
         active.unlink()
