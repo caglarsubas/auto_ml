@@ -1,0 +1,252 @@
+{
+  "schema": "dedicated_gvisor_expert_worker_acceptance_v1",
+  "packet": "P173",
+  "task": "D08-T01",
+  "scope": "Operator-mediated feature partitions on a dedicated synthetic Ubuntu 24.04 amd64 worker",
+  "pr": 282,
+  "qualified_head": "33cecc123c17d98e3157daee9c1d1bb7595fad41",
+  "merge": "89e89270f30e65baef6b1fd5481d19d967768587",
+  "ci_run": 42323224417,
+  "main_run": 42332878412,
+  "merged_tree_matches_qualified_pr": true,
+  "application_source_sha256": "2614459aa49906f00f6c5bf10c77157498aa1feaa9850ea56bdbfd1f4be7962b",
+  "main_qualified": true,
+  "previous_counts": {
+    "done": 11,
+    "open": 48,
+    "blocked": 7,
+    "total": 66
+  },
+  "accepted_counts": {
+    "done": 12,
+    "open": 47,
+    "blocked": 7,
+    "total": 66
+  },
+  "done_percentage_point_change": 1.5151515151515151,
+  "pr_qualification": {
+    "run": 42323224417,
+    "head": "33cecc123c17d98e3157daee9c1d1bb7595fad41",
+    "event": "pull_request",
+    "seven_jobs_passed": true,
+    "native": {
+      "tests": 7760,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 849.03,
+      "passed": 7754
+    },
+    "backend": {
+      "tests": 7615,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 5,
+      "time": 817.569,
+      "passed": 7610
+    },
+    "browser": {
+      "total": 49,
+      "expected": 49,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend": 732,
+    "expert_worker": {
+      "schema": "declarai_expert_worker_qualification_v1",
+      "environment": {
+        "architecture": "x86_64",
+        "profile": "declarai_expert_runsc_v1",
+        "rootfs_sha256": "60930b01ac2cf8ef9a6a47856b5cb2556b18148aeacc3db32c62d482e1839751",
+        "runtime_sha256": "d3983d6f38b8f955c60a03fc63970a0e94e29367846ef4826f54e733d24746d0",
+        "worker_sha256": "9c373a75dacaf93f86714d3723a4751b184abb728bd290c1facf10c8a4a58f54"
+      },
+      "cases": [
+        "transform",
+        "score",
+        "exact_code_input_partition_review",
+        "read_only_input",
+        "no_host_mount_or_network",
+        "approval_consumed_once",
+        "bounded_output",
+        "host_cgroup_limits_and_cleanup",
+        "wall_limit_cleanup",
+        "typed_candidate",
+        "runtime_unavailable_blocks"
+      ],
+      "synthetic": true,
+      "result": "passed",
+      "limits": {
+        "code_bytes": 65536,
+        "input_bytes": 524288,
+        "output_bytes": 262144,
+        "rows": 1000,
+        "columns": 32,
+        "seconds": 15,
+        "memory_bytes": 268435456,
+        "scratch_bytes": 8388608,
+        "pids": 32,
+        "cpu_quota": 50000,
+        "cpu_period": 100000
+      }
+    },
+    "expert_worker_qualified": true,
+    "original_p172_case_skip_identities_preserved": true,
+    "inherited_ci_jobs_byte_identical": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13554647162,
+        "sha256": "e81c70b4b7fd90530aff0e1e2662749b74f8eef70882d6759a795f33170405c9"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13558102920,
+        "sha256": "ecabe480505a0abb132adfd7d162abc222e021f088b8fe1fa89023dead67cc01"
+      },
+      "playwright-report": {
+        "artifact_id": 13554960101,
+        "sha256": "c4a2839edc17dfb09e42c6da956d82b464c7f95454fe8fbe14325b326c18ab6a"
+      },
+      "private-expert-worker-report": {
+        "artifact_id": 13553659434,
+        "sha256": "034da4e9abd7be02468ef7afe2319f0d8edfc3a59cdf54c5d6e9ec13f42ef422"
+      }
+    },
+    "run_attempt": 2,
+    "scoped_native_retry": {
+      "run": 42323224417,
+      "head": "33cecc123c17d98e3157daee9c1d1bb7595fad41",
+      "native_job": 128252513205,
+      "status": "rejected_native_timeout",
+      "artifact_id": 13555533073,
+      "artifact_sha256": "d591464510813cd0183f14ada894a3cfe33ebfd4c899219ae8eb201991cfe1e2",
+      "case_progress_at_last_worker_snapshot": 5442,
+      "collected_cases": 7760,
+      "native_cap_seconds": 900,
+      "original_suite_receipt_present": false,
+      "accepted": false,
+      "accepted_job": 128268733215,
+      "accepted_job_started_at": "2026-11-07T02:15:37Z",
+      "accepted_attempt": 2,
+      "other_jobs_reused_from_attempt": 1
+    },
+    "main_qualified": false
+  },
+  "main_qualification": {
+    "run": 42332878412,
+    "head": "89e89270f30e65baef6b1fd5481d19d967768587",
+    "event": "push",
+    "seven_jobs_passed": true,
+    "native": {
+      "tests": 7760,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 878.851,
+      "passed": 7754
+    },
+    "backend": {
+      "tests": 7760,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 554.575,
+      "passed": 7754
+    },
+    "browser": {
+      "total": 49,
+      "expected": 49,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend": 732,
+    "expert_worker": {
+      "schema": "declarai_expert_worker_qualification_v1",
+      "environment": {
+        "architecture": "x86_64",
+        "profile": "declarai_expert_runsc_v1",
+        "rootfs_sha256": "60930b01ac2cf8ef9a6a47856b5cb2556b18148aeacc3db32c62d482e1839751",
+        "runtime_sha256": "d3983d6f38b8f955c60a03fc63970a0e94e29367846ef4826f54e733d24746d0",
+        "worker_sha256": "9c373a75dacaf93f86714d3723a4751b184abb728bd290c1facf10c8a4a58f54"
+      },
+      "cases": [
+        "transform",
+        "score",
+        "exact_code_input_partition_review",
+        "read_only_input",
+        "no_host_mount_or_network",
+        "approval_consumed_once",
+        "bounded_output",
+        "host_cgroup_limits_and_cleanup",
+        "wall_limit_cleanup",
+        "typed_candidate",
+        "runtime_unavailable_blocks"
+      ],
+      "synthetic": true,
+      "result": "passed",
+      "limits": {
+        "code_bytes": 65536,
+        "input_bytes": 524288,
+        "output_bytes": 262144,
+        "rows": 1000,
+        "columns": 32,
+        "seconds": 15,
+        "memory_bytes": 268435456,
+        "scratch_bytes": 8388608,
+        "pids": 32,
+        "cpu_quota": 50000,
+        "cpu_period": 100000
+      }
+    },
+    "expert_worker_qualified": true,
+    "original_p172_case_skip_identities_preserved": true,
+    "inherited_ci_jobs_byte_identical": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 13558815307,
+        "sha256": "478569b8999172ed52bf1e06af5d8479fd23a7a21b959ee379caaff7f3008851"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 13561865876,
+        "sha256": "0547fac2c03faf3f2519ef3c29784b391483ba98b3cf586b9f70586a8145893f"
+      },
+      "playwright-report": {
+        "artifact_id": 13558334270,
+        "sha256": "599d144b25a586cab9d2e103865118248faf5f531e9e3ad6c30eae522cc5609e"
+      },
+      "private-expert-worker-report": {
+        "artifact_id": 13557334515,
+        "sha256": "596262ea1fbae80fe446e13351d0c06893d4e1130487583ecbf46b6a996a4809"
+      }
+    },
+    "run_attempt": 2,
+    "scoped_native_retry": {
+      "run": 42332878412,
+      "head": "89e89270f30e65baef6b1fd5481d19d967768587",
+      "native_job": 128283154913,
+      "status": "rejected_native_timeout",
+      "artifact_id": 13560176153,
+      "artifact_sha256": "3c82a653e673082f2f1cd1cfadf18394bfb1c441374e04c291fdce94b3559543",
+      "case_progress_at_last_worker_snapshot": 4147,
+      "collected_cases": 7760,
+      "native_cap_seconds": 900,
+      "original_suite_receipt_present": false,
+      "accepted": false,
+      "accepted_job": 128296599903,
+      "accepted_job_started_at": "2026-11-07T04:09:25Z",
+      "accepted_attempt": 2,
+      "other_jobs_reused_from_attempt": 1
+    },
+    "main_qualified": true
+  },
+  "native_process_cap_seconds": 900,
+  "native_workers": 2,
+  "native_worker_restarts": 0,
+  "job_cap_seconds": 3600,
+  "full_D08_qualified": false,
+  "release_qualified": false,
+  "customer_accepted": false
+}

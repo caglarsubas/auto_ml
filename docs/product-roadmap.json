@@ -834,9 +834,12 @@
         "[Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md)",
         "[P14 source qualification](evidence/p14-qualification-2026-10-09.json)",
         "[Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md)",
-        "[P173 qualification contract](evidence/p173-expert-worker-contract.json)"
+        "[P173 qualification contract](evidence/p173-expert-worker-contract.json)",
+        "[P173 dedicated expert worker qualification](evidence/p173-qualification.json)",
+        "[Implementation PR #282](https://github.com/caglarsubas/auto_ml/pull/282)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42332878412)"
       ],
-      "progress": "Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. Real runtime and exact-source qualification are in progress."
+      "progress": "Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. The pinned Linux gVisor profile passes real runtime qualification on the PR and independent main. D08-T02 carries expert fitted state across training, evaluation, replay and scoring."
     },
     {
       "id": "D09",
@@ -2127,6 +2130,10 @@
     {
       "date": "2026-11-07",
       "change": "Implement P173 as D08-T01. The 66-task baseline is 11 done, 48 open and 7 blocked pending real gVisor qualification."
+    },
+    {
+      "date": "2026-11-07",
+      "change": "Accept D08-T01 for the dedicated Linux expert worker after all seven PR #282 checks and independent main 42332878412 pass source and artifact audits. Keep 66 tasks and move done/open/blocked from 11/48/7 to 12/47/7."
     }
   ],
   "implementation_packets": [
@@ -5186,13 +5193,16 @@
         "D08"
       ],
       "owner": "Security/AI",
-      "status": "implemented",
+      "status": "tested",
       "description": "Bind exact code, projected feature bytes, environment, ordered row identity and limits to an operator-reviewed request. Run with Systrap isolation and stage typed candidates.",
       "evidence": [
         "[Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md)",
-        "[P173 qualification contract](evidence/p173-expert-worker-contract.json)"
+        "[P173 qualification contract](evidence/p173-expert-worker-contract.json)",
+        "[P173 dedicated expert worker qualification](evidence/p173-qualification.json)",
+        "[Implementation PR #282](https://github.com/caglarsubas/auto_ml/pull/282)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42332878412)"
       ],
-      "remaining": "Qualify the dedicated Linux worker and exact source on the PR and independent main. D08-T02 and D08-T03 retain separate gates."
+      "remaining": "D08-T01 is accepted for the dedicated operator-mediated Linux worker. Expert fitted-state lifecycle integration and the wider isolation matrix retain separate D08-T02 and D08-T03 gates."
     }
   ],
   "release_qualification": {
@@ -6011,7 +6021,7 @@
         ],
         "priority": "P0",
         "owner": "Security/AI",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [],
         "acceptance": [
           "Exact code/input/environment/partition/resource approval is required.",
@@ -6020,7 +6030,10 @@
         "blockers": [],
         "evidence": [
           "[Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md)",
-          "[P173 qualification contract](evidence/p173-expert-worker-contract.json)"
+          "[P173 qualification contract](evidence/p173-expert-worker-contract.json)",
+          "[P173 dedicated expert worker qualification](evidence/p173-qualification.json)",
+          "[Implementation PR #282](https://github.com/caglarsubas/auto_ml/pull/282)",
+          "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42332878412)"
         ],
         "packet_refs": [
           "P173"

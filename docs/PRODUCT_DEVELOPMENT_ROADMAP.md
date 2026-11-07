@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 4 (6.1%); in_progress: 1 (1.5%); waiting: 43 (65.2%); blocked: 7 (10.6%); done: 11 (16.7%).
+Inventory: 66 tasks; ready: 5 (7.6%); in_progress: 0 (0.0%); waiting: 42 (63.6%); blocked: 7 (10.6%); done: 12 (18.2%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -334,7 +334,7 @@ Measure representative data/model workloads before publishing capacity promises.
 
 ### D08-T01 — Implement the dedicated gVisor expert execution service
 
-**Priority / status:** P0 / in_progress. **Owner:** Security/AI. **Outcomes:** D08.
+**Priority / status:** P0 / done. **Owner:** Security/AI. **Outcomes:** D08.
 
 Build fixed-dependency Linux workers with scoped read-only inputs, staged outputs, no network and external resource limits.
 
@@ -344,11 +344,11 @@ Build fixed-dependency Linux workers with scoped read-only inputs, staged output
 
 **Source / rationale:** Remaining acceptance scope from D08; existing tested foundation is reused, not rebuilt.
 
-**Packet / evidence:** P173; [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json)
+**Packet / evidence:** P173; [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json); [P173 dedicated expert worker qualification](evidence/p173-qualification.json); [Implementation PR #282](https://github.com/caglarsubas/auto_ml/pull/282); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42332878412)
 
 ### D08-T02 — Keep expert fitted state isolated through replay and scoring
 
-**Priority / status:** P0 / waiting. **Owner:** Security/AI. **Outcomes:** D08.
+**Priority / status:** P0 / ready. **Owner:** Security/AI. **Outcomes:** D08.
 
 Carry the sandbox requirement with expert transformations and scorers across their lifecycle.
 
@@ -2620,13 +2620,13 @@ Qualify bounded first-use temporal assessment with independent pre-window approv
 
 ### P173 — Dedicated gVisor execution worker for reviewed feature partitions
 
-**Packet status:** implemented. **Mapped outcomes:** D08.
+**Packet status:** tested. **Mapped outcomes:** D08.
 
 Bind exact code, projected feature bytes, environment, ordered row identity and limits to an operator-reviewed request. Run with Systrap isolation and stage typed candidates.
 
-**Evidence:** [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json)
+**Evidence:** [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json); [P173 dedicated expert worker qualification](evidence/p173-qualification.json); [Implementation PR #282](https://github.com/caglarsubas/auto_ml/pull/282); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42332878412)
 
-**Remaining:** Qualify the dedicated Linux worker and exact source on the PR and independent main. D08-T02 and D08-T03 retain separate gates.
+**Remaining:** D08-T01 is accepted for the dedicated operator-mediated Linux worker. Expert fitted-state lifecycle integration and the wider isolation matrix retain separate D08-T02 and D08-T03 gates.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
@@ -2758,9 +2758,9 @@ Typed actions plus generated/user-authored Python in separate Linux gVisor/runsc
 
 **Source mapping:** Claude CC-3/CC-7/RM-3; GPT FIX-07/P04; Gemini C5; User first-release expert-code requirement.
 
-**Progress:** Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. Real runtime and exact-source qualification are in progress.
+**Progress:** Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. The pinned Linux gVisor profile passes real runtime qualification on the PR and independent main. D08-T02 carries expert fitted state across training, evaluation, replay and scoring.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md); [P12 source qualification](evidence/p12-qualification-2026-10-09.json); [Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md); [P13 source qualification](evidence/p13-qualification-2026-10-09.json); [Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md); [P14 source qualification](evidence/p14-qualification-2026-10-09.json); [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md); [P12 source qualification](evidence/p12-qualification-2026-10-09.json); [Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md); [P13 source qualification](evidence/p13-qualification-2026-10-09.json); [Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md); [P14 source qualification](evidence/p14-qualification-2026-10-09.json); [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json); [P173 dedicated expert worker qualification](evidence/p173-qualification.json); [Implementation PR #282](https://github.com/caglarsubas/auto_ml/pull/282); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42332878412)
 
 ### D18 Mission contracts and configurable oversight
 
