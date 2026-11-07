@@ -1,0 +1,22 @@
+{
+  "schema": "dedicated_gvisor_expert_worker_qualification_v1",
+  "packet": "P173",
+  "task": "D08-T01",
+  "base": "7b85ed55a5ce67190e0252d66d721ee0d5b1cb46",
+  "scope": "Operator-mediated feature-only requests on a dedicated Linux worker",
+  "sources": {
+    ".github/workflows/ci.yml": "c7e75ad960bec6424d59cd5443698e6d5a1c65ebc01abb53fe7542ef5e18af8e",
+    "docs/PRIVATE_EXPERT_WORKER.md": "d5177d312f4ab1c503cec92dc2f3bc8380559e4d8dc368e0f10a79502c01cac6",
+    "scripts/private_expert_worker.py": "e88fec8b3a585a4d41b065fce0bbf16a2a18ba6995b054e868bf814895418503",
+    "scripts/qualify_private_expert_worker.py": "93e4bfd3008fbeadfd27437a31064f18c887a25e4642ac765e070f589aedeb7b",
+    "scripts/qualify_private_expert_worker.sh": "3bc5aff31f0433853da721e12802ca52b1952ad3c1c1c251f69667f96b3d0f4b"
+  },
+  "native_cases": 7760,
+  "frontend_cases": 732,
+  "browser_cases": 49,
+  "native_workers": 2,
+  "native_process_cap_seconds": 900,
+  "native_job_cap_seconds": 3600,
+  "required_expert_job": "Private expert worker (gVisor)",
+  "runtime_release": "20261102.0"
+}

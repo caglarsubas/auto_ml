@@ -832,9 +832,11 @@
         "[Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md)",
         "[P13 source qualification](evidence/p13-qualification-2026-10-09.json)",
         "[Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md)",
-        "[P14 source qualification](evidence/p14-qualification-2026-10-09.json)"
+        "[P14 source qualification](evidence/p14-qualification-2026-10-09.json)",
+        "[Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md)",
+        "[P173 qualification contract](evidence/p173-expert-worker-contract.json)"
       ],
-      "progress": "Unsafe in-process expert Python was removed; execute_code fails closed before customer data loads. Dedicated Linux gVisor isolation, exact approvals, valid expert operations and replay/scoring remain unimplemented and mandatory for first release. P12 binds local MCP reads/proposals to active installation actors and explicit dataset grants, with access reservations and authority rechecks before output. Live stdio grant changes/revocation and retained audit snapshots are qualified; HTTP/SSE and unverified direct execution are blocked. REST project roles, exact approvals, expert isolation, egress/retention and deployment/security qualification remain open. P13 requires client-selected XGBoost explanation models to belong to a hash-verified immutable execution and matching dataset; development-only diagnostics support legitimate native overrides. Exact action approvals and isolated expert execution/replay/scoring remain unimplemented and mandatory. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open."
+      "progress": "Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. Real runtime and exact-source qualification are in progress."
     },
     {
       "id": "D09",
@@ -2121,6 +2123,10 @@
     {
       "date": "2026-11-07",
       "change": "Accept D03-T01 for the prospective native temporal profile after all six PR #280 checks and independent main 42231084353 pass source and artifact audits. Keep 66 backlog tasks. Done/open/blocked move 10/49/7 to 11/48/7."
+    },
+    {
+      "date": "2026-11-07",
+      "change": "Implement P173 as D08-T01. The 66-task baseline is 11 done, 48 open and 7 blocked pending real gVisor qualification."
     }
   ],
   "implementation_packets": [
@@ -5171,6 +5177,22 @@
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)"
       ],
       "remaining": "D03-T01 is accepted for the prospective native temporal profile. Broader lineage invalidation, independent reproduction and review, expert-code qualification, and the integrated D06-T03 threat model retain separate gates."
+    },
+    {
+      "id": "P173",
+      "kind": "product_implementation",
+      "title": "Dedicated gVisor execution worker for reviewed feature partitions",
+      "items": [
+        "D08"
+      ],
+      "owner": "Security/AI",
+      "status": "implemented",
+      "description": "Bind exact code, projected feature bytes, environment, ordered row identity and limits to an operator-reviewed request. Run with Systrap isolation and stage typed candidates.",
+      "evidence": [
+        "[Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md)",
+        "[P173 qualification contract](evidence/p173-expert-worker-contract.json)"
+      ],
+      "remaining": "Qualify the dedicated Linux worker and exact source on the PR and independent main. D08-T02 and D08-T03 retain separate gates."
     }
   ],
   "release_qualification": {
@@ -5989,15 +6011,20 @@
         ],
         "priority": "P0",
         "owner": "Security/AI",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [],
         "acceptance": [
           "Exact code/input/environment/partition/resource approval is required.",
           "Unavailable runsc blocks execution with no host-process fallback."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md)",
+          "[P173 qualification contract](evidence/p173-expert-worker-contract.json)"
+        ],
+        "packet_refs": [
+          "P173"
+        ],
         "order": 24,
         "basis": "Remaining acceptance scope from D08; existing tested foundation is reused, not rebuilt."
       },
@@ -7100,16 +7127,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P172 prospective protected assessment",
-      "recorded_on": "2026-11-06",
-      "inventory_source_commit": "7549f3e053402c04139112f835aee0029f249e2e",
+      "label": "Before P173 dedicated expert worker",
+      "recorded_on": "2026-11-07",
+      "inventory_source_commit": "7b85ed55a5ce67190e0252d66d721ee0d5b1cb46",
       "total": 66,
       "counts": {
-        "ready": 6,
+        "ready": 5,
         "in_progress": 0,
         "waiting": 43,
         "blocked": 7,
-        "done": 10
+        "done": 11
       }
     },
     "baseline_history": [
@@ -7237,6 +7264,20 @@
           "waiting": 43,
           "blocked": 7,
           "done": 9
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P172 prospective protected assessment",
+        "recorded_on": "2026-11-06",
+        "inventory_source_commit": "7549f3e053402c04139112f835aee0029f249e2e",
+        "total": 66,
+        "counts": {
+          "ready": 6,
+          "in_progress": 0,
+          "waiting": 43,
+          "blocked": 7,
+          "done": 10
         }
       }
     ]
