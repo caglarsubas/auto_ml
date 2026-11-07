@@ -236,7 +236,8 @@ def read_output(proc, deadline):
 def sandbox(env, bundle, identifier):
     command = [str(env / "runtime/runsc"), f"--root={bundle / 'runtime-state'}",
                "--network=none", "--gofer-network-namespace=new", "--platform=systrap",
-               "--directfs=false", "--ignore-cgroups=false"]
+               "--directfs=false", "--ignore-cgroups=false",
+               "--sandbox-creation-cpu-policy=1x", "--sandbox-lifecycle-cpu-policy=1x"]
     proc = None
     try:
         proc = subprocess.Popen([*command, "run", "--bundle", str(bundle), identifier],

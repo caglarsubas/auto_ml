@@ -7,7 +7,7 @@
   "sources": {
     ".github/workflows/ci.yml": "c7e75ad960bec6424d59cd5443698e6d5a1c65ebc01abb53fe7542ef5e18af8e",
     "docs/PRIVATE_EXPERT_WORKER.md": "42380e5e0b997ac858936d8dec946144b6d865a70d1af153e2e8176b3ae56490",
-    "scripts/private_expert_worker.py": "903f91a15aee34592c64dc8347ff9f38a23b668d426cdcd44f0fcdb6e95e86b2",
+    "scripts/private_expert_worker.py": "9c373a75dacaf93f86714d3723a4751b184abb728bd290c1facf10c8a4a58f54",
     "scripts/qualify_private_expert_worker.py": "f48b2ce0bfa77276f05d9cbcee4f1e36b45edc5190afaf249884b4ae70bb4f16",
     "scripts/qualify_private_expert_worker.sh": "429d27c5b4942ccb06bc302d4c9210c2b81dcca4175b6a3e77deed261ac0ad5e"
   },
@@ -19,10 +19,18 @@
   "native_job_cap_seconds": 3600,
   "required_expert_job": "Private expert worker (gVisor)",
   "runtime_release": "20261102.0",
-  "rejected_head": {
-    "head": "48788b1a87b5ca129fa37364330aed529816d6f4",
-    "run": 42322817720,
-    "reason": "The default gofer network namespace left a shared null-netns bind mount in the per-job runtime state.",
-    "correction": "Use a fresh empty network namespace for each gofer. Require cleanup before publishing candidates."
-  }
+  "rejected_heads": [
+    {
+      "head": "48788b1a87b5ca129fa37364330aed529816d6f4",
+      "run": 42322817720,
+      "reason": "The default gofer network namespace left a shared null-netns bind mount in the per-job runtime state.",
+      "correction": "Use a fresh empty network namespace for each gofer. Require cleanup before publishing candidates."
+    },
+    {
+      "head": "26058bd71a7fb3bb9693d1958e744e698b3b269c",
+      "run": 42323021483,
+      "reason": "Host probe observed the uncapped default runsc creation-phase CPU quota.",
+      "correction": "Bind both gVisor creation and lifecycle CPU policies to the exact OCI CPU quota."
+    }
+  ]
 }
