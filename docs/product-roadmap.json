@@ -843,9 +843,12 @@
         "[P174 expert fitted-state lifecycle qualification](evidence/p174-qualification.json)",
         "[Implementation PR #284](https://github.com/caglarsubas/auto_ml/pull/284)",
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42366832590)",
-        "[P175 isolation qualification contract](evidence/p175-isolation-contract.json)"
+        "[P175 isolation qualification contract](evidence/p175-isolation-contract.json)",
+        "[P175 expert isolation and cancellation qualification](evidence/p175-qualification.json)",
+        "[Implementation PR #286](https://github.com/caglarsubas/auto_ml/pull/286)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43235517556)"
       ],
-      "progress": "Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. The pinned Linux gVisor profile passes real runtime qualification on the PR and independent main. D08-T02 carries expert fitted state across training, evaluation, replay and scoring. P174 qualifies opaque expert artifacts and isolated fit, apply, evaluation, scoring and clean replay. The complete isolation and cancellation matrix is tracked under D08-T03. P175 adds operator cancellation bound to the active approval, cleanup fencing and a hostile-code matrix. Synthetic ARM64 preflight passed. CI and independent main qualification are pending."
+      "progress": "Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. The pinned Linux gVisor profile passes real runtime qualification on the PR and independent main. D08-T02 carries expert fitted state across training, evaluation, replay and scoring. P174 qualifies opaque expert artifacts and isolated fit, apply, evaluation, scoring and clean replay. The complete isolation and cancellation matrix is tracked under D08-T03. P175 qualifies approval-bound cancellation, cleanup fencing and the hostile-code matrix on the dedicated operator-mediated worker. Governed browser/MCP dispatch remains open."
     },
     {
       "id": "D09",
@@ -2152,6 +2155,10 @@
     {
       "date": "2026-11-12",
       "change": "Implement P175 for D08-T03 and pass the synthetic ARM64 gVisor preflight. Preserve the 66-task baseline pending CI and independent main qualification."
+    },
+    {
+      "date": "2026-11-12",
+      "change": "Accept D08-T03 for the dedicated Linux expert worker after all seven PR #286 checks and independent main 43235517556 pass source and artifact audits. Keep 66 tasks and move done/open/blocked from 13/46/7 to 14/45/7."
     }
   ],
   "implementation_packets": [
@@ -5249,13 +5256,16 @@
         "D08"
       ],
       "owner": "Security/AI",
-      "status": "implemented",
+      "status": "tested",
       "description": "Record exact active-job cancellation, verify cleanup before publication, and test isolation, pressure, serialization and recovery in real gVisor.",
       "evidence": [
         "[Dedicated expert worker and operator cancellation](PRIVATE_EXPERT_WORKER.md)",
-        "[P175 isolation qualification contract](evidence/p175-isolation-contract.json)"
+        "[P175 isolation qualification contract](evidence/p175-isolation-contract.json)",
+        "[P175 expert isolation and cancellation qualification](evidence/p175-qualification.json)",
+        "[Implementation PR #286](https://github.com/caglarsubas/auto_ml/pull/286)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43235517556)"
       ],
-      "remaining": "Publish D08-T03 acceptance after PR and independent main qualification. Governed browser/MCP integration and D06-T03 threat-model qualification remain open."
+      "remaining": "D08-T03 is accepted for the dedicated operator-mediated worker. Governed browser/MCP integration and the complete D06-T03 threat model remain open."
     }
   ],
   "release_qualification": {
@@ -6134,7 +6144,7 @@
         ],
         "priority": "P0",
         "owner": "Security/AI",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [
           "D08-T02",
           "D07-T02"
@@ -6146,7 +6156,10 @@
         "blockers": [],
         "evidence": [
           "[Dedicated expert worker and operator cancellation](PRIVATE_EXPERT_WORKER.md)",
-          "[P175 isolation qualification contract](evidence/p175-isolation-contract.json)"
+          "[P175 isolation qualification contract](evidence/p175-isolation-contract.json)",
+          "[P175 expert isolation and cancellation qualification](evidence/p175-qualification.json)",
+          "[Implementation PR #286](https://github.com/caglarsubas/auto_ml/pull/286)",
+          "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43235517556)"
         ],
         "packet_refs": [
           "P175"

@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 4 (6.1%); in_progress: 1 (1.5%); waiting: 41 (62.1%); blocked: 7 (10.6%); done: 13 (19.7%).
+Inventory: 66 tasks; ready: 4 (6.1%); in_progress: 0 (0.0%); waiting: 41 (62.1%); blocked: 7 (10.6%); done: 14 (21.2%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -362,7 +362,7 @@ Carry the sandbox requirement with expert transformations and scorers across the
 
 ### D08-T03 — Qualify hostile-code, cancellation and isolation failures
 
-**Priority / status:** P0 / in_progress. **Owner:** Security/AI. **Outcomes:** D08.
+**Priority / status:** P0 / done. **Owner:** Security/AI. **Outcomes:** D08.
 
 Validate supported expert work and unauthorized host/data/network/resource/serialization attempts.
 
@@ -372,7 +372,7 @@ Validate supported expert work and unauthorized host/data/network/resource/seria
 
 **Source / rationale:** Remaining acceptance scope from D08; existing tested foundation is reused, not rebuilt.
 
-**Packet / evidence:** P175; [Dedicated expert worker and operator cancellation](PRIVATE_EXPERT_WORKER.md); [P175 isolation qualification contract](evidence/p175-isolation-contract.json)
+**Packet / evidence:** P175; [Dedicated expert worker and operator cancellation](PRIVATE_EXPERT_WORKER.md); [P175 isolation qualification contract](evidence/p175-isolation-contract.json); [P175 expert isolation and cancellation qualification](evidence/p175-qualification.json); [Implementation PR #286](https://github.com/caglarsubas/auto_ml/pull/286); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43235517556)
 
 ### D09-T01 — Deliver clean-environment refit and assessment reproduction
 
@@ -2644,13 +2644,13 @@ Preserve the sandbox requirement with exported expert state. Bind each use to co
 
 ### P175 — Expert cancellation and hostile-code isolation qualification
 
-**Packet status:** implemented. **Mapped outcomes:** D08.
+**Packet status:** tested. **Mapped outcomes:** D08.
 
 Record exact active-job cancellation, verify cleanup before publication, and test isolation, pressure, serialization and recovery in real gVisor.
 
-**Evidence:** [Dedicated expert worker and operator cancellation](PRIVATE_EXPERT_WORKER.md); [P175 isolation qualification contract](evidence/p175-isolation-contract.json)
+**Evidence:** [Dedicated expert worker and operator cancellation](PRIVATE_EXPERT_WORKER.md); [P175 isolation qualification contract](evidence/p175-isolation-contract.json); [P175 expert isolation and cancellation qualification](evidence/p175-qualification.json); [Implementation PR #286](https://github.com/caglarsubas/auto_ml/pull/286); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43235517556)
 
-**Remaining:** Publish D08-T03 acceptance after PR and independent main qualification. Governed browser/MCP integration and D06-T03 threat-model qualification remain open.
+**Remaining:** D08-T03 is accepted for the dedicated operator-mediated worker. Governed browser/MCP integration and the complete D06-T03 threat model remain open.
 
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
@@ -2782,9 +2782,9 @@ Typed actions plus generated/user-authored Python in separate Linux gVisor/runsc
 
 **Source mapping:** Claude CC-3/CC-7/RM-3; GPT FIX-07/P04; Gemini C5; User first-release expert-code requirement.
 
-**Progress:** Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. The pinned Linux gVisor profile passes real runtime qualification on the PR and independent main. D08-T02 carries expert fitted state across training, evaluation, replay and scoring. P174 qualifies opaque expert artifacts and isolated fit, apply, evaluation, scoring and clean replay. The complete isolation and cancellation matrix is tracked under D08-T03. P175 adds operator cancellation bound to the active approval, cleanup fencing and a hostile-code matrix. Synthetic ARM64 preflight passed. CI and independent main qualification are pending.
+**Progress:** Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. The pinned Linux gVisor profile passes real runtime qualification on the PR and independent main. D08-T02 carries expert fitted state across training, evaluation, replay and scoring. P174 qualifies opaque expert artifacts and isolated fit, apply, evaluation, scoring and clean replay. The complete isolation and cancellation matrix is tracked under D08-T03. P175 qualifies approval-bound cancellation, cleanup fencing and the hostile-code matrix on the dedicated operator-mediated worker. Governed browser/MCP dispatch remains open.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md); [P12 source qualification](evidence/p12-qualification-2026-10-09.json); [Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md); [P13 source qualification](evidence/p13-qualification-2026-10-09.json); [Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md); [P14 source qualification](evidence/p14-qualification-2026-10-09.json); [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json); [P173 dedicated expert worker qualification](evidence/p173-qualification.json); [Implementation PR #282](https://github.com/caglarsubas/auto_ml/pull/282); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42332878412); [Expert fitted-state lifecycle](EXPERT_FITTED_STATE_LIFECYCLE.md); [P174 qualification contract](evidence/p174-lifecycle-contract.json); [P174 expert fitted-state lifecycle qualification](evidence/p174-qualification.json); [Implementation PR #284](https://github.com/caglarsubas/auto_ml/pull/284); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42366832590); [P175 isolation qualification contract](evidence/p175-isolation-contract.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P12 MCP access and limits](MCP_ACCESS_IMPLEMENTATION.md); [P12 source qualification](evidence/p12-qualification-2026-10-09.json); [Managed native storage implementation](MANAGED_STORAGE_IMPLEMENTATION.md); [P13 source qualification](evidence/p13-qualification-2026-10-09.json); [Exact assistant action implementation](ASSISTANT_APPROVAL_IMPLEMENTATION.md); [P14 source qualification](evidence/p14-qualification-2026-10-09.json); [Dedicated gVisor worker](PRIVATE_EXPERT_WORKER.md); [P173 qualification contract](evidence/p173-expert-worker-contract.json); [P173 dedicated expert worker qualification](evidence/p173-qualification.json); [Implementation PR #282](https://github.com/caglarsubas/auto_ml/pull/282); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42332878412); [Expert fitted-state lifecycle](EXPERT_FITTED_STATE_LIFECYCLE.md); [P174 qualification contract](evidence/p174-lifecycle-contract.json); [P174 expert fitted-state lifecycle qualification](evidence/p174-qualification.json); [Implementation PR #284](https://github.com/caglarsubas/auto_ml/pull/284); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42366832590); [P175 isolation qualification contract](evidence/p175-isolation-contract.json); [P175 expert isolation and cancellation qualification](evidence/p175-qualification.json); [Implementation PR #286](https://github.com/caglarsubas/auto_ml/pull/286); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43235517556)
 
 ### D18 Mission contracts and configurable oversight
 
