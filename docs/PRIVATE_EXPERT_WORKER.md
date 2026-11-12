@@ -49,17 +49,38 @@ sudo python3 -I private_expert_worker.py --state /var/lib/declarai-expert --envi
 The worker launches the pinned `runsc` executable directly with Systrap and
 network disabled. Each file-serving gofer has its own empty network namespace. Each sandbox has a read-only rootfs and input mount, an
 unprivileged identity, an 8 MiB scratch filesystem and CPU, PID and memory
-limits. The supervisor enforces a 15-second deadline and a 256 KiB output
+limits. The host cgroup disables swap for each sandbox. The supervisor enforces a 15-second deadline and a 256 KiB output
 limit. The API and worker controller never import expert modules. The
 controller accepts typed JSON and retains the validated output as an unadopted
 candidate in the root-owned job state directory.
 
-A missing or altered runtime stops execution. If supervisor loss or an
-unverified cleanup leaves an active marker, quarantine the worker. Reconcile
-the exact job's bundle and runsc state under operator control before removing
-the marker. Retain the claim and review receipts. The service does not
-automatically retry a consumed request. D08-T03 covers the wider hostile-code
-and failure matrix.
+## Cancel and reconcile
+
+From the trusted local operator channel, cancel an active job by its UUID.
+
+```sh
+sudo python3 -I private_expert_worker.py --state /var/lib/declarai-expert --environment /opt/declarai-expert cancel JOB_UUID --operator OPERATOR
+```
+
+The cancellation request records the operator label, request time and digest
+of the claimed approval. It is accepted for the exact active job before
+publication. Check the terminal receipt for `expert_cancelled`. The worker
+stops runsc, verifies the cgroup has been removed and discards candidate
+output. Cancellation of an already finished job is refused.
+
+A missing or altered runtime stops execution. Controller loss and unverified
+cleanup leave the active marker in place and fence subsequent execution.
+Quarantine the worker and reconcile the exact job's bundle, runsc state and
+host cgroup under operator control before removing the marker. Retain the
+claim, review, cancellation and any terminal receipts. The consumed claim
+continues to prevent re-execution.
+
+The gVisor qualification recipe exercises unauthorized partition and control
+file reads, host loopback and Unix socket access, privilege escalation, scratch
+and memory pressure, CPU throttling, malformed output, and a pickle side
+effect confined to the sandbox. It checks cancellation with live descendants,
+controller loss and operator cleanup. A separately injected runsc deletion
+failure verifies that the worker withholds publication and quarantines the job.
 
 ## Fitted artifact stages
 

@@ -1,0 +1,48 @@
+{
+  "schema": "expert_hostile_execution_qualification_v1",
+  "packet": "P175",
+  "task": "D08-T03",
+  "base": "c288ff1d791a4453f18f06106161f8873a725212",
+  "scope": "Synthetic hostile requests, cancellation and reconciliation on the dedicated operator-mediated Linux worker",
+  "sources": {
+    "docs/PRIVATE_EXPERT_WORKER.md": "474269a8712ec2277b9cef8f8f78664438e3d5b0c67eedc637cf21f25ea100dc",
+    "scripts/private_expert_worker.py": "2b6429daa6188c2044bbc92a26acfa286849908c4d8fb80ba1fed3063274c337",
+    "scripts/qualify_private_expert_isolation.py": "57142a34ec6cf20c760911e517fb95337d94809cf69b32adee7d9fc82f1bda6e",
+    "scripts/qualify_private_expert_worker.sh": "8c1558420af5983d8c375692a13b0e301f919cb72ef8445f1a293f66b7019627"
+  },
+  "isolation_cases": [
+    "other_partition_and_control_files_denied",
+    "host_loopback_unix_socket_and_environment_denied",
+    "rootfs_and_privilege_escalation_denied",
+    "scratch_limit_enforced",
+    "host_memory_pressure_stops_candidate",
+    "duplicate_json_and_row_substitution_refused",
+    "pickle_side_effect_confined_to_sandbox",
+    "cpu_quota_throttles_host_work",
+    "exact_active_cancellation_and_descendant_cleanup",
+    "terminal_receipt_replay_and_late_cancel_refused",
+    "next_approved_job_succeeds_after_cancel",
+    "controller_loss_fences_claim_and_other_jobs",
+    "operator_cleanup_preserves_consumed_claim",
+    "failed_runtime_delete_quarantines_without_candidate"
+  ],
+  "foundation_cases": 11,
+  "lifecycle_cases": 16,
+  "arm64_preflight": {
+    "environment": {
+      "architecture": "aarch64",
+      "profile": "declarai_expert_runsc_v1",
+      "rootfs_sha256": "daf47311f4cea6ffe6a22a74159f15808b44423022fce751980b11e615ac6a2c",
+      "runtime_sha256": "2613a4259d17abe90eecf01cd697a87c4b9cadb9e57bcc6de4be4d498f827147",
+      "worker_sha256": "2b6429daa6188c2044bbc92a26acfa286849908c4d8fb80ba1fed3063274c337"
+    },
+    "receipt_sha256": "260a1b6e8ce3e5359e9623dd150c4728c3375c2c8ea69e6a89d07d6871b7ca53"
+  },
+  "native_cases": 7760,
+  "frontend_cases": 732,
+  "browser_cases": 49,
+  "native_workers": 2,
+  "native_process_cap_seconds": 900,
+  "native_job_cap_seconds": 3600,
+  "required_expert_job": "Private expert worker (gVisor)"
+}
