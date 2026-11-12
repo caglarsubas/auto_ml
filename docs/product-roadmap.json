@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-11-07",
+  "updated": "2026-11-12",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -842,9 +842,10 @@
         "[P174 qualification contract](evidence/p174-lifecycle-contract.json)",
         "[P174 expert fitted-state lifecycle qualification](evidence/p174-qualification.json)",
         "[Implementation PR #284](https://github.com/caglarsubas/auto_ml/pull/284)",
-        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42366832590)"
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42366832590)",
+        "[P175 isolation qualification contract](evidence/p175-isolation-contract.json)"
       ],
-      "progress": "Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. The pinned Linux gVisor profile passes real runtime qualification on the PR and independent main. D08-T02 carries expert fitted state across training, evaluation, replay and scoring. P174 qualifies opaque expert artifacts and isolated fit, apply, evaluation, scoring and clean replay. The complete isolation and cancellation matrix is tracked under D08-T03."
+      "progress": "Browser and MCP expert Python fail closed. P173 adds a dedicated gVisor worker with reviewed feature partitions, sealed environment, typed candidate output and fixed limits. The pinned Linux gVisor profile passes real runtime qualification on the PR and independent main. D08-T02 carries expert fitted state across training, evaluation, replay and scoring. P174 qualifies opaque expert artifacts and isolated fit, apply, evaluation, scoring and clean replay. The complete isolation and cancellation matrix is tracked under D08-T03. P175 adds operator cancellation bound to the active approval, cleanup fencing and a hostile-code matrix. Synthetic ARM64 preflight passed. CI and independent main qualification are pending."
     },
     {
       "id": "D09",
@@ -2147,6 +2148,10 @@
     {
       "date": "2026-11-07",
       "change": "Accept D08-T02 for the dedicated Linux expert worker after all seven PR #284 checks and independent main 42366832590 pass source and artifact audits. Keep 66 tasks and move done/open/blocked from 12/47/7 to 13/46/7."
+    },
+    {
+      "date": "2026-11-12",
+      "change": "Implement P175 for D08-T03 and pass the synthetic ARM64 gVisor preflight. Preserve the 66-task baseline pending CI and independent main qualification."
     }
   ],
   "implementation_packets": [
@@ -5235,6 +5240,22 @@
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42366832590)"
       ],
       "remaining": "D08-T02 is accepted for the operator-mediated isolated expert lifecycle. Broader hostile-code and cancellation qualification belongs to D08-T03."
+    },
+    {
+      "id": "P175",
+      "kind": "product_implementation",
+      "title": "Expert cancellation and hostile-code isolation qualification",
+      "items": [
+        "D08"
+      ],
+      "owner": "Security/AI",
+      "status": "implemented",
+      "description": "Record exact active-job cancellation, verify cleanup before publication, and test isolation, pressure, serialization and recovery in real gVisor.",
+      "evidence": [
+        "[Dedicated expert worker and operator cancellation](PRIVATE_EXPERT_WORKER.md)",
+        "[P175 isolation qualification contract](evidence/p175-isolation-contract.json)"
+      ],
+      "remaining": "Publish D08-T03 acceptance after PR and independent main qualification. Governed browser/MCP integration and D06-T03 threat-model qualification remain open."
     }
   ],
   "release_qualification": {
@@ -6113,7 +6134,7 @@
         ],
         "priority": "P0",
         "owner": "Security/AI",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [
           "D08-T02",
           "D07-T02"
@@ -6123,8 +6144,13 @@
           "Valid custom transforms/scorers reproduce across supported stages."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Dedicated expert worker and operator cancellation](PRIVATE_EXPERT_WORKER.md)",
+          "[P175 isolation qualification contract](evidence/p175-isolation-contract.json)"
+        ],
+        "packet_refs": [
+          "P175"
+        ],
         "order": 26,
         "basis": "Remaining acceptance scope from D08; existing tested foundation is reused, not rebuilt."
       },
@@ -7180,16 +7206,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P174 expert fitted-state lifecycle",
-      "recorded_on": "2026-11-07",
-      "inventory_source_commit": "f5d509e0e67ed92521292b6dd0369937da7ed65f",
+      "label": "Before P175 expert isolation and cancellation",
+      "recorded_on": "2026-11-12",
+      "inventory_source_commit": "c288ff1d791a4453f18f06106161f8873a725212",
       "total": 66,
       "counts": {
         "ready": 5,
         "in_progress": 0,
-        "waiting": 42,
+        "waiting": 41,
         "blocked": 7,
-        "done": 12
+        "done": 13
       }
     },
     "baseline_history": [
@@ -7345,6 +7371,20 @@
           "waiting": 43,
           "blocked": 7,
           "done": 11
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P174 expert fitted-state lifecycle",
+        "recorded_on": "2026-11-07",
+        "inventory_source_commit": "f5d509e0e67ed92521292b6dd0369937da7ed65f",
+        "total": 66,
+        "counts": {
+          "ready": 5,
+          "in_progress": 0,
+          "waiting": 42,
+          "blocked": 7,
+          "done": 12
         }
       }
     ]

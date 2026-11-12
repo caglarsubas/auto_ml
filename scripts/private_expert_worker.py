@@ -18,6 +18,7 @@ import stat
 import subprocess
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 PROFILE = "declarai_expert_runsc_v1"
@@ -25,6 +26,7 @@ LIMITS = {
     "code_bytes": 64 * 1024, "input_bytes": 512 * 1024, "output_bytes": 256 * 1024,
     "rows": 1000, "columns": 32, "seconds": 15, "memory_bytes": 256 * 1024**2,
     "scratch_bytes": 8 * 1024**2, "pids": 32, "cpu_quota": 50000, "cpu_period": 100000,
+    "swap_bytes": 0,
 }
 ARTIFACT_SCHEMA = "declarai_expert_fitted_v1"
 ARTIFACT_LIMIT = 512 * 1024
@@ -285,43 +287,58 @@ def oci(rootfs, stage):
         "linux": {
             "namespaces": [{"type": name} for name in ("pid", "ipc", "uts", "mount", "network")],
             "resources": {"memory": {"limit": LIMITS["memory_bytes"]}, "pids": {"limit": LIMITS["pids"]},
-                          "cpu": {"quota": LIMITS["cpu_quota"], "period": LIMITS["cpu_period"]}},
+                          "cpu": {"quota": LIMITS["cpu_quota"], "period": LIMITS["cpu_period"]},
+                          "unified": {"memory.swap.max": str(LIMITS["swap_bytes"])}},
         },
     }
 
 
-def read_output(proc, deadline):
+def check_execution(deadline, cancellation):
+    if cancellation.exists():
+        raise Refused("expert_cancelled")
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise Refused("expert_wall_limit")
+    return min(remaining, 0.1)
+
+
+def read_output(proc, deadline, cancellation):
     output = bytearray()
     with selectors.DefaultSelector() as poll:
         poll.register(proc.stdout, selectors.EVENT_READ)
         while True:
-            left = deadline - time.monotonic()
-            if left <= 0 or not poll.select(left):
-                raise Refused("expert_wall_limit")
+            if not poll.select(check_execution(deadline, cancellation)):
+                continue
             block = os.read(proc.stdout.fileno(), min(65536, LIMITS["output_bytes"] + 1 - len(output)))
             if not block:
                 break
             output.extend(block)
             if len(output) > LIMITS["output_bytes"]:
                 raise Refused("expert_output_limit")
-    if proc.wait(timeout=max(0, deadline - time.monotonic())):
+    while proc.poll() is None:
+        time.sleep(check_execution(deadline, cancellation))
+    if proc.returncode:
         raise Refused("expert_runtime_failed")
     return output
 
 
-def sandbox(env, bundle, identifier):
-    command = [str(env / "runtime/runsc"), f"--root={bundle / 'runtime-state'}",
-               "--network=none", "--gofer-network-namespace=new", "--platform=systrap",
-               "--directfs=false", "--ignore-cgroups=false",
-               "--sandbox-creation-cpu-policy=1x", "--sandbox-lifecycle-cpu-policy=1x"]
+def runtime_command(env, bundle):
+    return [str(env / "runtime/runsc"), f"--root={bundle / 'runtime-state'}",
+            "--network=none", "--gofer-network-namespace=new", "--platform=systrap",
+            "--directfs=false", "--ignore-cgroups=false",
+            "--sandbox-creation-cpu-policy=1x", "--sandbox-lifecycle-cpu-policy=1x"]
+
+
+def sandbox(env, bundle, identifier, cancellation):
+    command = runtime_command(env, bundle)
+    deadline = time.monotonic() + LIMITS["seconds"]
+    check_execution(deadline, cancellation)
     proc = None
     try:
         proc = subprocess.Popen([*command, "run", "--bundle", str(bundle), identifier],
                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                 env=HOST_ENV, start_new_session=True)
-        return read_output(proc, time.monotonic() + LIMITS["seconds"])
-    except subprocess.TimeoutExpired:
-        raise Refused("expert_wall_limit") from None
+        return read_output(proc, deadline, cancellation)
     finally:
         if proc is not None:
             stopped = True
@@ -341,8 +358,37 @@ def sandbox(env, bundle, identifier):
                                timeout=5, check=True)
             except (subprocess.SubprocessError, OSError):
                 stopped = False
-            if not stopped:
+            if not stopped or (Path("/sys/fs/cgroup") / identifier).exists():
                 raise Refused("expert_cleanup_unverified")
+
+
+@contextmanager
+def job_lock(job):
+    fd = os.open(job / "publication.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "rb") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def cancel(state, identifier, operator):
+    identity(identifier)
+    if not LABEL.fullmatch(operator):
+        raise Refused("expert_invalid_cancellation_operator")
+    job = directory(state / identifier, private=True)
+    with job_lock(job):
+        if (job / "receipt.json").exists():
+            raise Refused("expert_job_already_finished")
+        active = state / "active.json"
+        if not active.exists() or decode(checked_file(active, 4096)) != {"job_id": identifier}:
+            raise Refused("expert_job_not_active")
+        claim = decode(checked_file(job / "claimed.json", 4096))
+        marker = job / "cancellation.json"
+        if marker.exists():
+            return decode(checked_file(marker, 4096))
+        record = {"id": identifier, "state": "cancellation_requested", "operator": operator,
+                  "approval_sha256": claim["approval_sha256"], "requested_ns": time.time_ns()}
+        exclusive(marker, canonical(record))
+        return record
 
 
 def execute(state, env, manifest, code, raw, row_ids, fitted_state):
@@ -358,11 +404,15 @@ def execute(state, env, manifest, code, raw, row_ids, fitted_state):
         raise Refused("expert_job_reconciliation_required")
     active = state / "active.json"
     # This durable single-worker fence survives controller loss.
-    exclusive(active, canonical({"job_id": manifest["id"]}))
-    exclusive(job / "claimed.json", canonical({"approval_sha256": digest(canonical(approval))}))
+    with job_lock(job):
+        if active.exists():
+            raise Refused("expert_worker_reconciliation_required")
+        exclusive(active, canonical({"job_id": manifest["id"]}))
+        exclusive(job / "claimed.json", canonical({"approval_sha256": digest(canonical(approval))}))
     receipt = {"id": manifest["id"], "profile": PROFILE, "state": "blocked",
                "approval_sha256": digest(canonical(approval)), "reviewer": approval["reviewer"]}
     bundle = job / "bundle"
+    cancellation = job / "cancellation.json"
     result = None
     fitted = None
     try:
@@ -378,7 +428,7 @@ def execute(state, env, manifest, code, raw, row_ids, fitted_state):
             exclusive(path, content)
             path.chmod(0o444)
         exclusive(bundle / "config.json", canonical(oci(env / "rootfs", stage)))
-        output = sandbox(env, bundle, manifest["id"])
+        output = sandbox(env, bundle, manifest["id"], cancellation)
         result, new_state = outcome(output, manifest, row_ids)
         if manifest["mode"] == "replay":
             if digest(result) != manifest["fit_candidate_sha256"]:
@@ -399,30 +449,41 @@ def execute(state, env, manifest, code, raw, row_ids, fitted_state):
             shutil.rmtree(bundle)
         except OSError:
             receipt["reason_code"] = "expert_cleanup_unverified"
-    clean = receipt.get("reason_code") != "expert_cleanup_unverified"
-    if "reason_code" not in receipt:
-        exclusive(job / "candidate.json", result)
-        if fitted is not None:
-            exclusive(job / "fitted.json", fitted)
-            receipt["artifact_sha256"] = digest(fitted)
-        elif "artifact_sha256" in manifest:
-            receipt["applied_artifact_sha256"] = manifest["artifact_sha256"]
-            receipt["fit_request_id"] = manifest["fit_request_id"]
-        receipt.update(state="succeeded", candidate_sha256=digest(result), scope="unadopted_candidate")
-    exclusive(job / "receipt.json", canonical(receipt))
-    if clean:
-        active.unlink()
-        sync_directory(state)
+    with job_lock(job):
+        clean = receipt.get("reason_code") != "expert_cleanup_unverified"
+        if cancellation.exists():
+            record = decode(checked_file(cancellation, 4096))
+            if record["id"] != manifest["id"] or record["approval_sha256"] != receipt["approval_sha256"]:
+                raise Refused("expert_cancellation_binding_invalid")
+            receipt["cancellation"] = record
+            if clean:
+                receipt["reason_code"] = "expert_cancelled"
+        if "reason_code" not in receipt:
+            exclusive(job / "candidate.json", result)
+            if fitted is not None:
+                exclusive(job / "fitted.json", fitted)
+                receipt["artifact_sha256"] = digest(fitted)
+            elif "artifact_sha256" in manifest:
+                receipt["applied_artifact_sha256"] = manifest["artifact_sha256"]
+                receipt["fit_request_id"] = manifest["fit_request_id"]
+            receipt.update(state="succeeded", candidate_sha256=digest(result), scope="unadopted_candidate")
+        exclusive(job / "receipt.json", canonical(receipt))
+        if clean:
+            active.unlink()
+            sync_directory(state)
     return receipt
 
 
 def serve(args):
     if platform.system() != "Linux" or os.geteuid() != 0:
         raise Refused("expert_dedicated_linux_worker_required")
+    state = directory(args.state, private=True)
+    if args.operation == "cancel":
+        return cancel(state, args.job_id, args.operator)
     controllers = Path("/sys/fs/cgroup/cgroup.controllers").read_text().split()
     if not {"cpu", "memory", "pids"}.issubset(controllers):
         raise Refused("expert_cgroup_controls_unavailable")
-    state, env = directory(args.state, private=True), directory(args.environment)
+    env = directory(args.environment)
     if state.is_relative_to(env) or env.is_relative_to(state):
         raise Refused("expert_environment_state_overlap")
     installed = environment(env)
@@ -472,6 +533,9 @@ def main():
     parser.add_argument("--environment", type=Path, required=True)
     modes = parser.add_subparsers(dest="operation", required=True)
     modes.add_parser("pin")
+    cancellation = modes.add_parser("cancel")
+    cancellation.add_argument("job_id")
+    cancellation.add_argument("--operator", required=True)
     for op in ("preview", "approve", "execute", "export"):
         mode = modes.add_parser(op)
         mode.add_argument("request", type=Path)
