@@ -1,0 +1,481 @@
+{
+  "schema": "fold_local_preparation_acceptance_v1",
+  "packet": "P176",
+  "task": "D02-T01",
+  "scope": "Declared fold-local preparation across alternate models and supported legacy searches",
+  "pr": 289,
+  "qualified_head": "6993b146d30aefa363b9b8727cfc1ccc099c3be1",
+  "merge": "addd47bb5ed60acb168fa7c352b7347be76ebf24",
+  "ci_run": 43380783477,
+  "main_run": 43395871531,
+  "merged_tree_matches_qualified_pr": true,
+  "application_source_sha256": "5567dad20b757b5fc57c7b161b64a87da98184cbbb98d600168913cde8e116df",
+  "main_qualified": true,
+  "previous_counts": {
+    "done": 14,
+    "open": 45,
+    "blocked": 7,
+    "total": 66
+  },
+  "accepted_counts": {
+    "done": 15,
+    "open": 44,
+    "blocked": 7,
+    "total": 66
+  },
+  "done_percentage_point_change": 1.5151515151515151,
+  "pr_qualification": {
+    "run": 43380783477,
+    "head": "6993b146d30aefa363b9b8727cfc1ccc099c3be1",
+    "event": "pull_request",
+    "seven_jobs_passed": true,
+    "native": {
+      "tests": 7772,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 820.657,
+      "passed": 7766
+    },
+    "backend": {
+      "tests": 7627,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 5,
+      "time": 999.365,
+      "passed": 7622
+    },
+    "browser": {
+      "total": 49,
+      "expected": 49,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend": 732,
+    "expert_worker": {
+      "schema": "declarai_expert_worker_qualification_v1",
+      "environment": {
+        "architecture": "x86_64",
+        "profile": "declarai_expert_runsc_v1",
+        "rootfs_sha256": "60930b01ac2cf8ef9a6a47856b5cb2556b18148aeacc3db32c62d482e1839751",
+        "runtime_sha256": "d3983d6f38b8f955c60a03fc63970a0e94e29367846ef4826f54e733d24746d0",
+        "worker_sha256": "2b6429daa6188c2044bbc92a26acfa286849908c4d8fb80ba1fed3063274c337"
+      },
+      "cases": [
+        "transform",
+        "score",
+        "exact_code_input_partition_review",
+        "read_only_input",
+        "no_host_mount_or_network",
+        "approval_consumed_once",
+        "bounded_output",
+        "host_cgroup_limits_and_cleanup",
+        "wall_limit_cleanup",
+        "typed_candidate",
+        "runtime_unavailable_blocks"
+      ],
+      "synthetic": true,
+      "result": "passed",
+      "limits": {
+        "code_bytes": 65536,
+        "input_bytes": 524288,
+        "output_bytes": 262144,
+        "rows": 1000,
+        "columns": 32,
+        "seconds": 15,
+        "memory_bytes": 268435456,
+        "scratch_bytes": 8388608,
+        "pids": 32,
+        "cpu_quota": 50000,
+        "cpu_period": 100000,
+        "swap_bytes": 0
+      },
+      "lifecycle": {
+        "schema": "expert_fitted_lifecycle_qualification_v1",
+        "cases": [
+          "sandbox_fit",
+          "opaque_export",
+          "fit_partition_only",
+          "sandbox_apply",
+          "sandbox_evaluate",
+          "sandbox_score",
+          "clean_state_replay",
+          "replay_exact_inputs",
+          "replay_state_mismatch",
+          "same_project",
+          "exact_code",
+          "exact_artifact",
+          "required_state",
+          "state_integrity",
+          "environment_integrity",
+          "controller_never_imports_expert"
+        ],
+        "artifact_sha256": "dce57108ab858f2cf6964602ca4a9114b414c9c9ec8b3e2151244415c1ed9e3f",
+        "all_passed": true
+      },
+      "isolation": {
+        "schema": "expert_hostile_execution_qualification_v1",
+        "cases": [
+          "other_partition_and_control_files_denied",
+          "host_loopback_unix_socket_and_environment_denied",
+          "rootfs_and_privilege_escalation_denied",
+          "scratch_limit_enforced",
+          "host_memory_pressure_stops_candidate",
+          "duplicate_json_and_row_substitution_refused",
+          "pickle_side_effect_confined_to_sandbox",
+          "cpu_quota_throttles_host_work",
+          "exact_active_cancellation_and_descendant_cleanup",
+          "terminal_receipt_replay_and_late_cancel_refused",
+          "next_approved_job_succeeds_after_cancel",
+          "controller_loss_fences_claim_and_other_jobs",
+          "operator_cleanup_preserves_consumed_claim",
+          "failed_runtime_delete_quarantines_without_candidate"
+        ],
+        "all_passed": true,
+        "cleanup_failure_injected": true
+      }
+    },
+    "fold_local_preparation_qualified": true,
+    "fold_local_case_names": [
+      "test_alternate_cv_fits_on_purged_raw_partitions[logistic_regression]",
+      "test_alternate_cv_fits_on_purged_raw_partitions[scorecard]",
+      "test_constrained_search_without_frozen_inputs_refuses_before_fitting[hpo]",
+      "test_constrained_search_without_frozen_inputs_refuses_before_fitting[sfs]",
+      "test_durable_searches_keep_the_source_temporal_recipe",
+      "test_incomplete_constraints_cannot_select_shuffled_outer_fit[split0]",
+      "test_incomplete_constraints_cannot_select_shuffled_outer_fit[split1]",
+      "test_incomplete_constraints_cannot_select_shuffled_outer_fit[split2]",
+      "test_partial_plan_and_validation_only_changes_cannot_alter_fitted_state",
+      "test_scorecard_numeric_fit_uses_the_same_raw_bins_during_scoring",
+      "test_search_replays_partial_encoding_plan_in_each_temporal_fold[hpo]",
+      "test_search_replays_partial_encoding_plan_in_each_temporal_fold[sfs]"
+    ],
+    "original_p175_case_skip_identities_preserved": true,
+    "inherited_ci_jobs_byte_identical": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 14017536778,
+        "sha256": "c94777b663766aa36e587ba1f8c0ac846199ec2eeabb1f47771a21b9e9bb5776"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 14022441977,
+        "sha256": "ebfdb071ac8ea53f5d93d557638cbd7d4a9c11014b97d0b3a8c24a577e4f0764"
+      },
+      "playwright-report": {
+        "artifact_id": 14016692330,
+        "sha256": "0bf35b5bf44ffd506ec3f55fcb8a2ad17f03d62438ccc62f72a82f45680e8a1f"
+      },
+      "private-expert-worker-report": {
+        "artifact_id": 14016830536,
+        "sha256": "d4744d6d97044462c9c6ca772609581c1155fd283975bee6ea2061ff1aba1253"
+      }
+    },
+    "run_attempt": 2,
+    "scoped_native_retry": {
+      "run": 43380783477,
+      "head": "6993b146d30aefa363b9b8727cfc1ccc099c3be1",
+      "native_job": 131737794247,
+      "status": "rejected_native_job_cancelled",
+      "job_wall_seconds": 3900.0,
+      "native_cap_seconds": 900,
+      "job_cap_seconds": 3600,
+      "artifact_published": false,
+      "original_suite_receipt_present": false,
+      "accepted": false,
+      "accepted_job": 131763174846,
+      "accepted_job_started_at": "2026-11-13T07:51:06Z",
+      "accepted_attempt": 2,
+      "other_jobs_reused_from_attempt": 1
+    },
+    "main_qualified": false
+  },
+  "main_qualification": {
+    "run": 43395871531,
+    "head": "addd47bb5ed60acb168fa7c352b7347be76ebf24",
+    "event": "push",
+    "seven_jobs_passed": true,
+    "native": {
+      "tests": 7772,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 888.887,
+      "passed": 7766
+    },
+    "backend": {
+      "tests": 7772,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "time": 562.788,
+      "passed": 7766
+    },
+    "browser": {
+      "total": 49,
+      "expected": 49,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "frontend": 732,
+    "expert_worker": {
+      "schema": "declarai_expert_worker_qualification_v1",
+      "environment": {
+        "architecture": "x86_64",
+        "profile": "declarai_expert_runsc_v1",
+        "rootfs_sha256": "60930b01ac2cf8ef9a6a47856b5cb2556b18148aeacc3db32c62d482e1839751",
+        "runtime_sha256": "d3983d6f38b8f955c60a03fc63970a0e94e29367846ef4826f54e733d24746d0",
+        "worker_sha256": "2b6429daa6188c2044bbc92a26acfa286849908c4d8fb80ba1fed3063274c337"
+      },
+      "cases": [
+        "transform",
+        "score",
+        "exact_code_input_partition_review",
+        "read_only_input",
+        "no_host_mount_or_network",
+        "approval_consumed_once",
+        "bounded_output",
+        "host_cgroup_limits_and_cleanup",
+        "wall_limit_cleanup",
+        "typed_candidate",
+        "runtime_unavailable_blocks"
+      ],
+      "synthetic": true,
+      "result": "passed",
+      "limits": {
+        "code_bytes": 65536,
+        "input_bytes": 524288,
+        "output_bytes": 262144,
+        "rows": 1000,
+        "columns": 32,
+        "seconds": 15,
+        "memory_bytes": 268435456,
+        "scratch_bytes": 8388608,
+        "pids": 32,
+        "cpu_quota": 50000,
+        "cpu_period": 100000,
+        "swap_bytes": 0
+      },
+      "lifecycle": {
+        "schema": "expert_fitted_lifecycle_qualification_v1",
+        "cases": [
+          "sandbox_fit",
+          "opaque_export",
+          "fit_partition_only",
+          "sandbox_apply",
+          "sandbox_evaluate",
+          "sandbox_score",
+          "clean_state_replay",
+          "replay_exact_inputs",
+          "replay_state_mismatch",
+          "same_project",
+          "exact_code",
+          "exact_artifact",
+          "required_state",
+          "state_integrity",
+          "environment_integrity",
+          "controller_never_imports_expert"
+        ],
+        "artifact_sha256": "c8936c8b288733f74a1fbdab54806bc5de18cb36a4828b3e7c327050593aa794",
+        "all_passed": true
+      },
+      "isolation": {
+        "schema": "expert_hostile_execution_qualification_v1",
+        "cases": [
+          "other_partition_and_control_files_denied",
+          "host_loopback_unix_socket_and_environment_denied",
+          "rootfs_and_privilege_escalation_denied",
+          "scratch_limit_enforced",
+          "host_memory_pressure_stops_candidate",
+          "duplicate_json_and_row_substitution_refused",
+          "pickle_side_effect_confined_to_sandbox",
+          "cpu_quota_throttles_host_work",
+          "exact_active_cancellation_and_descendant_cleanup",
+          "terminal_receipt_replay_and_late_cancel_refused",
+          "next_approved_job_succeeds_after_cancel",
+          "controller_loss_fences_claim_and_other_jobs",
+          "operator_cleanup_preserves_consumed_claim",
+          "failed_runtime_delete_quarantines_without_candidate"
+        ],
+        "all_passed": true,
+        "cleanup_failure_injected": true
+      }
+    },
+    "fold_local_preparation_qualified": true,
+    "fold_local_case_names": [
+      "test_alternate_cv_fits_on_purged_raw_partitions[logistic_regression]",
+      "test_alternate_cv_fits_on_purged_raw_partitions[scorecard]",
+      "test_constrained_search_without_frozen_inputs_refuses_before_fitting[hpo]",
+      "test_constrained_search_without_frozen_inputs_refuses_before_fitting[sfs]",
+      "test_durable_searches_keep_the_source_temporal_recipe",
+      "test_incomplete_constraints_cannot_select_shuffled_outer_fit[split0]",
+      "test_incomplete_constraints_cannot_select_shuffled_outer_fit[split1]",
+      "test_incomplete_constraints_cannot_select_shuffled_outer_fit[split2]",
+      "test_partial_plan_and_validation_only_changes_cannot_alter_fitted_state",
+      "test_scorecard_numeric_fit_uses_the_same_raw_bins_during_scoring",
+      "test_search_replays_partial_encoding_plan_in_each_temporal_fold[hpo]",
+      "test_search_replays_partial_encoding_plan_in_each_temporal_fold[sfs]"
+    ],
+    "original_p175_case_skip_identities_preserved": true,
+    "inherited_ci_jobs_byte_identical": true,
+    "artifacts": {
+      "backend-test-reports": {
+        "artifact_id": 14022483768,
+        "sha256": "0a20fe9fb13173c517aea602d6b5c53c37f6af52bce9c84758770452d254f2a8"
+      },
+      "postgresql-runtime-reports": {
+        "artifact_id": 14026730320,
+        "sha256": "1594e314f4d114fdf4b47b121bd1cb9d1c4c292858830d7ce48bd61155a9286b"
+      },
+      "playwright-report": {
+        "artifact_id": 14022634113,
+        "sha256": "a043eb9ab992964633a9199f3be101c6125e76f7d8f657d8da45e681dcb13410"
+      },
+      "private-expert-worker-report": {
+        "artifact_id": 14022158894,
+        "sha256": "fd663c275b18fa7d677aa6cb3824ea654ef5f4f89c26530e6f25d131fee548cf"
+      }
+    },
+    "run_attempt": 1,
+    "scoped_native_retry": null,
+    "main_qualified": true
+  },
+  "native_process_cap_seconds": 900,
+  "native_workers": 2,
+  "native_worker_restarts": 0,
+  "job_cap_seconds": 3600,
+  "full_D02_qualified": false,
+  "release_qualified": false,
+  "customer_accepted": false,
+  "qualification_setup": {
+    "schema": "p176_synthetic_credential_setup_qualification_v1",
+    "scope": "Setup-only correction after independent main timeouts",
+    "source_base": "66a63f13894ca14bf7b24d42ff01a9233caacc51",
+    "files": {
+      "backend/tests/unit/test_project_authority.py": {
+        "before": "ca1f7cd9fa8d59329f004ec68f7b7d483cd01b112b1fcf60283290af332c69b4",
+        "after": "18bd362180ca21d72e09860851574e4ebc82f71bd0fc84f614a98badd8ec5141",
+        "tests": {
+          "test_scoped_lists_and_project_metadata": "8df9107805d1d61208fc428964ad9652b7188a807129dd92e6f5360b9f542d85",
+          "test_pipeline_creation_role_and_binding": "f21894eef419d21993f2163f667bebe8e693e95732d838d2f0206cfe815d3414",
+          "test_missing_role_and_staff_never_grant_access": "4ca2a3863c920c24452ef18fea7d6264348d5da9a1e8056eeaf93c2d31389641",
+          "test_unbound_legacy_needs_explicit_current_assignment_and_no_filename_fallback": "39143a3afcd44d231effd30e740323cdb7a4f344a368a53dda69fbe42773b025",
+          "test_override_and_pipeline_reference_cannot_select_another_project": "f864fdb470cd202664ef615aaeebba1c31214ec9e88a6363535edd3493ee4410",
+          "test_native_upload_and_registered_artifact_require_correct_owner": "3c34cdf9e3c0c3e8e9dc77edf172bd07f3d529e34d81cb776b1c593b7ae73eef",
+          "test_explicit_project_choice_and_durable_activation": "f8bebac036de68ff787e769ac8b1d1834a5b7e8abdf41aece3455f7f296ce638",
+          "test_admin_changes_are_attributable_idempotent_and_cancel_unused_actions": "6525955aa036b1e0aa9818240a36b3b526d609e9bc87503b8544325bd07e5deb",
+          "test_mcp_grant_is_additional_to_project_scope_and_rechecked": "afd5eca4a345d7cb543d0d77115f483394cad274cac15f9546c3f4366ca6ff1d",
+          "test_revoked_stream_withholds_later_chunks_and_records_outcome": "04b610d3872b7a69f26cf1e61bedcd25d3635f0e3d8169c6a40370d4638060fa",
+          "test_database_or_audit_failure_never_returns_data": "db8f993502fa4db95ba5743bd39373319173c8513cd5b5db60f8be89afa53960",
+          "test_holdout_reuse_counts_survive_cross_project_redaction": "105d4ac1b0073182dcd9597f4211a89d4b88196e37691b03311de7f0946e4686",
+          "test_every_native_route_has_an_explicit_policy": "f54518a418702a3433c60d1e937f59b1df46b61f861e309a13c613e86947c986",
+          "test_operator_bootstrap_receipt_and_invalid_command_are_atomic": "965b96c396e4d069e25240a82ac2a11f7a5b90d9de6fa716c9aa367d50d8294b",
+          "test_legacy_frozen_cross_project_history_is_withheld_without_rewriting": "fb876115a6bc8515e73f0c4730965f61123af4d7dd8b143a219ea296ae4c4234",
+          "test_reviewer_cannot_mutate_governance_and_csrf_remains_required": "2667ccc675c25d5f64798c790ce31490a3403b5b79a7fbf6e066d97563a311bd",
+          "test_regrant_cannot_reuse_previous_prepared_approval": "3ff3db7b5e5884a0ae2a5421f6f43387adfca649fcad84f4c21e0bc20e33c8d4",
+          "test_mid_prepare_role_change_does_not_publish_approval": "8d5db9da0c835b499a667b897d7a3ba40978e847b6c617613a2ed964ecaf6a1d",
+          "test_project_listing_revocation_during_response_withholds_names": "f20f02c22c5345b8d76469e1acf885752322fea4e6e7d6c0509889cf5fc49598",
+          "test_reviewer_mcp_reads_but_cannot_prepare_even_with_prepare_grant": "36dcef4c79ee95743847be21053d2c3610bbd3e6149d74fad8e8b751793f4f43",
+          "test_authorized_deletion_returns_success_and_absence_never_grants_access": "6efd55d3cc4193afd9f75b4f6aa21a7ea6304a244c7421a1ce46d193e530ba32",
+          "test_published_native_execution_artifacts_have_explicit_project_owners": "d486d0be3c451e0e6da88d4f2c2a0983a93828b37625993cc377ec84d8497532",
+          "test_revocation_during_export_inspection_withholds_the_final_response": "b28d92ddfe9827e620be9431455363721b3a25f74fd7865cc7b3eb85c1902506",
+          "test_workspace_filter_only_returns_selected_project": "6045fb03bf9ac2b4af17e369b18e3be992155601dd9310ebd386bf290ca0fb8d",
+          "test_workspace_filter_does_not_fall_back_to_all_records": "4bc178c41b479cc0a8a76a1574960252577f42cd5a91d5f87148f2c47a524ce7",
+          "test_workspace_filter_cannot_relabel_a_resource": "fdc3e9809d65c32ed6b401b43119cd09f3fbaa4e9495d644858ea890bcad0884",
+          "test_workspace_explicit_creation_with_multiple_developer_projects": "1e46828de84b67ff220c88bb4d1249f2056bbe8f00cc07fd457a4ae7a2623b25"
+        }
+      },
+      "backend/tests/unit/test_assistant_approvals.py": {
+        "before": "c663bd54744de9798a4a636e99de4a02bb280980d83bd8ce94ce2ca6fa56315a",
+        "after": "1fff97283036f681c837844483c61ac8b19f8994f67cf5cbc85a2aa725465e54",
+        "tests": {
+          "test_review_approval_dispatch_and_replay_are_distinct": "b1dbdb332767e38f282ad5a7afa4ac4792c14cf5cc3d87f071e3a952a88b2938",
+          "test_operator_revocation_closes_approved_action_and_old_browser_session": "adde24485494fd66710da3dd98d27b4e8909985004aa4c9576429137e080d131",
+          "test_revocation_during_preparation_cannot_create_usable_authority": "63be84c9e0743fcf272885fed294a5b91ac0d6c37266e30104fc7b268a551a0e",
+          "test_altered_requests_cannot_inherit_approval": "13599ea3b06bdd6b54ded2de23cbf1f45626f3926aa8ddf69e640e835b2483ee",
+          "test_recorded_input_changes_require_fresh_review": "4aedf69623c9957bf0624e16c480869d194bb25cdc2f99779d687a17fb74dbaa",
+          "test_cancelled_approval_cannot_dispatch": "9384840c3b8fd75326c5be1cbc43bec147e03b3a5e2abaaa3dcba6c0f732b8ae",
+          "test_approval_identity_is_actor_scoped": "8af3a5bed736e0f382a0d2ce4781c98333a1689efb261f1c6b26aae7710c1d95",
+          "test_deactivated_actor_and_deleted_dataset_cannot_dispatch": "643672d2c13256c3a9c1898fce49988d712e98d16eb955d9368dc1eb36c7c650",
+          "test_expired_approval_cannot_dispatch": "94b2e69cd494b72c74f0defb04632978b2cefb5398c4d4a7b3f479a408c4bda7",
+          "test_tampered_stored_proposal_blocks_before_dispatch": "e5ab6bf1379b865695a33c116929a1b41567e9dc042fd30852a987b8ee7c8c66",
+          "test_unbounded_or_nonobject_payloads_cannot_be_prepared": "e89b833a78f8ad87422b77c712f5134f4bcefcee75f39ee3820c11e67fdd517a",
+          "test_code_and_fabricated_confirmation_never_grant_authority": "65fe9d6fe8d26e361e6db9713d82806d184d9aa9eb6fa07d10683aa9336a107b",
+          "test_failed_dispatch_replay_does_not_retry": "ecadc69903f391f9d22a60175a6c52692d38177003e03e5511fd4b7665112d41",
+          "test_unknown_inflight_attempt_cannot_be_repeated": "ef771c74b6b891594a3f693ddaf3dbed3428682e1b4502e8fc2f11f79523a667",
+          "test_actor_snapshot_survives_deletion": "74ce5501cfeb90961ac4d43f3d12a03a6790f71ec8e91ec09e8e298c5e0e24dc",
+          "test_audit_write_failure_cannot_repeat_dispatch": "632bcc23f32486e3ce86ebd201196cb7982821b559dea6424ee4b988af0a35d7",
+          "test_approval_endpoints_require_authentication_and_csrf": "6ec5f811f845d14053d8aeb50b8187778cc04a8701783740d3decf9c8e5cafa9",
+          "test_ordinal_cache_inputs_are_bound_or_blocked": "cef4f39d735f503120f0a8a7303a6bab2fb216eea1d2e2dbcc4ba0ac744c9cde",
+          "test_concurrent_duplicates_dispatch_once": "7dcc1c89e37f589d78704dcfe5c8cc44468008c9d5c41df6f574dde268844673",
+          "test_missing_confirmation_cannot_dispatch": "3546c7f4c5b13fcab5495cfd32bacbdea16effb6a0207d1aa48a9bd382afa5d8"
+        }
+      }
+    },
+    "native_cap_seconds": 900,
+    "native_workers": 2,
+    "native_worker_restarts": 0,
+    "local_case_count": 150,
+    "local_before_seconds": 43.882,
+    "local_after_seconds": 11.386,
+    "rejected_native_attempts": [
+      {
+        "run": 43361723349,
+        "head": "66a63f13894ca14bf7b24d42ff01a9233caacc51",
+        "native_job": 131676553953,
+        "status": "rejected_native_timeout",
+        "artifact_id": 14011052383,
+        "artifact_sha256": "cbb582cf5b59088a94f102dccca47641c3b3539ac1063a249fd71a206eff5d54",
+        "case_progress_at_last_worker_snapshot": 4363,
+        "collected_cases": 7772,
+        "native_cap_seconds": 900,
+        "original_suite_receipt_present": false,
+        "accepted": false
+      },
+      {
+        "run": 43361723349,
+        "head": "66a63f13894ca14bf7b24d42ff01a9233caacc51",
+        "native_job": 131696896431,
+        "status": "rejected_native_timeout",
+        "artifact_id": 14013632981,
+        "artifact_sha256": "a785ab7a948018f6bcbff67bee654829eb927e22ee2fa79e23423538153995ed",
+        "case_progress_at_last_worker_snapshot": 7772,
+        "collected_cases": 7772,
+        "native_cap_seconds": 900,
+        "original_suite_receipt_present": false,
+        "accepted": false,
+        "case_and_skip_identities_match_qualified_pr": true,
+        "zero_reported_case_failures": true,
+        "worker_sessions_successful": true,
+        "failure_boundary": "controller_finalization_after_worker_success"
+      },
+      {
+        "run": 43361723349,
+        "head": "66a63f13894ca14bf7b24d42ff01a9233caacc51",
+        "native_job": 131716987283,
+        "status": "rejected_native_timeout",
+        "artifact_id": 14015579645,
+        "artifact_sha256": "0ecc520180c7ff69748b1ecfa4cdb5e34eb4e1ad8ce29ba5a306b9535a50239d",
+        "case_progress_at_last_worker_snapshot": 7770,
+        "collected_cases": 7772,
+        "native_cap_seconds": 900,
+        "original_suite_receipt_present": false,
+        "workers_completed": false,
+        "accepted": false
+      }
+    ],
+    "prior_implementation_pr": 288,
+    "prior_implementation_pr_run": 43355189446,
+    "job_cap_seconds": 3600,
+    "native_case_count": 7772,
+    "original_native_skips": 6,
+    "test_bodies_unchanged": true,
+    "production_source_unchanged": true,
+    "workflow_unchanged": true
+  },
+  "original_implementation_pr": 288,
+  "original_implementation_run": 43355189446
+}
