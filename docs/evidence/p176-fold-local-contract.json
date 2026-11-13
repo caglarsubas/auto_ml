@@ -1,0 +1,24 @@
+{
+  "schema": "fold_local_preparation_qualification_v1",
+  "packet": "P176",
+  "task": "D02-T01",
+  "base": "8c4285ecc32989c07b2dbf7f916f375e55715028",
+  "sources": {
+    "backend/modeling/alt_pipelines.py": "26be32fab20474abca8147d878fc51fe21fd9d830b9323e26dc1db9661edfc8f",
+    "backend/modeling/development_assessment.py": "2c0659945a7e05619a7af75a48e2f65fcc8bf9181900f0cef1627dfb918b781b",
+    "backend/modeling/development_validation.py": "7527e94358b2d5673f546e5882b8bb1932ddb3d57e5a1fd8f34de1ad0a6921bc",
+    "backend/modeling/sfs_objective.py": "c18b55a814018884a4008dffc11adb3131d471fa0cb29fa465fddca14cf733a5",
+    "backend/modeling/split_contract.py": "d671819879d9cd29b9d2eeac749aac168dcbc3d2ad371091770996a1f34a78a0",
+    "backend/modeling/tuning_evidence.py": "ee66b0ea8338f55b24e3e3f3b9af27ab5fa3d3273c3f4f41448b0467f3483679",
+    "backend/modeling/views.py": "23993e93ac10aaef1938bf045a28c9793c3d446eeb84934ea5da99542036cdd4",
+    "backend/tests/unit/test_fold_local_preparation.py": "1d3b5382a422da42a172d484e34596b0dbba4da4163ebdb25fe6c75f35dac137",
+    "docs/FOLD_LOCAL_PREPARATION.md": "4d5a93e9e7bdd6cb916c38174501a126c698e341c3f0a12f8a72f297c06b1ccc"
+  },
+  "new_backend_cases": 12,
+  "prior_native_cases": 7760,
+  "native_cases": 7772,
+  "native_workers": 2,
+  "native_process_cap_seconds": 900,
+  "native_job_cap_seconds": 3600,
+  "scope": "Declared fold-local preparation across alternate models and supported legacy searches"
+}

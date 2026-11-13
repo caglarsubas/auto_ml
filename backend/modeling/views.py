@@ -28,7 +28,7 @@ from modeling.sfs_utils import run_forward_sfs, run_backward_sfs, run_sfs_with_p
 from modeling.hyperparam_utils import (
     run_hyperparam_search_with_progress, validate_param_space, recommend_search_method,
 )
-from modeling.development_validation import development_folds
+from modeling.development_validation import development_folds, fit_category_levels, search_validation_context
 from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
 from modeling.collinearity import write_snapshot, load_snapshot, detail
 from modeling.execution_artifacts import begin_execution, publish_execution, publish_candidate, replace_projection, load_development_data, load_execution, projection_lock
@@ -320,6 +320,7 @@ def execute_legacy_training(data):
                 'frame': df.loc[train_idx.append(valid_idx)].copy(), 'labels': encoded_target.loc[train_idx.append(valid_idx)], 'task': prediction_contract['task'],
                 'target_column': target_col, 'excluded_features': excluded_cols_for_modeling,
                 'split_meta': split_meta, 'encoding_plan': encoding_plan, 'use_native': use_native,
+                'categorical_features': [column for column in X_raw if column in meta_cat_cols] if not purifier_recipe else [],
                 'purifier_recipe': purifier_recipe, 'prediction_contract': prediction_contract,
                 'class_weight_policy': 'train_label_ratio' if prediction_contract['task'] == 'classification' and len(prediction_contract['class_mapping']) == 2 else None,
             }
@@ -350,6 +351,10 @@ def execute_legacy_training(data):
                     X_with_target = X_with_target.drop(columns=[target_col])
                 X_raw = X_with_target
                 encoding_report = enc_report_list
+                encoding_report.extend(fit_category_levels(
+                    X_raw, train_idx, encoded={entry['feature'] for entry in encoding_report},
+                    categorical=cat_cols,
+                ))
                 # After apply_encoding, some columns may now be numeric (encoded)
                 # Refresh cat_cols: only those that are still pd.Categorical
                 cat_cols = [c for c in X_raw.columns if hasattr(X_raw[c], 'cat') and X_raw[c].dtype.name == 'category']
@@ -376,18 +381,8 @@ def execute_legacy_training(data):
                     print(f"[ModelingStart] Could not save encoded CSV: {enc_save_err}")
             else:
                 # Default behavior: convert all categorical columns to pd.Categorical for native support
-                enable_cat = len(cat_cols) > 0
-                for c in cat_cols:
-                    if c in X_raw.columns:
-                        levels = pd.Index(X_raw.loc[train_idx, c].dropna().unique())
-                        X_raw[c] = pd.Categorical(X_raw[c], categories=levels)
-                        cats = [str(v) for v in X_raw[c].cat.categories]
-                        encoding_report.append({
-                            'feature': c,
-                            'strategy': 'native_categorical',
-                            'categories': cats,
-                            'nunique': len(cats),
-                        })
+                encoding_report = fit_category_levels(X_raw, train_idx, categorical=cat_cols)
+                enable_cat = bool(encoding_report)
             print(f"[ModelingStart] Categorical features ({len(cat_cols)}): {cat_cols}")
             print(f"[ModelingStart] enable_categorical={enable_cat}, total features={X_raw.shape[1]}")
             # Drop columns with all NaNs
@@ -1820,7 +1815,10 @@ def execute_legacy_sfs(data):
         # Older regression pickles may omit raw frames — fall back to imputed matrices.
         X_train_raw = train_data.get('X_train_raw', X_train)
         X_valid_raw = train_data.get('X_valid_raw', X_valid)
-        context = train_data.get('validation_context')
+        try:
+            context = search_validation_context(train_data)
+        except ValueError as error:
+            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
         contract = train_data.get('prediction_contract') or {}
         if len(contract.get('class_mapping') or []) > 2:
             return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -2369,7 +2367,10 @@ def execute_legacy_hpo(data):
         y_train = train_data['y_train']
         X_valid = train_data['X_valid']
         y_valid = train_data['y_valid']
-        context = train_data.get('validation_context')
+        try:
+            context = search_validation_context(train_data)
+        except ValueError as error:
+            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
         contract = train_data.get('prediction_contract') or {}
         if len(contract.get('class_mapping') or []) > 2:
             return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)

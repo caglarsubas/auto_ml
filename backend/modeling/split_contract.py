@@ -106,6 +106,31 @@ def _align_indices(df: pd.DataFrame, idx_list: Sequence) -> pd.Index:
     return pd.Index(idx_list)
 
 
+def validation_strategy(meta):
+    """Resolve stored split declarations before choosing a partitioner."""
+    config = meta.get('split_config')
+    if config is None:
+        config = {}
+    if not isinstance(config, dict):
+        raise ValueError('Stored split configuration must be an object.')
+    declared = config.get('strategy')
+    strategy = meta.get('strategy', declared or 'random')
+    allowed = ('random', 'group', 'oot')
+    if strategy not in allowed or (declared is not None and declared not in allowed):
+        raise ValueError('Unsupported validation strategy.')
+    if declared is not None and ('oot' in (declared, strategy)) and declared != strategy:
+        raise ValueError('Stored temporal validation declarations disagree. Recreate the split.')
+    if strategy == 'random' and (config.get('group_column') or declared == 'group'):
+        strategy = 'group'
+    if strategy == 'group' and not config.get('group_column'):
+        raise ValueError('Declared group validation requires group_column; shuffled fallback is prohibited.')
+    if strategy != 'oot' and config.get('label_end_column'):
+        raise ValueError('Outcome windows require out-of-time validation.')
+    if strategy == 'oot' and config.get('label_end_column') and not config.get('date_column'):
+        raise ValueError('Outcome windows require an explicit date_column.')
+    return strategy, config
+
+
 def resolve_modeling_splits(
     df: pd.DataFrame,
     y: pd.Series,
@@ -136,11 +161,11 @@ def resolve_modeling_splits(
         raise ValueError('Validation requires unique row IDs, at least eight rows and a valid validation fraction.')
     if not y.index.equals(df.index) or y.isna().any():
         raise ValueError('Labels must align exactly with the split frame and contain no missing outcomes.')
-    if artifact:
+    if artifact is not None:
         outer_train = _align_indices(df, artifact.get('train_idx') or [])
         outer_test = _align_indices(df, artifact.get('test_idx') or [])
-        meta['strategy'] = artifact.get('strategy', 'random')
         meta['split_config'] = artifact.get('split_config')
+        meta['strategy'], _ = validation_strategy(artifact)
         if len(outer_train) >= 5 and len(outer_test) >= 1 and outer_train.intersection(outer_test).empty:
             meta['source'] = 'preprocessing'
             meta['used_preprocessing_split'] = True

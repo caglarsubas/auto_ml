@@ -69,7 +69,8 @@ def tuning_basis(X_train, y_train, X_valid, y_valid, context, execution_id, algo
                       'raw_valid': input_receipt(context['frame'].loc[X_valid.index], y_valid),
                       'configuration': {key: context.get(key) for key in (
                           'task', 'prediction_contract', 'target_column', 'split_meta',
-                          'excluded_features', 'purifier_recipe', 'encoding_plan', 'use_native', 'class_weight_policy')}}
+                          'excluded_features', 'purifier_recipe', 'encoding_plan', 'categorical_features',
+                          'use_native', 'class_weight_policy')}}
     try:
         search_runtime = {'optuna': version('optuna')}
     except PackageNotFoundError:
