@@ -112,9 +112,15 @@
         "[P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md)",
         "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)",
         "[Fold-local alternate modeling and search](FOLD_LOCAL_PREPARATION.md)",
-        "[P176 source and qualification contract](evidence/p176-fold-local-contract.json)"
+        "[P176 source and qualification contract](evidence/p176-fold-local-contract.json)",
+        "[P176 fold-local preparation qualification](evidence/p176-qualification.json)",
+        "[Qualified PR #289](https://github.com/caglarsubas/auto_ml/pull/289)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43395871531)",
+        "[Implementation PR #288](https://github.com/caglarsubas/auto_ml/pull/288)",
+        "[Native qualification setup](NATIVE_QUALIFICATION_SETUP.md)",
+        "[Retained failed original main CI](https://github.com/caglarsubas/auto_ml/actions/runs/43361723349)"
       ],
-      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P176 makes stored constraints authoritative for search, fits unplanned categories inside each fit partition and replays new scorecard bins on the raw scale. D02-T01 qualification is in progress."
+      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P176 qualifies D02-T01 on the supported alternate-model and durable search paths. D02-T02 complete provenance export and D02-T03 constrained target encoding remain open."
     },
     {
       "id": "D03",
@@ -2165,6 +2171,10 @@
     {
       "date": "2026-11-13",
       "change": "Implement P176 for D02-T01, the first unmet validation prerequisite for D09-T02. Hold backlog credit until qualification."
+    },
+    {
+      "date": "2026-11-13",
+      "change": "Accept D02-T01 fold-local preparation after all seven PR #289 checks and independent main 43395871531 pass source and artifact audits. Keep 66 tasks and move done/open/blocked from 14/45/7 to 15/44/7."
     }
   ],
   "implementation_packets": [
@@ -5281,13 +5291,19 @@
         "D02"
       ],
       "owner": "Backend/ML",
-      "status": "implemented",
+      "status": "tested",
       "description": "Resolve declared validation before fitting, replay training-only category levels for partial encoding plans, and preserve scorecard bins through scoring.",
       "evidence": [
         "[Fold-local alternate modeling and search](FOLD_LOCAL_PREPARATION.md)",
-        "[P176 source and qualification contract](evidence/p176-fold-local-contract.json)"
+        "[P176 source and qualification contract](evidence/p176-fold-local-contract.json)",
+        "[P176 fold-local preparation qualification](evidence/p176-qualification.json)",
+        "[Qualified PR #289](https://github.com/caglarsubas/auto_ml/pull/289)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43395871531)",
+        "[Implementation PR #288](https://github.com/caglarsubas/auto_ml/pull/288)",
+        "[Native qualification setup](NATIVE_QUALIFICATION_SETUP.md)",
+        "[Retained failed original main CI](https://github.com/caglarsubas/auto_ml/actions/runs/43361723349)"
       ],
-      "remaining": "Complete PR and independent main qualification. D02-T02 export and D02-T03 constrained target encoding remain open."
+      "remaining": "D02-T01 is accepted for the supported paths. D02-T02 fold provenance export is ready. D09-T02 awaits its remaining prerequisites."
     }
   ],
   "release_qualification": {
@@ -5525,7 +5541,7 @@
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [],
         "acceptance": [
           "Learned preparation uses only each fit partition.",
@@ -5534,7 +5550,13 @@
         "blockers": [],
         "evidence": [
           "[Fold-local alternate modeling and search](FOLD_LOCAL_PREPARATION.md)",
-          "[P176 source and qualification contract](evidence/p176-fold-local-contract.json)"
+          "[P176 source and qualification contract](evidence/p176-fold-local-contract.json)",
+          "[P176 fold-local preparation qualification](evidence/p176-qualification.json)",
+          "[Qualified PR #289](https://github.com/caglarsubas/auto_ml/pull/289)",
+          "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43395871531)",
+          "[Implementation PR #288](https://github.com/caglarsubas/auto_ml/pull/288)",
+          "[Native qualification setup](NATIVE_QUALIFICATION_SETUP.md)",
+          "[Retained failed original main CI](https://github.com/caglarsubas/auto_ml/actions/runs/43361723349)"
         ],
         "packet_refs": [
           "P176"
