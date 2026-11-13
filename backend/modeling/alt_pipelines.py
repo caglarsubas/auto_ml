@@ -146,13 +146,8 @@ def fit_woe_maps(
         s = X[col]
         bins_meta: List[Dict[str, Any]] = []
         if pd.api.types.is_numeric_dtype(s) and s.nunique(dropna=True) > max_bins:
-            try:
-                cats, edges = pd.qcut(
-                    s.rank(method='first'), q=min(max_bins, max(2, s.nunique())),
-                    duplicates='drop', retbins=True,
-                )
-            except Exception:
-                cats, edges = pd.cut(s, bins=min(max_bins, max(2, int(s.nunique()))), duplicates='drop', retbins=True)
+            _, edges = pd.qcut(s, q=max_bins, duplicates='drop', retbins=True)
+            cats = _numeric_woe_bins(s, edges)
             tab = pd.crosstab(cats, y)
             if tab.shape[1] < 2:
                 continue
@@ -164,21 +159,20 @@ def fit_woe_maps(
             iv = float(((good_rate - bad_rate) * woe).sum())
             mapping = {}
             for i, idx in enumerate(tab.index):
-                mapping[str(idx)] = float(woe.iloc[i])
+                mapping[str(int(idx))] = float(woe.iloc[i])
                 bins_meta.append({
-                    'label': str(idx),
+                    'label': f'{edges[int(idx)]:.6g} to {edges[int(idx) + 1]:.6g}',
                     'woe': float(woe.iloc[i]),
                     'iv_contrib': float((good_rate.iloc[i] - bad_rate.iloc[i]) * woe.iloc[i]),
                 })
             maps[col] = {
-                'kind': 'numeric_qcut',
+                'kind': 'numeric_quantile_v2',
                 'iv': iv if np.isfinite(iv) else None,
                 'edges': [float(e) for e in edges] if hasattr(edges, '__iter__') else [],
                 'mapping': mapping,
                 'bins': bins_meta,
             }
-            # transform via qcut labels then map
-            woe_cols[col] = cats.astype(str).map(mapping).astype(float).fillna(0.0)
+            woe_cols[col] = cats.astype('Int64').astype('string').map(mapping).fillna(0.0)
         else:
             cats = s.astype(str).fillna('__NULL__')
             tab = pd.crosstab(cats, y)
@@ -211,6 +205,13 @@ def fit_woe_maps(
     return maps, woe_df
 
 
+def _numeric_woe_bins(series, edges):
+    # Interior cut points also define the first and last bin for new extremes.
+    values = series.to_numpy(dtype=float, na_value=np.nan)
+    bins = np.searchsorted(edges[1:-1], values, side='left')
+    return pd.Series(bins, index=series.index).where(np.isfinite(values))
+
+
 def transform_woe(X: pd.DataFrame, maps: Dict[str, Any]) -> pd.DataFrame:
     out = {}
     for col, meta in maps.items():
@@ -218,7 +219,11 @@ def transform_woe(X: pd.DataFrame, maps: Dict[str, Any]) -> pd.DataFrame:
             continue
         mapping = meta.get('mapping') or {}
         s = X[col]
-        if meta.get('kind') == 'numeric_qcut' and meta.get('edges'):
+        if meta.get('kind') == 'numeric_quantile_v2':
+            cats = _numeric_woe_bins(s, meta['edges'])
+            out[col] = cats.astype('Int64').astype('string').map(mapping).fillna(0.0)
+        elif meta.get('kind') == 'numeric_qcut' and meta.get('edges'):
+            # Historical artifacts retain the prediction behavior they recorded.
             try:
                 cats = pd.cut(s, bins=meta['edges'], include_lowest=True)
                 out[col] = cats.astype(str).map(mapping).astype(float).fillna(0.0)

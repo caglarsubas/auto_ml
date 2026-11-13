@@ -142,6 +142,7 @@ def search_basis(
                     "excluded_features",
                     "purifier_recipe",
                     "encoding_plan",
+                    "categorical_features",
                     "use_native",
                 )
             },

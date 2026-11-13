@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupKFold, KFold, StratifiedKFold, TimeSeriesSplit
 
-from modeling.split_contract import fit_numeric_imputer, transform_numeric_impute
+from modeling.split_contract import fit_numeric_imputer, transform_numeric_impute, validation_strategy
 from preprocessing.purifier_contract import parse_split_dates
 
 
@@ -16,11 +16,10 @@ def development_folds(context, row_index, y, n_splits):
     if not row_index.is_unique or not row_index.isin(context['frame'].index).all():
         raise ValueError('Development rows must be unique members of the recorded development population.')
     frame = context['frame'].loc[row_index]
-    config = (context.get('split_meta') or {}).get('split_config') or {}
-    strategy = (context.get('split_meta') or {}).get('strategy', 'random')
+    strategy, config = validation_strategy(context.get('split_meta') or {})
     group_column = config.get('group_column')
-    if strategy == 'group' and not group_column:
-        raise ValueError('Declared group validation requires group_column; shuffled fallback is prohibited.')
+    if group_column and group_column not in frame:
+        raise ValueError('Declared group_column is absent from the development population.')
     groups = frame[group_column] if group_column else None
     if groups is not None and groups.isna().any():
         raise ValueError('Development groups contain missing identifiers.')
@@ -36,6 +35,8 @@ def development_folds(context, row_index, y, n_splits):
             raise ValueError('Development temporal folds require valid timestamps.')
         order = dates.sort_values(kind='mergesort').index
         end_column = config.get('label_end_column')
+        if end_column and end_column not in frame:
+            raise ValueError('Declared label_end_column is absent from the development population.')
         ends = parse_split_dates(frame[end_column]) if end_column else dates
         if ends.isna().any() or (ends < dates).any():
             raise ValueError('Development label windows are invalid.')
@@ -71,6 +72,34 @@ def _check_fold(train, valid):
         raise ValueError('Declared constraints leave an invalid development fold.')
 
 
+def fit_category_levels(frame, train, *, encoded=(), categorical=()):
+    """Fit native category inventories for columns left categorical by the plan."""
+    reports = []
+    for column in frame:
+        if column not in encoded and (column in categorical or not pd.api.types.is_numeric_dtype(frame[column])):
+            values = frame[column]
+            levels = pd.Index(values.loc[train].dropna().unique())
+            frame[column] = pd.Categorical(values.where(values.isin(levels)), categories=levels)
+            reports.append({'feature': column, 'strategy': 'native_categorical',
+                            'categories': levels.astype(str).tolist(), 'nunique': len(levels),
+                            'fit_on_train_only': True})
+    return reports
+
+
+def search_validation_context(data):
+    """Protect constrained historical searches with missing or conflicting context."""
+    context = data.get('validation_context')
+    strategy, config = validation_strategy(data.get('split_meta') or {})
+    if strategy in ('group', 'oot'):
+        if not context:
+            raise ValueError('Constrained search requires recorded development inputs; refit the source model.')
+        recorded_strategy, recorded = validation_strategy(context.get('split_meta') or {})
+        columns = ('group_column', 'date_column', 'label_end_column')
+        if recorded_strategy != strategy or any(config.get(key) != recorded.get(key) for key in columns):
+            raise ValueError('Search validation contradicts the source split; refit the source model.')
+    return context
+
+
 def prepare_fold(context, train, valid, features=None):
     source = context['frame']
     target = context['target_column']
@@ -88,15 +117,20 @@ def prepare_fold(context, train, valid, features=None):
     plan = context.get('encoding_plan') or []
     if plan:
         from encoding.encoding_utils import apply_encoding
+        strategy, _ = validation_strategy(context.get('split_meta') or {})
+        use_native = context.get('use_native', True)
+        if strategy in ('group', 'oot') and not use_native and any(
+                entry.get('encoding_method') == 'target_encoding' for entry in plan):
+            raise ValueError('Target encoding with temporal/entity constraints requires partition-aware inner encoding.')
         work[target] = context['labels'].loc[work.index]
-        work, report = apply_encoding(work, plan, target_col=target, use_native=context.get('use_native', True), fit_idx=train)
+        work, report = apply_encoding(work, plan, target_col=target, use_native=use_native, fit_idx=train)
         work = work.drop(columns=[target])
     else:
         report = []
-        for column in work:
-            if not pd.api.types.is_numeric_dtype(work[column]):
-                levels = pd.Index(work.loc[train, column].dropna().unique())
-                work[column] = pd.Categorical(work[column], categories=levels)
+    report.extend(fit_category_levels(
+        work, train, encoded={item['feature'] for item in report},
+        categorical=context.get('categorical_features', ()),
+    ))
     if features is not None:
         # An OHE column whose category is absent in the fit fold is all zero.
         work = work.reindex(columns=features, fill_value=0.)

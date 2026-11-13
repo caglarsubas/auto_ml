@@ -9,6 +9,7 @@ from sklearn.metrics import (
 )
 
 from modeling.development_validation import prepared_folds
+from modeling.split_contract import validation_strategy
 
 
 def metric_coverage(values, *, complete_only=True):
@@ -317,9 +318,8 @@ def assess_development_cv(context, X, y, algorithm, params, *, n_splits=5,
     if context.get('purifier_recipe') and primary and coverage.get(primary, {}).get('status') != 'complete':
         count = coverage.get(primary, {}).get('n_valid', 0)
         raise ValueError(f'Declared objective {primary} is available in {count} of {n_splits} development folds; revise the metric or validation population.')
-    config = (context.get('split_meta') or {}).get('split_config') or {}
+    strategy, config = validation_strategy(context.get('split_meta') or {})
     group = config.get('group_column')
-    strategy = (context.get('split_meta') or {}).get('strategy', 'random')
     summary = {'schema_version': 2, 'status': 'completed', 'task': task, 'n_splits': n_splits,
                'folds': rows, 'fold_provenance': receipts, 'metric_coverage': coverage,
                'cv_strategy': 'time_series' if strategy == 'oot' else ('group' if group else 'random'),

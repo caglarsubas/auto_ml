@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-11-12",
+  "updated": "2026-11-13",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -110,9 +110,11 @@
         "[P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md)",
         "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)",
         "[P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md)",
-        "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)"
+        "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)",
+        "[Fold-local alternate modeling and search](FOLD_LOCAL_PREPARATION.md)",
+        "[P176 source and qualification contract](evidence/p176-fold-local-contract.json)"
       ],
-      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open."
+      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P176 makes stored constraints authoritative for search, fits unplanned categories inside each fit partition and replays new scorecard bins on the raw scale. D02-T01 qualification is in progress."
     },
     {
       "id": "D03",
@@ -2159,6 +2161,10 @@
     {
       "date": "2026-11-12",
       "change": "Accept D08-T03 for the dedicated Linux expert worker after all seven PR #286 checks and independent main 43235517556 pass source and artifact audits. Keep 66 tasks and move done/open/blocked from 13/46/7 to 14/45/7."
+    },
+    {
+      "date": "2026-11-13",
+      "change": "Implement P176 for D02-T01, the first unmet validation prerequisite for D09-T02. Hold backlog credit until qualification."
     }
   ],
   "implementation_packets": [
@@ -5266,6 +5272,22 @@
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43235517556)"
       ],
       "remaining": "D08-T03 is accepted for the dedicated operator-mediated worker. Governed browser/MCP integration and the complete D06-T03 threat model remain open."
+    },
+    {
+      "id": "P176",
+      "kind": "product_implementation",
+      "title": "Fold-local preparation for alternate models and search",
+      "items": [
+        "D02"
+      ],
+      "owner": "Backend/ML",
+      "status": "implemented",
+      "description": "Resolve declared validation before fitting, replay training-only category levels for partial encoding plans, and preserve scorecard bins through scoring.",
+      "evidence": [
+        "[Fold-local alternate modeling and search](FOLD_LOCAL_PREPARATION.md)",
+        "[P176 source and qualification contract](evidence/p176-fold-local-contract.json)"
+      ],
+      "remaining": "Complete PR and independent main qualification. D02-T02 export and D02-T03 constrained target encoding remain open."
     }
   ],
   "release_qualification": {
@@ -5503,15 +5525,20 @@
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [],
         "acceptance": [
           "Learned preparation uses only each fit partition.",
           "No shuffled fallback appears in constrained workflows."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Fold-local alternate modeling and search](FOLD_LOCAL_PREPARATION.md)",
+          "[P176 source and qualification contract](evidence/p176-fold-local-contract.json)"
+        ],
+        "packet_refs": [
+          "P176"
+        ],
         "order": 3,
         "basis": "Remaining acceptance scope from D02; existing tested foundation is reused, not rebuilt."
       },
@@ -7219,16 +7246,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P175 expert isolation and cancellation",
-      "recorded_on": "2026-11-12",
-      "inventory_source_commit": "c288ff1d791a4453f18f06106161f8873a725212",
+      "label": "Before P176 fold-local preparation",
+      "recorded_on": "2026-11-13",
+      "inventory_source_commit": "8c4285ecc32989c07b2dbf7f916f375e55715028",
       "total": 66,
       "counts": {
-        "ready": 5,
+        "ready": 4,
         "in_progress": 0,
         "waiting": 41,
         "blocked": 7,
-        "done": 13
+        "done": 14
       }
     },
     "baseline_history": [
@@ -7398,6 +7425,20 @@
           "waiting": 42,
           "blocked": 7,
           "done": 12
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P175 expert isolation and cancellation",
+        "recorded_on": "2026-11-12",
+        "inventory_source_commit": "c288ff1d791a4453f18f06106161f8873a725212",
+        "total": 66,
+        "counts": {
+          "ready": 5,
+          "in_progress": 0,
+          "waiting": 41,
+          "blocked": 7,
+          "done": 13
         }
       }
     ]
