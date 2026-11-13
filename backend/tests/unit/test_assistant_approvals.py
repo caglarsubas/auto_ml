@@ -3,8 +3,10 @@
 import copy
 from datetime import timedelta
 from pathlib import Path
+from functools import lru_cache
 
 import pytest
+from django.contrib.auth.hashers import get_hasher
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -16,8 +18,15 @@ from modeling.models import PipelineRun
 pytestmark = [pytest.mark.unit, pytest.mark.auth_boundary, pytest.mark.django_db]
 
 
+@lru_cache(maxsize=8)
+def _approval_password(hasher, username):
+    # Reuse only the seeded credential encoding. The hasher, users, database
+    # sessions, CSRF and real authentication under test are unchanged.
+    return hasher.encode('synthetic-approval-test-pass', hasher.salt())
+
+
 def session(django_user_model, username):
-    actor = django_user_model.objects.create_user(username=username, password="synthetic-approval-test-pass")
+    actor = django_user_model.objects.create(username=username, password=_approval_password(get_hasher(), username))
     client = APIClient(enforce_csrf_checks=True)
     token = client.get("/api/auth/session/").json()["csrf_token"]
     result = client.post(

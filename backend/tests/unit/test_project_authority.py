@@ -4,9 +4,11 @@ import io
 import json
 import uuid
 from pathlib import Path
+from functools import lru_cache
 from unittest.mock import patch
 
 import pytest
+from django.contrib.auth.hashers import get_hasher
 from django.core.management import call_command, CommandError
 from django.db import DatabaseError
 from django.http import StreamingHttpResponse
@@ -34,6 +36,13 @@ from modeling.models import PipelineRun
 pytestmark = [pytest.mark.unit, pytest.mark.auth_boundary, pytest.mark.django_db(transaction=True)]
 
 
+@lru_cache(maxsize=8)
+def _project_password(hasher, username):
+    # Reuse only the seeded credential encoding. The hasher, users, database
+    # sessions, CSRF and real authentication under test are unchanged.
+    return hasher.encode('synthetic-project-pass', hasher.salt())
+
+
 @pytest.fixture
 def world(settings, tmp_path, django_user_model):
     settings.MEDIA_ROOT = str(tmp_path)
@@ -42,7 +51,7 @@ def world(settings, tmp_path, django_user_model):
     a, b = Project.objects.create(name="A"), Project.objects.create(name="B")
     users, clients = {}, {}
     for role in ["developer", "reviewer", "admin", "outsider"]:
-        user = django_user_model.objects.create_user(username=role, password="synthetic-project-pass")
+        user = django_user_model.objects.create(username=role, password=_project_password(get_hasher(), role))
         if role != "outsider":
             ProjectMembership.objects.create(project=a, actor=user, role=role)
         client = Client()
