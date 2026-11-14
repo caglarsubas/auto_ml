@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from django.conf import settings
 
-from encoding.fitted import apply_fitted_encoding
+from encoding.fitted import apply_fitted_encoding, scoring_encoding_reports
 from modeling.execution_artifacts import digest_file, execution_root, projection_lock, replace_projection
 from deployment.evidence import current_selection, resolve_handoff, verify_bundle
 
@@ -215,7 +215,7 @@ def _build_score_bundle(file_id, context, out):
         'prediction_contract': contract,
         'fit_receipt': model.get('fit_receipt'),
         'task': model.get('task') or 'classification',
-        'encoding_report': td.get('encoding_report', []) if os.path.exists(train_pkl) else [],
+        'encoding_report': scoring_encoding_reports(td.get('encoding_report', [])) if os.path.exists(train_pkl) else [],
         'input_stage': 'raw_unencoded' if purifier else ('processed_unencoded' if contract else 'legacy_model_features'),
         'purifier_file': 'purifier.json' if purifier else None,
         'purifier_provenance': 'partition_fitted' if purifier else 'legacy_unverified',

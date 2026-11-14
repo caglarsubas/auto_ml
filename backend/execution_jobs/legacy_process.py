@@ -238,6 +238,8 @@ def execute(job, token, check):
         event(job.pk, token, "legacy_failure", detail)
         legacy.conflict("native_execution_failed")
     returned = json.loads(legacy.read(control / "result.json", legacy.BUDGET["max_result_bytes"]))
+    if returned["outcome"] == "result_budget_exceeded":
+        legacy.conflict("result_budget")
     if returned["outcome"] == "cancelled":
         retain_checkpoint(job, token, control, work)
         raise service.JobStopped

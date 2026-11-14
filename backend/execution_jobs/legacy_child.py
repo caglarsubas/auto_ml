@@ -82,7 +82,9 @@ def main():
             )
         raw = json.dumps({"outcome": outcome, "payload": payload}, allow_nan=False, default=str).encode()
         if len(raw) > 8 * 1024**2:
-            raise ValueError("legacy_result_budget")
+            # Keep the existing result cap and return only a safe budget code.
+            (control / "result.json").write_text('{"outcome":"result_budget_exceeded"}')
+            return
         (control / "result.json").write_bytes(raw)
     except Exception as error:
         from modeling.async_failures import record_failure

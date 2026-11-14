@@ -82,5 +82,11 @@ def tuning_basis(X_train, y_train, X_valid, y_valid, context, execution_id, algo
              'implementation_sha256': {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
                                        for name in ('hyperparam_utils.py', 'tuning_evidence.py', 'sfs_objective.py',
                                                     'development_validation.py', 'development_assessment.py', 'booster_adapters.py', 'declared_metric.py')}}
+    from modeling.development_validation import target_encoding_features
+
+    if context and target_encoding_features(context):
+        for name in ('encoding_utils.py', 'constrained.py'):
+            path = root.parent / 'encoding' / name
+            basis['implementation_sha256'][f'encoding/{name}'] = hashlib.sha256(path.read_bytes()).hexdigest()
     basis['sha256'] = receipt_digest(basis)
     return basis

@@ -11,9 +11,10 @@ ENCODER_FIELDS = ('feature', 'strategy', 'strategy_applied', 'mapping', 'new_col
 
 
 class FoldEvidence:
-    def __init__(self, development_rows, *, raw_input_sha256=None):
+    def __init__(self, development_rows, *, raw_input_sha256=None, validation_specification=None):
         self.development_rows = set(development_rows)
         self.raw_input_sha256 = raw_input_sha256
+        self.validation_specification = validation_specification
         self.partitions = {}
         self.transforms = {}
         self.fits = []
@@ -77,9 +78,12 @@ class FoldEvidence:
                     for entry in state.get('encoding', [])]
         for entry in encoding:
             mapping = entry.get('mapping') or {}
-            if mapping.get('type') == 'target_encoding' and not verify_encoder_folds(mapping, train_rows):
-                self.gaps.append({'stage': stage, 'reason': 'inner_target_encoding_folds_unverified',
-                                  'feature': entry['feature']})
+            if mapping.get('type') == 'target_encoding':
+                if not verify_encoder_folds(
+                    mapping, train_rows, task=fit.get('task'), specification=self.validation_specification,
+                ):
+                    self.gaps.append({'stage': stage, 'reason': 'inner_target_encoding_folds_unverified',
+                                      'feature': entry['feature']})
         transforms = {'encoding': encoding, 'impute_means': state.get('impute_means', {}),
                       'purifier': purifier, 'internal': internal, 'class_weight': state.get('class_weight')}
         # The hash still binds the full fitted state; reference it once in the

@@ -28,7 +28,9 @@ from modeling.sfs_utils import run_forward_sfs, run_backward_sfs, run_sfs_with_p
 from modeling.hyperparam_utils import (
     run_hyperparam_search_with_progress, validate_param_space, recommend_search_method,
 )
-from modeling.development_validation import development_folds, fit_category_levels, search_validation_context
+from modeling.development_validation import (
+    development_folds, fit_category_levels, search_validation_context, target_encoding_features, target_encoding_plan,
+)
 from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
 from modeling.collinearity import write_snapshot, load_snapshot, detail
 from modeling.execution_artifacts import begin_execution, publish_execution, publish_candidate, replace_projection, load_development_data, load_execution, projection_lock
@@ -324,16 +326,22 @@ def execute_legacy_training(data):
                 'purifier_recipe': purifier_recipe, 'prediction_contract': prediction_contract,
                 'class_weight_policy': 'train_label_ratio' if prediction_contract['task'] == 'classification' and len(prediction_contract['class_mapping']) == 2 else None,
             }
+            constrained_features = target_encoding_features(validation_context)
+            if constrained_features:
+                text = pd.read_csv(raw_snapshot, usecols=sorted(constrained_features),
+                                   dtype={name: 'string' for name in constrained_features})
+                for name in constrained_features:
+                    X_raw[name] = text[name]
+                    validation_context['frame'][name] = text.loc[validation_context['frame'].index, name]
+            inner = target_encoding_plan(validation_context, train_idx) if constrained_features else None
             if purifier_recipe:
-                purifier_state = fit_purifier(X_raw, purifier_recipe, train_idx)
+                purifier_state = fit_purifier(X_raw, purifier_recipe, train_idx, preserve=constrained_features)
                 X_raw = apply_purifier(X_raw, purifier_state)
                 cat_cols = [column for column in X_raw if not pd.api.types.is_numeric_dtype(X_raw[column])]
                 (execution_dir / 'purifier.json').write_text(json.dumps(purifier_state, indent=2, allow_nan=False))
             target_encoding = not use_native and any(
                 (entry.get('encoding_method') or entry.get('fallback_strategy')) == 'target_encoding'
                 for entry in encoding_plan)
-            if target_encoding and (split_meta.get('strategy') in ('oot', 'group') or (split_meta.get('split_config') or {}).get('group_column')):
-                raise PredictionContractError('Target encoding with temporal/entity constraints requires partition-aware inner encoding; choose native or unsupervised encoding until that path is qualified.')
             if target_encoding and len(prediction_contract['class_mapping']) > 2:
                 raise PredictionContractError('Numeric target encoding is not supported for multiclass outcomes. Choose native or unsupervised encoding.')
 
@@ -345,7 +353,7 @@ def execute_legacy_training(data):
                 X_with_target[target_col] = encoded_target.values
                 X_with_target, enc_report_list = _apply_enc(
                     X_with_target, encoding_plan, target_col=target_col,
-                    use_native=use_native, fit_idx=train_idx,
+                    use_native=use_native, fit_idx=train_idx, target_encoding_plan=inner,
                 )
                 if target_col in X_with_target.columns:
                     X_with_target = X_with_target.drop(columns=[target_col])

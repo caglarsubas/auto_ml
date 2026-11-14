@@ -25,6 +25,7 @@ from deployment.deploy_utils import (
     build_deployment_pack_zip,
     build_score_bundle,
     bundle_summary,
+    bundle_dir,
     score_frame,
 )
 
@@ -136,6 +137,7 @@ class DeploymentScoreView(APIView):
             return Response({'error': 'file_id must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            resolved_bundle = request.data.get('bundle_id')
             if request.FILES.get('file'):
                 uploaded = request.FILES['file']
                 name = getattr(uploaded, 'name', 'upload.csv').lower()
@@ -144,9 +146,18 @@ class DeploymentScoreView(APIView):
                         tmp.write(chunk)
                     tmp_path = tmp.name
                 try:
-                    df = pd.read_csv(tmp_path) if tmp_path.endswith('.csv') else pd.read_excel(tmp_path)
-                    input_receipt = csv_input(Path(tmp_path).read_bytes()) if tmp_path.endswith('.csv') else {
-                        'format': 'excel', 'offline_verification_supported': False}
+                    from deployment.evidence import verify_bundle
+                    from encoding.fitted import constrained_text_columns
+                    requested_bundle = request.data.get('bundle_id')
+                    manifest, _ = verify_bundle(bundle_dir(file_id, requested_bundle), file_id, requested_bundle)
+                    resolved_bundle = manifest.get('bundle_id') or requested_bundle
+                    text_columns = {column: 'string' for column in constrained_text_columns(manifest.get('encoding_report') or [])}
+                    if tmp_path.endswith('.csv'):
+                        df = pd.read_csv(tmp_path, dtype=text_columns or None)
+                        input_receipt = csv_input(Path(tmp_path).read_bytes(), string_columns=text_columns)
+                    else:
+                        df = pd.read_excel(tmp_path, dtype=text_columns or None)
+                        input_receipt = {'format': 'excel', 'offline_verification_supported': False}
                 finally:
                     try:
                         os.unlink(tmp_path)
@@ -160,7 +171,7 @@ class DeploymentScoreView(APIView):
                     'error': 'Provide multipart file upload or JSON rows array.',
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            result = score_frame(file_id, df, bundle_id=request.data.get('bundle_id'))
+            result = score_frame(file_id, df, bundle_id=resolved_bundle)
             # Cap inline scores for large batches — also write artifact
             scores = result.get('scores') or []
             out_dir = os.path.join(settings.MEDIA_ROOT, 'deployment')

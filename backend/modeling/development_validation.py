@@ -72,6 +72,93 @@ def _check_fold(train, valid):
         raise ValueError('Declared constraints leave an invalid development fold.')
 
 
+def target_encoding_features(context):
+    """Return declared constrained encoder inputs before fitting the purifier."""
+    plan = context.get('encoding_plan') or []
+    if context.get('use_native', True) or not any(row.get('encoding_method') == 'target_encoding' for row in plan):
+        return set()
+    strategy, config = validation_strategy(context.get('split_meta') or {})
+    if strategy == 'random':
+        return set()
+    task = context['task']
+    contract = context.get('prediction_contract') or {}
+    if task not in ('classification', 'regression') or len(contract.get('class_mapping') or []) > 2:
+        raise ValueError('Constrained target encoding supports binary classification and regression.')
+    if not context.get('purifier_recipe'):
+        raise ValueError('Constrained target encoding requires a frozen raw-input recipe. Run preprocessing again.')
+    features = [row.get('feature') for row in plan]
+    if any(not isinstance(name, str) or not name for name in features) or len(set(features)) != len(features):
+        raise ValueError('Constrained target encoding requires unique named encoding inputs.')
+    target = context['target_column']
+    if target in features:
+        raise ValueError('An encoding plan cannot transform the declared outcome.')
+    requested = {row['feature'] for row in plan if row.get('encoding_method') == 'target_encoding'}
+    controls = {config.get(key) for key in ('date_column', 'label_end_column', 'group_column')}
+    available = set(context['frame']) - controls - set(context.get('excluded_features', []))
+    if not requested <= available:
+        raise ValueError('Target-encoded features must be available predictors outside the validation controls.')
+    return requested
+
+
+def target_encoding_plan(context, train):
+    """Build nested memberships once per parent fit using raw split controls."""
+    if not target_encoding_features(context):
+        return None
+    train = pd.Index(train)
+    strategy, config = validation_strategy(context.get('split_meta') or {})
+    if not train.is_unique or not train.isin(context['frame'].index).all() or len(train) < 3:
+        raise ValueError('Constrained target encoding requires at least three distinct training rows.')
+    frame = context['frame'].loc[train]
+    group_column = config.get('group_column')
+    if group_column and group_column not in frame:
+        raise ValueError('Target encoding requires the declared group column.')
+    groups = frame[group_column] if group_column else None
+    if groups is not None and groups.isna().any():
+        raise ValueError('Target encoding requires nonmissing group identities.')
+
+    warmup = []
+    chronological_rows = None
+    warmup_prior = None
+    if strategy == 'group':
+        n_splits = min(5, groups.nunique())
+        if n_splits < 2:
+            raise ValueError('Grouped target encoding requires at least two training groups in every parent fit.')
+        folds = [(train[tr], train[va]) for tr, va in GroupKFold(n_splits=n_splits).split(frame, groups=groups)]
+        if any(len(tr) < 2 for tr, _ in folds):
+            raise ValueError('Grouped target encoding requires at least two fit rows in every inner fold.')
+    else:
+        date_column, end_column = config.get('date_column'), config.get('label_end_column')
+        if not date_column or not end_column or date_column not in frame or end_column not in frame:
+            raise ValueError('Temporal target encoding requires explicit prediction-date and outcome-end columns.')
+        dates, ends = parse_split_dates(frame[date_column]), parse_split_dates(frame[end_column])
+        if dates.isna().any() or ends.isna().any() or (ends < dates).any():
+            raise ValueError('Temporal target encoding requires valid dates and outcome windows.')
+        ordered = dates.sort_values(kind='stable')
+        chronological_rows = ordered.index.tolist()
+        warmup_prior = 0.5 if context['task'] == 'classification' else 0.0
+        folds = []
+        # Partition distinct timestamps so rows sharing a prediction time always
+        # use one mapping. Use only matured, earlier outcomes for each block.
+        boundaries = np.array_split(ordered.unique(), min(6, ordered.nunique()))
+        for block in boundaries:
+            validation = ordered.index[ordered.isin(block)]
+            start = ordered.loc[validation].iloc[0]
+            reference = ordered.index[(ordered < start) & (ends.loc[ordered.index] < start)]
+            if groups is not None:
+                reference = reference[~groups.loc[reference].isin(groups.loc[validation])]
+            if len(reference) < 2:
+                if folds:
+                    raise ValueError('A temporal target encoding fold has fewer than two mature, group-disjoint fit rows. Revise the split.')
+                warmup.extend(validation.tolist())
+            else:
+                folds.append((reference, validation))
+        if not folds:
+            raise ValueError('Temporal target encoding needs at least two mature, group-disjoint historical rows for a learned fold.')
+    metadata = {'cross_fit_strategy': strategy, 'fit_rows': train.tolist(),
+                'warmup_rows': warmup, 'warmup_prior': warmup_prior, 'chronological_rows': chronological_rows}
+    return metadata, folds
+
+
 def fit_category_levels(frame, train, *, encoded=(), categorical=()):
     """Fit native category inventories for columns left categorical by the plan."""
     reports = []
@@ -105,10 +192,12 @@ def prepare_fold(context, train, valid, features=None):
     target = context['target_column']
     columns = [column for column in source if column != target and column not in context.get('excluded_features', [])]
     work = source.loc[train.append(valid), columns].copy()
+    constrained_features = target_encoding_features(context)
+    inner = target_encoding_plan(context, train) if constrained_features else None
     purifier = None
     if context.get('purifier_recipe'):
         from preprocessing.replay import fit_purifier, apply_purifier
-        purifier = fit_purifier(work, context['purifier_recipe'], train)
+        purifier = fit_purifier(work, context['purifier_recipe'], train, preserve=constrained_features)
         work = apply_purifier(work, purifier)
         if features is not None:
             dropped = set(columns) - set(work.columns)
@@ -117,13 +206,10 @@ def prepare_fold(context, train, valid, features=None):
     plan = context.get('encoding_plan') or []
     if plan:
         from encoding.encoding_utils import apply_encoding
-        strategy, _ = validation_strategy(context.get('split_meta') or {})
         use_native = context.get('use_native', True)
-        if strategy in ('group', 'oot') and not use_native and any(
-                entry.get('encoding_method') == 'target_encoding' for entry in plan):
-            raise ValueError('Target encoding with temporal/entity constraints requires partition-aware inner encoding.')
         work[target] = context['labels'].loc[work.index]
-        work, report = apply_encoding(work, plan, target_col=target, use_native=use_native, fit_idx=train)
+        work, report = apply_encoding(work, plan, target_col=target, use_native=use_native, fit_idx=train,
+                                      target_encoding_plan=inner)
         work = work.drop(columns=[target])
     else:
         report = []

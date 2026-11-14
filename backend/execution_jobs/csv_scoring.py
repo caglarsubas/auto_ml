@@ -125,6 +125,7 @@ def score(job, manifest, out, hashed, check, metadata_bytes=None):
     from execution_jobs.service import JobConflict
     from deployment.offline_verify import NATIVE_ALGORITHMS
     from deployment.deploy_utils import score_bundle_directory
+    from encoding.fitted import constrained_text_columns
 
     if manifest.get("algorithm") not in NATIVE_ALGORITHMS:
         raise JobConflict("job_native_package_required")
@@ -152,7 +153,9 @@ def score(job, manifest, out, hashed, check, metadata_bytes=None):
     except (csv.Error, UnicodeError, StopIteration):
         raise JobConflict("job_csv_input_invalid") from None
     check()
-    frame = pd.read_csv(io.BytesIO(raw), nrows=BUDGET["max_rows"] + 1)
+    text_columns = constrained_text_columns(manifest.get("encoding_report") or [])
+    frame = pd.read_csv(io.BytesIO(raw), nrows=BUDGET["max_rows"] + 1,
+                        dtype={column: "string" for column in text_columns} or None)
     if frame.empty or len(frame) > BUDGET["max_rows"] or len(frame.columns) > BUDGET["max_columns"]:
         raise JobConflict("job_input_budget_exceeded")
     check()
@@ -168,7 +171,9 @@ def score(job, manifest, out, hashed, check, metadata_bytes=None):
             "batch_id": str(job.pk),
             "job_id": str(job.pk),
             "receipt_schema_version": 1,
-            "input": {k: v for k, v in receipt.items() if k not in {"file_id", "name", "relative_path"}},
+            "input": csv_input(raw, string_columns=text_columns) if text_columns else {
+                k: v for k, v in receipt.items() if k not in {"file_id", "name", "relative_path"}
+            },
             "scoring_runtime": scoring_runtime(),
             "offline_verification_scope": "native_csv_batch_score_parity",
             "review_approved": False,

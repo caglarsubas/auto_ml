@@ -126,6 +126,12 @@ def search_basis(
             "declared_metric.py",
         )
     }
+    from modeling.development_validation import target_encoding_features
+
+    if context and target_encoding_features(context):
+        for name in ('encoding_utils.py', 'constrained.py'):
+            path = root.parent / 'encoding' / name
+            implementation[f'encoding/{name}'] = hashlib.sha256(path.read_bytes()).hexdigest()
     validation = {"qualification": "Legacy; upstream preprocessing and partition provenance unverified."}
     if context and "frame" in context:
         # Hash only permitted development rows, never the protected outcome partition.
