@@ -122,7 +122,7 @@ def _native(job):
     all_rows = list(range(len(refit['train_rows'])))
     if refit['train_rows'] != all_rows or refit['valid_rows'] or result.get('final_holdout_accessed') is not False:
         _conflict()
-    output = FoldEvidence(all_rows)
+    output = FoldEvidence(all_rows, validation_specification=plan['options']['validation'])
     if (service.digest(plan) != job.specification['training_sha256']
             or result.get('scope') != training_search.KIND
             or result.get('job_id') != str(job.pk) or result.get('input_sha256') != plan['source']['sha256']
@@ -172,7 +172,8 @@ def _legacy(actor, job, scopes):
         model, state, train, valid = _snapshot(job, execution)
         if state['parent_execution_id'] != source_evidence.get('source_execution_id'):
             _conflict()
-        output = FoldEvidence(train + valid, raw_input_sha256=state.get('raw_input_sha256'))
+        output = FoldEvidence(train + valid, raw_input_sha256=state.get('raw_input_sha256'),
+                              validation_specification=state['validation_specification'])
         calibration = _model_evidence(output, 'model', model, state, train, valid)
         return {**output.result(), **source_evidence, 'execution_id': execution, 'calibration': calibration,
                 'input_snapshot_sha256': state['input_snapshot_sha256'],
@@ -183,7 +184,8 @@ def _legacy(actor, job, scopes):
         _conflict()
     execution = source_evidence['source_execution_id']
     _, state, train, valid = _snapshot(source, execution)
-    output = FoldEvidence(train + valid, raw_input_sha256=state.get('raw_input_sha256'))
+    output = FoldEvidence(train + valid, raw_input_sha256=state.get('raw_input_sha256'),
+                          validation_specification=state['validation_specification'])
     payload = result['payload']
     candidates = {}
     parent_rows = set(train)

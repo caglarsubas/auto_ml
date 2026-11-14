@@ -108,6 +108,8 @@ def apply_encoding(
     target_col: str = 'Target',
     use_native: bool = True,
     fit_idx: Optional[pd.Index] = None,
+    *,
+    target_encoding_plan=None,
 ) -> Tuple[pd.DataFrame, List[Dict]]:
     """
     Apply encoding to *df* according to *plan*.
@@ -181,7 +183,7 @@ def apply_encoding(
             encoded, feat_report = _apply_fallback(
                 encoded, feature, strategy, ranking, target_col, feat_report,
                 manual_mapping=manual_mapping,
-                fit_idx=fit_idx,
+                fit_idx=fit_idx, target_encoding_plan=target_encoding_plan,
             )
 
         report.append(feat_report)
@@ -202,6 +204,7 @@ def _apply_fallback(
     feat_report: Dict,
     manual_mapping: Optional[Dict] = None,
     fit_idx: Optional[pd.Index] = None,
+    target_encoding_plan=None,
 ) -> Tuple[pd.DataFrame, Dict]:
     if fallback == 'label_encoding':
         df, mapping = _label_encode(df, feature, fit_idx=fit_idx)
@@ -227,7 +230,11 @@ def _apply_fallback(
             feat_report['fallback_reason'] += ' (no ranking provided → label encoding)'
 
     elif fallback == 'target_encoding':
-        df, mapping = _target_encode(df, feature, target_col, fit_idx=fit_idx)
+        if target_encoding_plan is None:
+            df, mapping = _target_encode(df, feature, target_col, fit_idx=fit_idx)
+        else:
+            from encoding.constrained import fit_target_encoding
+            df, mapping = fit_target_encoding(df, feature, target_col, fit_idx, target_encoding_plan, smoothing=10.0)
         feat_report['mapping'] = mapping
         feat_report['strategy_applied'] = 'target_encoding'
 

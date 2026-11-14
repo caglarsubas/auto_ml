@@ -9,7 +9,7 @@ from pathlib import Path
 PACKAGES = ('Django', 'djangorestframework', 'pandas', 'numpy', 'scikit-learn',
             'xgboost', 'lightgbm', 'catboost', 'joblib')
 RUNTIME_FILES = ('deployment/deploy_utils.py', 'deployment/evidence.py',
-                 'deployment/scoring_receipts.py', 'deployment/offline_verify.py', 'encoding/fitted.py',
+                 'deployment/scoring_receipts.py', 'deployment/offline_verify.py', 'encoding/fitted.py', 'encoding/constrained.py',
                  'preprocessing/replay.py', 'modeling/alt_pipelines.py',
                  'modeling/booster_adapters.py', 'modeling/calibration_utils.py',
                  'modeling/execution_artifacts.py', 'evaluation/eval_utils.py', 'deployment/runtime_metadata.py')
@@ -37,6 +37,9 @@ def scoring_runtime():
             'source_sha256': {name: byte_digest((root / name).read_bytes()) for name in RUNTIME_FILES}}
 
 
-def csv_input(raw):
-    return {'format': 'csv', 'sha256': byte_digest(raw), 'bytes': len(raw),
+def csv_input(raw, *, string_columns=()):
+    receipt = {'format': 'csv', 'sha256': byte_digest(raw), 'bytes': len(raw),
             'parser': 'pandas.read_csv/defaults', 'pandas_version': version('pandas')}
+    if string_columns:
+        receipt.update(parser='pandas.read_csv/constrained_text_v1', string_columns=list(string_columns))
+    return receipt

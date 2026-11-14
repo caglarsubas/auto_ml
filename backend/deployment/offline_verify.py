@@ -89,8 +89,6 @@ def verify_package(package, csv, receipt, *, package_sha256, receipt_sha256,
         if not isinstance(input_spec, dict) or input_spec.get('format') != 'csv':
             raise VerificationBlocked('Offline verification currently supports exact CSV inputs only.')
         snapshot(csv, root / 'input.csv', input_spec.get('sha256'))
-        if input_spec != csv_input((root / 'input.csv').read_bytes()):
-            raise VerificationBlocked('CSV bytes or parser version differ from the scoring receipt.')
         runtime = scoring_runtime()
         if runtime != recorded.get('scoring_runtime'):
             raise VerificationBlocked('Installed scoring runtime differs from the recorded runtime; parity is unqualified.')
@@ -112,7 +110,11 @@ def verify_package(package, csv, receipt, *, package_sha256, receipt_sha256,
         if (execution.get('python_version') != runtime['python_version']
                 or execution.get('packages') != runtime['packages']):
             raise VerificationBlocked('Installed dependencies differ from the recorded model environment.')
-        frame = pd.read_csv(root / 'input.csv')
+        from encoding.fitted import constrained_text_columns
+        text_columns = constrained_text_columns(manifest.get('encoding_report') or [])
+        if input_spec != csv_input((root / 'input.csv').read_bytes(), string_columns=text_columns):
+            raise VerificationBlocked('CSV bytes or parser version differ from the scoring receipt.')
+        frame = pd.read_csv(root / 'input.csv', dtype={column: 'string' for column in text_columns} or None)
         if frame.empty or recorded.get('n_scored') != len(frame):
             raise VerificationBlocked('Receipt row count must agree with a nonempty CSV.')
         reference = np.asarray(recorded.get('scores'), dtype=float)
