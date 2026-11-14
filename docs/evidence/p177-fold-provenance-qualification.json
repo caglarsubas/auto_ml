@@ -1,0 +1,194 @@
+{
+  "schema": "development_fold_provenance_acceptance_v1",
+  "packet": "P177",
+  "task": "D02-T02",
+  "pr": 291,
+  "qualified_head": "9f46df81de2d22a2b5e3b912c66c74f2068fe78f",
+  "merge": "2af45c2b89615a61e111c8a01d1f25413312c276",
+  "ci_run": 43545524778,
+  "main_run": 43550567514,
+  "required_checks": [
+    "Backend lint (ruff)",
+    "Backend tests (pytest)",
+    "Frontend E2E (Playwright)",
+    "Frontend lint (ESLint + Prettier)",
+    "Frontend unit tests (Karma)",
+    "PostgreSQL runtime and metadata",
+    "Private expert worker (gVisor)"
+  ],
+  "main_qualified": true,
+  "merged_tree_matches_qualified_pr": true,
+  "source_hashes_match": true,
+  "original_case_skip_workload_limits_preserved": true,
+  "previous_backlog": {
+    "done": 15,
+    "open": 44,
+    "blocked": 7,
+    "total": 66
+  },
+  "qualified_backlog": {
+    "done": 16,
+    "open": 43,
+    "blocked": 7,
+    "total": 66
+  },
+  "done_percentage_point_change": 1.5,
+  "pr_qualification": {
+    "run": 43545524778,
+    "run_attempt": 1,
+    "head": "9f46df81de2d22a2b5e3b912c66c74f2068fe78f",
+    "event": "pull_request",
+    "required_checks": [
+      "Backend lint (ruff)",
+      "Backend tests (pytest)",
+      "Frontend E2E (Playwright)",
+      "Frontend lint (ESLint + Prettier)",
+      "Frontend unit tests (Karma)",
+      "PostgreSQL runtime and metadata",
+      "Private expert worker (gVisor)"
+    ],
+    "jobs": {
+      "PostgreSQL runtime and metadata": 132295901742,
+      "Backend lint (ruff)": 132295901930,
+      "Backend tests (pytest)": 132295901934,
+      "Private expert worker (gVisor)": 132295901943,
+      "Frontend unit tests (Karma)": 132295902008,
+      "Frontend lint (ESLint + Prettier)": 132295902012,
+      "Frontend E2E (Playwright)": 132295902051
+    },
+    "seven_jobs_passed": true,
+    "original_case_skip_workload_limits_preserved": true,
+    "source_hashes_match": true,
+    "application_source_sha256": "8391b1526c8e654788918fa7f9edd3efbb486c2fda2e8c97da09ebf1e0f3502b",
+    "native": {
+      "tests": 7783,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 829.151,
+      "workers": 2,
+      "worker_restarts": 0,
+      "cap_seconds": 900,
+      "added_cases": [
+        "tests.unit.test_alternate_transform_evidence::test_encoding_export_replays_nested_training_fits_and_excludes_diagnostics",
+        "tests.unit.test_alternate_transform_evidence::test_fitted_state_is_portable_and_bound_to_the_training_partition[isolation_forest]",
+        "tests.unit.test_alternate_transform_evidence::test_fitted_state_is_portable_and_bound_to_the_training_partition[logistic_regression]",
+        "tests.unit.test_alternate_transform_evidence::test_fitted_state_is_portable_and_bound_to_the_training_partition[scorecard]",
+        "tests.unit.test_alternate_transform_evidence::test_nonwinning_search_candidates_retain_their_folds",
+        "tests.unit.test_calibration_transform_evidence::test_calibration_state_can_be_replayed_without_deserializing_the_model[isotonic]",
+        "tests.unit.test_calibration_transform_evidence::test_calibration_state_can_be_replayed_without_deserializing_the_model[platt]",
+        "tests.unit.test_fold_provenance_export::test_export_rejects_protected_rows_in_fitted_membership",
+        "tests.unit.test_fold_provenance_export::test_legacy_evidence_pins_exact_source_and_never_reads_protected_artifacts",
+        "tests.unit.test_fold_provenance_export::test_reviewer_export_uses_exact_training_evidence",
+        "tests.unit.test_fold_provenance_export::test_selection_sidecar_bounds_integrity_and_keeps_result_references_small"
+      ]
+    },
+    "artifacts": {
+      "postgresql-runtime-reports": {
+        "id": 14095263792,
+        "sha256": "1b1d7accb6c78c615b1fabf62ba705b7ae5abb96c41b333c96a21d7d5af5a3f0"
+      },
+      "backend-test-reports": {
+        "id": 14094680478,
+        "sha256": "3519fc7b7aa27baeb406386d7ef97f80897089f4eed09312ebcf0df06b76fc7c"
+      },
+      "private-expert-worker-report": {
+        "id": 14093822085,
+        "sha256": "a311871d6d102397b1d76f1b367a95286490a170823c8319867e08f25f9a5018"
+      }
+    }
+  },
+  "main_qualification": {
+    "run": 43550567514,
+    "run_attempt": 1,
+    "head": "2af45c2b89615a61e111c8a01d1f25413312c276",
+    "event": "push",
+    "required_checks": [
+      "Backend lint (ruff)",
+      "Backend tests (pytest)",
+      "Frontend E2E (Playwright)",
+      "Frontend lint (ESLint + Prettier)",
+      "Frontend unit tests (Karma)",
+      "PostgreSQL runtime and metadata",
+      "Private expert worker (gVisor)"
+    ],
+    "jobs": {
+      "Frontend E2E (Playwright)": 132311832461,
+      "Backend lint (ruff)": 132311832628,
+      "Private expert worker (gVisor)": 132311832643,
+      "Frontend unit tests (Karma)": 132311832653,
+      "Backend tests (pytest)": 132311832670,
+      "Frontend lint (ESLint + Prettier)": 132311832685,
+      "PostgreSQL runtime and metadata": 132311832727
+    },
+    "seven_jobs_passed": true,
+    "original_case_skip_workload_limits_preserved": true,
+    "source_hashes_match": true,
+    "application_source_sha256": "8391b1526c8e654788918fa7f9edd3efbb486c2fda2e8c97da09ebf1e0f3502b",
+    "native": {
+      "tests": 7783,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 776.621,
+      "workers": 2,
+      "worker_restarts": 0,
+      "cap_seconds": 900,
+      "added_cases": [
+        "tests.unit.test_alternate_transform_evidence::test_encoding_export_replays_nested_training_fits_and_excludes_diagnostics",
+        "tests.unit.test_alternate_transform_evidence::test_fitted_state_is_portable_and_bound_to_the_training_partition[isolation_forest]",
+        "tests.unit.test_alternate_transform_evidence::test_fitted_state_is_portable_and_bound_to_the_training_partition[logistic_regression]",
+        "tests.unit.test_alternate_transform_evidence::test_fitted_state_is_portable_and_bound_to_the_training_partition[scorecard]",
+        "tests.unit.test_alternate_transform_evidence::test_nonwinning_search_candidates_retain_their_folds",
+        "tests.unit.test_calibration_transform_evidence::test_calibration_state_can_be_replayed_without_deserializing_the_model[isotonic]",
+        "tests.unit.test_calibration_transform_evidence::test_calibration_state_can_be_replayed_without_deserializing_the_model[platt]",
+        "tests.unit.test_fold_provenance_export::test_export_rejects_protected_rows_in_fitted_membership",
+        "tests.unit.test_fold_provenance_export::test_legacy_evidence_pins_exact_source_and_never_reads_protected_artifacts",
+        "tests.unit.test_fold_provenance_export::test_reviewer_export_uses_exact_training_evidence",
+        "tests.unit.test_fold_provenance_export::test_selection_sidecar_bounds_integrity_and_keeps_result_references_small"
+      ]
+    },
+    "artifacts": {
+      "postgresql-runtime-reports": {
+        "id": 14098240677,
+        "sha256": "0e1da7926ea9a1d6493ffbbfd8a4291253b7dfcccb2b1e73c0eb59bd75e13755"
+      },
+      "backend-test-reports": {
+        "id": 14096187978,
+        "sha256": "b0537894407b66ead712aaaecd68fd8c6542133d99a3b4547c0dffc56ec1932d"
+      },
+      "private-expert-worker-report": {
+        "id": 14096310370,
+        "sha256": "8bddc20d51ef604f75db4b5a4fb22955a66a64af96d95193c2a59f5e6eb06097"
+      }
+    }
+  },
+  "rejected_native_attempt": {
+    "run": 43539810941,
+    "attempt": 1,
+    "job": 132277574316,
+    "head": "9250aa156849570ac02e07dd281346d41c5acdc8",
+    "artifact_id": 14092894691,
+    "artifact_sha256": "60349e9e7dbd2b82bc397cb625b3a6630d8dab3fc93945de4c76107cf8901cc6",
+    "native_cap_seconds": 900,
+    "qualified": false,
+    "finished_cases": 7783,
+    "reason": "same_database_connection_prevented_retention",
+    "native_seconds": 851.855,
+    "failures": [
+      "tests.unit.test_private_data_policy::test_retention_cli_review_and_idempotent_purge",
+      "tests.unit.test_private_data_policy::test_retention_holds_used_and_unclassified_artifacts",
+      "tests.unit.test_private_data_policy::test_stale_review_and_interrupted_storage_removal",
+      "tests.unit.test_private_data_policy::test_retention_refuses_link_and_concurrent_database_client"
+    ]
+  },
+  "qualification_fixture_repair": {
+    "case": "tests.unit.test_assistant_approvals::test_concurrent_duplicates_dispatch_once",
+    "scope": "Close PostgreSQL sessions owned by the short-lived test threads",
+    "all_assertions_preserved": true,
+    "matched_local_postgresql_cases_after_repair": 5,
+    "production_maintenance_checks_changed": false
+  },
+  "independent_model_reproduction_verified": false,
+  "release_qualified": false
+}
