@@ -1,0 +1,166 @@
+{
+  "schema": "constrained_target_encoding_acceptance_v1",
+  "packet": "P178",
+  "task": "D02-T03",
+  "pr": 293,
+  "qualified_head": "23ec7bcaceaade24c1eae4128e258c813482b905",
+  "merge": "286474e840a9878ad0a647d37f9f80179f8802a0",
+  "ci_run": 43616635050,
+  "main_run": 43621786630,
+  "required_checks": [
+    "Backend lint (ruff)",
+    "Backend tests (pytest)",
+    "Frontend E2E (Playwright)",
+    "Frontend lint (ESLint + Prettier)",
+    "Frontend unit tests (Karma)",
+    "PostgreSQL runtime and metadata",
+    "Private expert worker (gVisor)"
+  ],
+  "main_qualified": true,
+  "merged_tree_matches_qualified_pr": true,
+  "source_hashes_match": true,
+  "original_case_skip_workload_limits_preserved": true,
+  "previous_backlog": {
+    "done": 16,
+    "open": 43,
+    "blocked": 7,
+    "total": 66
+  },
+  "qualified_backlog": {
+    "done": 17,
+    "open": 42,
+    "blocked": 7,
+    "total": 66
+  },
+  "done_percentage_point_change": 1.5,
+  "pr_qualification": {
+    "run": 43616635050,
+    "run_attempt": 1,
+    "head": "23ec7bcaceaade24c1eae4128e258c813482b905",
+    "event": "pull_request",
+    "required_checks": [
+      "Backend lint (ruff)",
+      "Backend tests (pytest)",
+      "Frontend E2E (Playwright)",
+      "Frontend lint (ESLint + Prettier)",
+      "Frontend unit tests (Karma)",
+      "PostgreSQL runtime and metadata",
+      "Private expert worker (gVisor)"
+    ],
+    "jobs": {
+      "PostgreSQL runtime and metadata": 132513017802,
+      "Frontend E2E (Playwright)": 132513017945,
+      "Frontend lint (ESLint + Prettier)": 132513017963,
+      "Private expert worker (gVisor)": 132513018000,
+      "Frontend unit tests (Karma)": 132513018005,
+      "Backend lint (ruff)": 132513018046,
+      "Backend tests (pytest)": 132513018064
+    },
+    "seven_jobs_passed": true,
+    "original_case_skip_workload_limits_preserved": true,
+    "source_hashes_match": true,
+    "application_source_sha256": "a970868f424e7e8b7024d9cc9ff5533896a00758931282acac8979bd7ef183fb",
+    "native": {
+      "tests": 7793,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 852.893,
+      "workers": 2,
+      "worker_restarts": 0,
+      "cap_seconds": 900,
+      "added_cases": [
+        "tests.unit.test_constrained_encoding_provenance::test_constrained_encoder_rejects_invalid_parent_membership_and_temporal_warmup",
+        "tests.unit.test_constrained_encoding_provenance::test_constrained_encoder_round_trips_from_export_to_offline_reader[group]",
+        "tests.unit.test_constrained_encoding_provenance::test_constrained_encoder_round_trips_from_export_to_offline_reader[oot]",
+        "tests.unit.test_constrained_encoding_provenance::test_offline_verification_rejects_rehashed_group_evidence_and_preserves_historical_gaps",
+        "tests.unit.test_constrained_target_encoding_workflow::test_durable_oot_target_encoding_reaches_training_sfs_hpo_and_reviewer_export",
+        "tests.unit.test_constrained_target_encoding_workflow::test_group_target_encoding_uses_whole_groups_and_continuous_labels",
+        "tests.unit.test_constrained_target_encoding_workflow::test_oot_target_encoding_has_label_free_warmup_and_preserves_past_encodings",
+        "tests.unit.test_constrained_target_encoding_workflow::test_raw_target_encoding_scores_independent_csv_batches",
+        "tests.unit.test_constrained_target_encoding_workflow::test_target_encoding_rejects_impossible_inner_partitions[group]",
+        "tests.unit.test_constrained_target_encoding_workflow::test_target_encoding_rejects_impossible_inner_partitions[oot]"
+      ]
+    },
+    "artifacts": {
+      "postgresql-runtime-reports": {
+        "id": 14124551302,
+        "sha256": "e35f3b014e78ee30a9b6ab224760ee75b54b21101fe8e983c9add96405f34b19"
+      },
+      "backend-test-reports": {
+        "id": 14123010278,
+        "sha256": "69f503253408d278ae7ac795c26128b916e32f2c78e7ca9c6a8b632d80a0cf18"
+      },
+      "private-expert-worker-report": {
+        "id": 14122512631,
+        "sha256": "70cb384cdae1e509db5797c65029ff0e1481f8f32d5e0d521721fd5445b30bf0"
+      }
+    }
+  },
+  "main_qualification": {
+    "run": 43621786630,
+    "run_attempt": 1,
+    "head": "286474e840a9878ad0a647d37f9f80179f8802a0",
+    "event": "push",
+    "required_checks": [
+      "Backend lint (ruff)",
+      "Backend tests (pytest)",
+      "Frontend E2E (Playwright)",
+      "Frontend lint (ESLint + Prettier)",
+      "Frontend unit tests (Karma)",
+      "PostgreSQL runtime and metadata",
+      "Private expert worker (gVisor)"
+    ],
+    "jobs": {
+      "Private expert worker (gVisor)": 132528869852,
+      "Frontend E2E (Playwright)": 132528870023,
+      "Backend lint (ruff)": 132528870064,
+      "Frontend unit tests (Karma)": 132528870068,
+      "Backend tests (pytest)": 132528870107,
+      "Frontend lint (ESLint + Prettier)": 132528870126,
+      "PostgreSQL runtime and metadata": 132528870140
+    },
+    "seven_jobs_passed": true,
+    "original_case_skip_workload_limits_preserved": true,
+    "source_hashes_match": true,
+    "application_source_sha256": "a970868f424e7e8b7024d9cc9ff5533896a00758931282acac8979bd7ef183fb",
+    "native": {
+      "tests": 7793,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 823.658,
+      "workers": 2,
+      "worker_restarts": 0,
+      "cap_seconds": 900,
+      "added_cases": [
+        "tests.unit.test_constrained_encoding_provenance::test_constrained_encoder_rejects_invalid_parent_membership_and_temporal_warmup",
+        "tests.unit.test_constrained_encoding_provenance::test_constrained_encoder_round_trips_from_export_to_offline_reader[group]",
+        "tests.unit.test_constrained_encoding_provenance::test_constrained_encoder_round_trips_from_export_to_offline_reader[oot]",
+        "tests.unit.test_constrained_encoding_provenance::test_offline_verification_rejects_rehashed_group_evidence_and_preserves_historical_gaps",
+        "tests.unit.test_constrained_target_encoding_workflow::test_durable_oot_target_encoding_reaches_training_sfs_hpo_and_reviewer_export",
+        "tests.unit.test_constrained_target_encoding_workflow::test_group_target_encoding_uses_whole_groups_and_continuous_labels",
+        "tests.unit.test_constrained_target_encoding_workflow::test_oot_target_encoding_has_label_free_warmup_and_preserves_past_encodings",
+        "tests.unit.test_constrained_target_encoding_workflow::test_raw_target_encoding_scores_independent_csv_batches",
+        "tests.unit.test_constrained_target_encoding_workflow::test_target_encoding_rejects_impossible_inner_partitions[group]",
+        "tests.unit.test_constrained_target_encoding_workflow::test_target_encoding_rejects_impossible_inner_partitions[oot]"
+      ]
+    },
+    "artifacts": {
+      "postgresql-runtime-reports": {
+        "id": 14126731150,
+        "sha256": "46762bc12b3336bc4ea2e054a92b25a5add9c118bfd3e95f85546896b46c0eea"
+      },
+      "backend-test-reports": {
+        "id": 14124604630,
+        "sha256": "0128f60f91950e587fbaee40cd936c069161a143be06ca7a2e0ab150e5a4df56"
+      },
+      "private-expert-worker-report": {
+        "id": 14124656774,
+        "sha256": "3d4eb7066e387114a7ec41b155d7a29c9559f7f1050e6758deb8f09e0def4e1a"
+      }
+    }
+  },
+  "independent_model_reproduction_verified": false,
+  "release_qualified": false
+}

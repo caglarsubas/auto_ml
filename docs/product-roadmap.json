@@ -124,9 +124,12 @@
         "[Implementation PR #291](https://github.com/caglarsubas/auto_ml/pull/291)",
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43550567514)",
         "[Retained failing retention run](https://github.com/caglarsubas/auto_ml/actions/runs/43539810941/attempts/1)",
-        "[Constrained target encoding](CONSTRAINED_TARGET_ENCODING.md)"
+        "[Constrained target encoding](CONSTRAINED_TARGET_ENCODING.md)",
+        "[P178 constrained target encoding qualification](evidence/p178-constrained-target-encoding-qualification.json)",
+        "[Implementation PR #293](https://github.com/caglarsubas/auto_ml/pull/293)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43621786630)"
       ],
-      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P176 qualifies D02-T01 on the supported alternate-model and durable search paths. P177 qualifies exact-job development fold and fitted transformation export. D02-T03 constrained target encoding is ready. P178 implements nested target encoding for supported temporal and grouped development workflows. Independent merged-main qualification is pending."
+      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Additional legacy and milestone qualification remains open. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P176 qualifies D02-T01 on the supported alternate-model and durable search paths. P177 qualifies exact-job development fold and fitted transformation export. P178 qualifies nested temporal and grouped target encoding for the supported binary classification and regression paths."
     },
     {
       "id": "D03",
@@ -2193,6 +2196,10 @@
     {
       "date": "2026-11-15",
       "change": "Implement P178 for D02-T03. Retain exact inner memberships and frozen scoring maps. Record completion after merged-main qualification."
+    },
+    {
+      "date": "2026-11-15",
+      "change": "Qualify D02-T03 with implementation PR #293 and independent push-main CI 43621786630. Backlog moves from 16/43/7 to 17/42/7 done/open/blocked across 66 tasks."
     }
   ],
   "implementation_packets": [
@@ -5350,12 +5357,15 @@
         "D02"
       ],
       "owner": "Backend/ML",
-      "status": "implemented",
+      "status": "tested",
       "description": "Fit nested target encoders inside declared training partitions. Preserve a label-free temporal warm-up, ordered evidence, and reproducible scoring maps.",
       "evidence": [
-        "[Constrained target encoding](CONSTRAINED_TARGET_ENCODING.md)"
+        "[Constrained target encoding](CONSTRAINED_TARGET_ENCODING.md)",
+        "[P178 constrained target encoding qualification](evidence/p178-constrained-target-encoding-qualification.json)",
+        "[Implementation PR #293](https://github.com/caglarsubas/auto_ml/pull/293)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43621786630)"
       ],
-      "remaining": "D02-T03 awaits pull-request and merged-main qualification."
+      "remaining": "D02-T03 is qualified on the supported modeling, search, export and scoring paths. The full D02 outcome gate still requires milestone qualification."
     }
   ],
   "release_qualification": {
@@ -5650,13 +5660,13 @@
       {
         "id": "D02-T03",
         "title": "Implement constrained target encoding without leakage",
-        "description": "Keep currently unsupported constrained target encoding unavailable until a fold-aware implementation qualifies.",
+        "description": "Fit target encoders inside declared temporal or entity-grouped development partitions for binary classification and regression, and replay the frozen training map for scoring.",
         "items": [
           "D02"
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [
           "D02-T01",
           "D02-T02"
@@ -5667,7 +5677,10 @@
         ],
         "blockers": [],
         "evidence": [
-          "[Constrained target encoding](CONSTRAINED_TARGET_ENCODING.md)"
+          "[Constrained target encoding](CONSTRAINED_TARGET_ENCODING.md)",
+          "[P178 constrained target encoding qualification](evidence/p178-constrained-target-encoding-qualification.json)",
+          "[Implementation PR #293](https://github.com/caglarsubas/auto_ml/pull/293)",
+          "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43621786630)"
         ],
         "packet_refs": [
           "P178"
