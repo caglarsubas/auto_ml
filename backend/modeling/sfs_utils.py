@@ -696,6 +696,7 @@ def _run_selection_step(
     mode,
     objective,
 ):
+    from execution_jobs.selection_provenance import record
     from modeling.development_assessment import development_metrics
 
     primary = objective["primary_metric"]
@@ -727,13 +728,14 @@ def _run_selection_step(
             raise ValueError(
                 f"Development-validation screening metric {primary} is unavailable; revise the split or objective."
             )
-        return name, float(value)
+        return name, (float(value), adapter.fit_receipt)
 
     if n_jobs > 1:
         with ThreadPoolExecutor(max_workers=min(n_jobs, len(candidates))) as pool:
-            screened = dict(pool.map(screen, candidates))
+            screening = dict(pool.map(screen, candidates))
     else:
-        screened = dict(screen(name) for name in candidates)
+        screening = dict(screen(name) for name in candidates)
+    screened = {name: value for name, (value, _) in screening.items()}
     # Stable ties preserve the declared feature order, even with parallel workers.
     ranked = sorted(candidates, key=lambda name: (-sign * screened[name], candidates.index(name)))
     evidence = {
@@ -776,6 +778,12 @@ def _run_selection_step(
         "feature_importance": {row["feature"]: float(row["score"]) for row in adapter.gain_importance()},
         "shap_importance_by_feature": shap_values,
     }
+    additional_fits = record({
+        "screening": {name: receipt for name, (_, receipt) in screening.items()},
+        "other_top_k": {name: value["fold_provenance"] for name, value in evidence.items() if name != winner},
+    })
+    if additional_fits is not None:
+        result["additional_fits"] = additional_fits
     for split, values in metrics.items():
         result.update({split + "_" + name: value for name, value in values.items()})
     return result

@@ -6,6 +6,7 @@ apply in Evaluation / Deployment so reported probabilities are decision-ready.
 
 from __future__ import annotations
 
+import hashlib
 import os
 from typing import Any, Dict, Optional, Tuple
 
@@ -81,6 +82,28 @@ def fit_calibrator(
         pass
     meta['method'] = chosen
     meta['fitted'] = True
+    meta['fit_partition'] = 'development_validation'
+    # Bind the ordered calibration inputs without exposing scores or outcomes.
+    digest = hashlib.sha256()
+    digest.update(len(y_true).to_bytes(8, 'little'))
+    digest.update(y_true.astype('<i8', copy=False).tobytes())
+    digest.update(y_proba.astype('<f8', copy=False).tobytes())
+    meta['calibration_input_sha256'] = digest.hexdigest()
+    if chosen == 'isotonic':
+        meta['fitted_transform'] = {
+            'schema_version': 1,
+            'kind': 'isotonic_linear_interpolation',
+            'input_thresholds': calibrator.X_thresholds_.tolist(),
+            'output_thresholds': calibrator.y_thresholds_.tolist(),
+            'out_of_bounds': 'clip',
+        }
+    else:
+        meta['fitted_transform'] = {
+            'schema_version': 1,
+            'kind': 'platt_sigmoid',
+            'coefficient': float(calibrator.lr.coef_[0, 0]),
+            'intercept': float(calibrator.lr.intercept_[0]),
+        }
     return calibrator, meta
 
 

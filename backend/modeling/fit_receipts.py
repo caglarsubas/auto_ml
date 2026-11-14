@@ -46,7 +46,7 @@ def receipt_digest(receipt):
 
 
 def record_native_fit(adapter, X_train, y_train, X_valid, y_valid, requested_params,
-                      effective_params, num_boost_round=None, early_stopping_rounds=None):
+                      effective_params, num_boost_round=None, early_stopping_rounds=None, *, fitted_transforms=None):
     receipt = {'schema_version': 1, 'algorithm': adapter.algorithm if adapter.name == 'sklearn' else adapter.name,
                'task': adapter.task, 'train': input_receipt(X_train, y_train),
                'valid': input_receipt(X_valid, y_valid), 'requested_params': dict(requested_params),
@@ -59,6 +59,17 @@ def record_native_fit(adapter, X_train, y_train, X_valid, y_valid, requested_par
                                    (getattr(adapter, 'declared_metric_spec', None) and not early_stopping_rounds) else
                                    'early_stopping' if early_stopping_rounds else 'evaluation_only'),
                'qualification': 'Native controller record; effective parameters are those supplied to the fitter (resolved defaults for CatBoost/sklearn). Not independent reproduction or actor authentication.'}
+    for name, frame in (('train', X_train), ('valid', X_valid)):
+        rows = frame.index.tolist()
+        if all(type(row) in (int, str) for row in rows):
+            receipt[name + '_rows_sha256'] = receipt_digest(rows)
+    if fitted_transforms is not None:
+        receipt['fitted_transforms'] = {
+            'schema_version': 1,
+            'fit_partition': 'train',
+            'fit_input_sha256': receipt['train']['sha256'],
+            'steps': fitted_transforms,
+        }
     # Preserve native metric/weight parameter types while detaching containers.
     def primitive(value):
         if isinstance(value, np.generic):

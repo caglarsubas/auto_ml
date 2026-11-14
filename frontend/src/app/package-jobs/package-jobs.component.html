@@ -176,6 +176,16 @@
       </section>
     }
     <button type="button" (click)="download()" [disabled]="busy">Download job receipt</button>
+    @if (canDownloadFolds) {
+      <button type="button" (click)="downloadFolds()" [disabled]="busy">
+        Download fold provenance
+      </button>
+      @if (foldExportDigest) {
+        <p role="status">
+          Retain this export SHA-256 separately <code>{{ foldExportDigest }}</code>
+        </p>
+      }
+    }
     @if (
       evidenceEnabled &&
       job.state === 'succeeded' &&
@@ -226,8 +236,8 @@
         </p>
         <p>{{ job.result.evidence_scope }}</p>
         <p>
-          Native model and fold evidence are included in the job receipt. Model adoption and final
-          assessment remain separate.
+          The fold export records development fits. Model adoption and final assessment have
+          separate evidence.
         </p>
         <app-native-candidate
           [job]="job"
@@ -236,6 +246,8 @@
           [jobsEnabled]="!!directory?.jobs_enabled"
           (queued)="candidateQueued($event)"
         />
+      } @else if (job.specification.kind === 'legacy_native_execution_v1') {
+        <p>Development operation {{ job.result.operation }}</p>
       } @else {
         <p>
           Verified {{ job.result.artifact_count }} artifacts · {{ job.result.verified_bytes }} bytes

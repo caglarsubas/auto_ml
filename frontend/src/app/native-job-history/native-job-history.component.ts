@@ -72,6 +72,7 @@ export class NativeJobHistoryComponent implements OnChanges, OnDestroy {
     ['package_integrity_v1', 'Package integrity'],
     ['native_csv_scoring_v1', 'Package CSV scoring'],
     ['native_numeric_training_search_v1', 'Development training search'],
+    ['legacy_native_execution_v1', 'Durable modeling and search'],
     ['native_training_scoring_v1', 'Native candidate scoring'],
     ['native_protected_assessment_v1', 'Protected assessment'],
   ];

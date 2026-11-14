@@ -494,6 +494,8 @@ def execute_legacy_training(data):
                             if not skip_calibration:
                                 calibrator, calibration_meta = fit_calibrator(y_valid, y_prob, method='auto')
                                 if calibrator is not None:
+                                    calibration_meta['fit_input_sha256'] = adapter.fit_receipt['valid']['sha256']
+                                    calibration_meta['fit_rows'] = X_valid.index.tolist()
                                     calibrator_path = save_calibrator(
                                         int(file_id), calibrator, str(execution_dir),
                                     )
