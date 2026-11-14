@@ -265,6 +265,8 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
     if task == 'classification' and class_count == 2:
         calibrator, calibration = fit_calibrator(data['y_valid'], adapter.predict_proba(data['X_valid']))
         if calibrator is not None:
+            calibration['fit_input_sha256'] = fit_receipt['valid']['sha256']
+            calibration['fit_rows'] = data['X_valid'].index.tolist()
             calibrator_path = str((root / save_calibrator(file_id, calibrator, str(root))).relative_to(Path(settings.MEDIA_ROOT)))
     data['calibration'], data['calibrator_path'], data['algorithm'] = calibration, calibrator_path, algorithm
     data['scale_pos_weight'] = fit_receipt['requested_params'].get('scale_pos_weight')

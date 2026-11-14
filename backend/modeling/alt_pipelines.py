@@ -302,8 +302,39 @@ class SklearnModelAdapter:
         else:
             self._train_logit(X_train, y_train, X_valid, y_valid, params)
         from modeling.fit_receipts import record_native_fit
-        record_native_fit(self, X_train, y_train, X_valid, y_valid, params, self.model.get_params())
+        record_native_fit(self, X_train, y_train, X_valid, y_valid, params, self.model.get_params(),
+                          fitted_transforms=self._fitted_transform_evidence())
         return self
+
+    def _fitted_transform_evidence(self):
+        # Only primitive scoring state enters the receipt. Reviewers do not
+        # load the fitted sklearn artifact to inspect these transformations.
+        if self.algorithm == 'scorecard':
+            return [{
+                'kind': 'scorecard_woe_v1',
+                'input_features': list(self.woe_maps),
+                'output_features': list(self.feature_names),
+                'features': {feature: {key: spec[key] for key in ('kind', 'edges', 'mapping') if key in spec}
+                             for feature, spec in self.woe_maps.items()},
+                'unmapped_value': 0.0,
+            }]
+        design = self.design
+        steps = [{
+            'kind': 'sklearn_design_matrix_v1',
+            'input_features': list(design.feature_names),
+            'output_features': list(design.encoded_feature_names),
+            'numeric_features': list(design.num_features),
+            'numeric_missing_value': 0.0,
+            'categorical_features': list(design.cat_features),
+            'categories': ([list(map(str, levels)) for levels in design.encoder.categories_]
+                           if design.encoder is not None else []),
+            'categorical_missing_value': '__NULL__',
+            'unknown_category_policy': 'ignore',
+        }]
+        if self.algorithm == 'isolation_forest':
+            steps.append({'kind': 'anomaly_score_reference_v1',
+                          'score_range': list(self.anomaly_score_range)})
+        return steps
 
     def _train_logit(self, X_train, y_train, X_valid, y_valid, params):
         self.design = DesignMatrix().fit(X_train)

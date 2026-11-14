@@ -8,14 +8,12 @@ import subprocess
 import sys
 import time
 import uuid
-from pathlib import Path
 
 from django.conf import settings
 from django.utils import timezone
 
-from access_control import projects
 from deployment.reviews import digest
-from execution_jobs import legacy_execution as legacy
+from execution_jobs import legacy_execution as legacy, legacy_selection_provenance
 from execution_jobs.models import NativeJob
 
 
@@ -58,7 +56,15 @@ def checkpoint_files(actor, file_id, options, source):
     raw = legacy.read(path, 8 * 1024**2)
     if hashlib.sha256(raw).hexdigest() != checksum:
         legacy.conflict("checkpoint_changed")
-    return {record["path"]: raw}
+    files = {record["path"]: raw}
+    extra = record.get("selection_fit_artifact")
+    if extra:
+        name = legacy_selection_provenance.NAME
+        artifact = legacy.read(path.parents[1] / name, legacy_selection_provenance.MAX_BYTES)
+        if len(artifact) != extra["bytes"] or hashlib.sha256(artifact).hexdigest() != extra["sha256"]:
+            legacy.conflict("checkpoint_changed")
+        files[name] = artifact
+    return files
 
 
 def stop(child, control):
@@ -96,6 +102,12 @@ def retain_checkpoint(job, token, control, work):
         # its complete recorded basis is validated by the same replay reader.
         restore_sfs_resume(path, value["resume_basis"])
         path.chmod(0o400)
+        extra = work / legacy_selection_provenance.NAME
+        selection_fit_artifact = None
+        if extra.exists():
+            artifact = legacy.read(extra, legacy_selection_provenance.MAX_BYTES)
+            extra.chmod(0o400)
+            selection_fit_artifact = {"bytes": len(artifact), "sha256": hashlib.sha256(artifact).hexdigest()}
         event(
             job.pk,
             token,
@@ -108,6 +120,7 @@ def retain_checkpoint(job, token, control, work):
                 "sha256": hashlib.sha256(raw).hexdigest(),
                 "bytes": len(raw),
                 "model_adopted": False,
+                "selection_fit_artifact": selection_fit_artifact,
             },
         )
     except (ValueError, OSError, KeyError):
@@ -130,7 +143,8 @@ def execute(job, token, check):
     work.mkdir()
     control = attempt / "control"
     control.mkdir()
-    mutable = {f"sfs_results/{job.dataset_id}_sfs_results.json"} if plan["options"].get("resume") else set()
+    mutable = ({f"sfs_results/{job.dataset_id}_sfs_results.json", legacy_selection_provenance.NAME}
+               if plan["options"].get("resume") else set())
     for name, raw in frozen.items():
         path = work / name
         path.parent.mkdir(parents=True, exist_ok=True)

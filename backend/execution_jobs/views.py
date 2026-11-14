@@ -151,6 +151,26 @@ class JobCandidateExportView(NativeReadView):
             return failure(exc)
 
 
+class JobFoldProvenanceView(NativeReadView):
+    def get(self, request, job_id):
+        from hashlib import sha256
+
+        from execution_jobs import fold_provenance
+
+        try:
+            params = request.query_params
+            if set(params) - {"sha256", "project_id"} or len(params.getlist("sha256")) != 1:
+                raise ValueError("Supply the exact result digest.")
+            raw = fold_provenance.export(request.user, job_id, request.query_params.get("sha256"))
+            response = HttpResponse(raw, content_type="application/json")
+            response["Content-Disposition"] = f'attachment; filename="development-folds-{job_id}.json"'
+            response["X-DeclarAI-Export-SHA256"] = sha256(raw).hexdigest()
+            response["Access-Control-Expose-Headers"] = "X-DeclarAI-Export-SHA256"
+            return response
+        except ERRORS as exc:
+            return failure(exc)
+
+
 class JobCandidateInputView(NativeReadView):
     def post(self, request, job_id):
         try:

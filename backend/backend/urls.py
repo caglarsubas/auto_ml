@@ -1,4 +1,4 @@
-from execution_jobs.views import JobLegacySelectionView, JobLegacyInputView, DatasetJobHistoryView, JobOperationalHandoffView, NativeAdoptionListView, NativeAdoptionView, NativeProtectedInputView, NativeAssessmentInputView, JobCandidateExportView, JobCandidateInputView, DatasetJobsView, JobDetailView, JobInputView, JobScoresView, JobTrainingInputView
+from execution_jobs.views import JobFoldProvenanceView, JobLegacySelectionView, JobLegacyInputView, DatasetJobHistoryView, JobOperationalHandoffView, NativeAdoptionListView, NativeAdoptionView, NativeProtectedInputView, NativeAssessmentInputView, JobCandidateExportView, JobCandidateInputView, DatasetJobsView, JobDetailView, JobInputView, JobScoresView, JobTrainingInputView
 from access_control.project_views import ProjectListView, ProjectMemberView
 from access_control.assistant_views import AssistantApprovalView, AssistantApproveView, AssistantCancelView, AssistantReceiptView
 from django.contrib import admin
@@ -74,6 +74,7 @@ urlpatterns = [
     path('api/native-adoptions/<uuid:adoption_id>/', NativeAdoptionView.as_view(), name='native-adoption'),
     path('api/native-adoptions/<uuid:adoption_id>/protected-inputs/', NativeProtectedInputView.as_view(), name='native-protected-input'),
     path('api/native-protected-inputs/<uuid:protected_id>/preview/', NativeAssessmentInputView.as_view(), name='native-assessment-input'),
+    path('api/jobs/<uuid:job_id>/fold-provenance/', JobFoldProvenanceView.as_view(), name='job-fold-provenance'),
     path('api/jobs/<uuid:job_id>/candidate/', JobCandidateExportView.as_view(), name='job-candidate'),
     path('api/jobs/<uuid:job_id>/scoring-input/', JobCandidateInputView.as_view(), name='job-candidate-input'),
     path('api/jobs/<uuid:job_id>/scores/', JobScoresView.as_view(), name='job-scores'),

@@ -395,7 +395,7 @@ def test_ordinal_cache_inputs_are_bound_or_blocked(workflow, monkeypatch, kind):
 @pytest.mark.django_db(transaction=True)
 def test_concurrent_duplicates_dispatch_once(workflow, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
-    from django.db import close_old_connections
+    from django.db import connections
     import time
 
     _, client, _, request = workflow
@@ -413,7 +413,6 @@ def test_concurrent_duplicates_dispatch_once(workflow, monkeypatch):
     monkeypatch.setattr("ai_assistant.action_executor.dispatch_action", counted_dispatch)
 
     def post():
-        close_old_connections()
         duplicate = APIClient(enforce_csrf_checks=True)
         duplicate.cookies = copy.deepcopy(client.cookies)
         duplicate.credentials(**client._credentials)
@@ -421,7 +420,9 @@ def test_concurrent_duplicates_dispatch_once(workflow, monkeypatch):
             response = dispatch(duplicate, request, selector)
             return response.status_code, response.json()
         finally:
-            close_old_connections()
+            # These short-lived request threads own their database sessions.
+            # Closing only old connections can leave a fresh one alive until GC.
+            connections.close_all()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda _: post(), range(2)))

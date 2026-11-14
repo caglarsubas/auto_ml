@@ -36,6 +36,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   directory: any = null;
   job: any = null;
   handoff: any = null;
+  foldExportDigest = '';
   showHistory = false;
   busy = false;
   error = '';
@@ -59,7 +60,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.showHistory = false;
     this.inputFileId = this.fileId;
     this.busy = false;
-    this.error = '';
+    this.error = this.foldExportDigest = '';
     this.refresh();
   }
   private url(value: string) {
@@ -85,6 +86,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     // Withdraw stale evidence before either refresh response can replace its
     // controls; keyboard actions must target the newly verified receipt.
     this.job = this.handoff = null;
+    this.foldExportDigest = '';
     this.requests.add(
       this.http
         .get<any>(this.url(`datasets/${this.fileId}`), {
@@ -108,6 +110,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     if (this.busy) return;
     this.busy = true;
     this.job = this.handoff = null;
+    this.foldExportDigest = '';
     this.error = '';
     const generation = ++this.generation;
     this.requests.add(
@@ -230,6 +233,44 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
         }),
     );
   }
+  get canDownloadFolds(): boolean {
+    return (
+      this.job?.state === 'succeeded' &&
+      !!this.job.result_sha256 &&
+      ['native_numeric_training_search_v1', 'legacy_native_execution_v1'].includes(
+        this.job.specification.kind,
+      )
+    );
+  }
+  downloadFolds(): void {
+    if (this.busy || !this.canDownloadFolds) return;
+    const generation = this.generation;
+    const { id, result_sha256 } = this.job;
+    this.foldExportDigest = '';
+    this.error = '';
+    this.requests.add(
+      this.http
+        .get(this.url(`${id}/fold-provenance`), {
+          params: { ...this.params, sha256: result_sha256 },
+          responseType: 'blob',
+          observe: 'response',
+          transferCache: false,
+        })
+        .subscribe({
+          next: (response) => {
+            if (generation !== this.generation) return;
+            const digest = response.headers.get('X-DeclarAI-Export-SHA256');
+            if (!response.body || !digest || !/^[a-f0-9]{64}$/.test(digest)) {
+              this.error = 'Fold provenance export is missing its integrity digest.';
+              return;
+            }
+            this.foldExportDigest = digest;
+            this.save(response.body, `development-folds-${id}.json`);
+          },
+          error: (error) => this.fail(generation, error, false),
+        }),
+    );
+  }
   private save(blob: Blob, filename: string): void {
     downloadBlob(blob, filename);
   }
@@ -271,6 +312,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     if (generation !== this.generation) return;
     this.busy = false;
     this.job = this.handoff = null;
+    this.foldExportDigest = '';
     if (error.status === 403 || !mutation) {
       this.directory = null;
       this.source = null;

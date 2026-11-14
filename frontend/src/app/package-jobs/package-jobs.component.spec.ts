@@ -205,4 +205,22 @@ describe('Durable package job receipts', () => {
     expect(create).not.toHaveBeenCalled();
     expect(component.job).toBeNull();
   });
+  it('downloads exact fold evidence and displays the separately retained digest', () => {
+    const save = spyOn(URL, 'createObjectURL').and.returnValue('blob:fold-test');
+    spyOn(HTMLAnchorElement.prototype, 'click');
+    component.job = {
+      ...job,
+      state: 'succeeded',
+      result_sha256: 'a'.repeat(64),
+      specification: { kind: 'legacy_native_execution_v1' },
+    };
+    component.downloadFolds();
+    const request = http.expectOne(
+      '/api/jobs/job-1/fold-provenance/?project_id=project-a&sha256=' + 'a'.repeat(64),
+    );
+    const body = new Blob(['{}']);
+    request.flush(body, { headers: { 'X-DeclarAI-Export-SHA256': 'b'.repeat(64) } });
+    expect(save).toHaveBeenCalledWith(body);
+    expect(component.foldExportDigest).toBe('b'.repeat(64));
+  });
 });

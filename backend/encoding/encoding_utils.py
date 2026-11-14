@@ -237,9 +237,11 @@ def _apply_fallback(
         feat_report['strategy_applied'] = 'frequency_encoding'
 
     elif fallback == 'manual_grouping':
-        df, mapping = _manual_group_encode(df, feature, manual_mapping)
+        df, mapping = _manual_group_encode(df, feature, manual_mapping, fit_idx=fit_idx)
+        if mapping['type'] != fallback:
+            feat_report['fallback_reason'] += ' (no grouping supplied → label encoding)'
         feat_report['mapping'] = mapping
-        feat_report['strategy_applied'] = 'manual_grouping'
+        feat_report['strategy_applied'] = mapping['type']
 
     # After stats on the (possibly replaced) column
     if feature in df.columns:
@@ -338,6 +340,7 @@ def _target_encode(
         oof = pd.Series(index=fit_idx, dtype=float)
         n_splits = min(n_folds, len(fit_idx))
         used_oof = False
+        oof_fits = []
 
         if n_splits >= 2:
             try:
@@ -361,6 +364,10 @@ def _target_encode(
                 # Bayesian smoothing toward global mean
                 smooth = (stats['count'] * stats['mean'] + smoothing * fold_prior) / (stats['count'] + smoothing)
                 mapping_fold = {str(k): float(v) for k, v in smooth.items()}
+                oof_fits.append({
+                    'train_rows': tr_labels.tolist(), 'validation_rows': va_labels.tolist(),
+                    'mapping': mapping_fold, 'global_mean': fold_prior,
+                })
                 oof.loc[va_labels] = x_fit.loc[va_labels].map(
                     lambda v: mapping_fold.get(str(v), fold_prior)
                 ).astype(float)
@@ -389,6 +396,7 @@ def _target_encode(
             'global_mean': global_mean,
             'smoothing': smoothing,
             'oof': used_oof,
+            'oof_fits': oof_fits,
             'fit_on_train_only': True,
         }
 
@@ -429,11 +437,12 @@ def _frequency_encode(
     }
 
 
-def _manual_group_encode(df: pd.DataFrame, feature: str, manual_mapping: Optional[Dict] = None) -> Tuple[pd.DataFrame, Dict]:
+def _manual_group_encode(df: pd.DataFrame, feature: str, manual_mapping: Optional[Dict] = None,
+                         *, fit_idx: Optional[pd.Index] = None) -> Tuple[pd.DataFrame, Dict]:
     """Replace categories with user-assigned numeric group numbers."""
     if not manual_mapping:
         # Fallback: label encode if no mapping provided
-        return _label_encode(df, feature)
+        return _label_encode(df, feature, fit_idx=fit_idx)
 
     null_ph = '__NULL__'
     series = df[feature].fillna(null_ph).astype(str)

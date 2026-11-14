@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-11-13",
+  "updated": "2026-11-14",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -118,9 +118,10 @@
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43395871531)",
         "[Implementation PR #288](https://github.com/caglarsubas/auto_ml/pull/288)",
         "[Native qualification setup](NATIVE_QUALIFICATION_SETUP.md)",
-        "[Retained failed original main CI](https://github.com/caglarsubas/auto_ml/actions/runs/43361723349)"
+        "[Retained failed original main CI](https://github.com/caglarsubas/auto_ml/actions/runs/43361723349)",
+        "[Development fold provenance and verification](DEVELOPMENT_FOLD_PROVENANCE.md)"
       ],
-      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P176 qualifies D02-T01 on the supported alternate-model and durable search paths. D02-T02 complete provenance export and D02-T03 constrained target encoding remain open."
+      "progress": "Strict time/entity/outcome-window partitions and shared current booster CV/SFS/HPO folds record memberships. New raw-input recipes bind the split/version; purifier, encoding and imputation fit within model/fold partitions. Focused temporal/group and XGBoost classification/regression replay coverage is recorded in P03. Full alternate/search/supervised-encoding and legacy-path qualification remain open; constrained target encoding stays blocked. P04 adds shared classification/regression development assessment, complete fold-metric coverage, frozen target/task checks and fold-local automatic binary weights. Numeric temporal/grouped CV spans three boosters plus binary alternate CV; full search/encoding and objective consistency remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 records tuning trial/curve fold-local transformations and native fit receipts, complete objective availability and fold-training class-weight policy. Separate candidate assessment remains exploratory. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P176 qualifies D02-T01 on the supported alternate-model and durable search paths. D02-T02 complete provenance export and D02-T03 constrained target encoding remain open. P177 implements reviewable, exact-job fold and transformation export. Independent merged-main qualification is pending."
     },
     {
       "id": "D03",
@@ -2175,6 +2176,10 @@
     {
       "date": "2026-11-13",
       "change": "Accept D02-T01 fold-local preparation after all seven PR #289 checks and independent main 43395871531 pass source and artifact audits. Keep 66 tasks and move done/open/blocked from 14/45/7 to 15/44/7."
+    },
+    {
+      "date": "2026-11-14",
+      "change": "Implement P177 for D02-T02. Qualify exact fold membership, fitted state and reviewer export before taking backlog credit."
     }
   ],
   "implementation_packets": [
@@ -5304,6 +5309,21 @@
         "[Retained failed original main CI](https://github.com/caglarsubas/auto_ml/actions/runs/43361723349)"
       ],
       "remaining": "D02-T01 is accepted for the supported paths. D02-T02 fold provenance export is ready. D09-T02 awaits its remaining prerequisites."
+    },
+    {
+      "id": "P177",
+      "kind": "product_implementation",
+      "title": "Development fold and fitted transformation provenance export",
+      "items": [
+        "D02"
+      ],
+      "owner": "Backend/ML",
+      "status": "implemented",
+      "description": "Export exact-job, development-only fit evidence for native training, durable modeling and search, with ordered memberships, fitted state, source pins, and offline verification.",
+      "evidence": [
+        "[Development fold provenance and verification](DEVELOPMENT_FOLD_PROVENANCE.md)"
+      ],
+      "remaining": "D02-T02 awaits pull-request and merged-main qualification. D02-T03 remains queued."
     }
   ],
   "release_qualification": {
@@ -5465,8 +5485,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P169",
-    "source_commit": "08cff0849890135eb7995924d10813306faef485",
+    "packet": "P176",
+    "source_commit": "53889d05c7fa665c7759a23df53a2e6a0e537edf",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5476,9 +5496,9 @@
       }
     },
     "packets": {
-      "total": 169,
+      "total": 176,
       "counts": {
-        "done": 168,
+        "done": 175,
         "open": 0,
         "blocked": 1
       }
@@ -5573,7 +5593,7 @@
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [
           "D02-T01"
         ],
@@ -5582,8 +5602,12 @@
           "Exported evidence identifies every fit partition and transformation."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Development fold provenance and verification](DEVELOPMENT_FOLD_PROVENANCE.md)"
+        ],
+        "packet_refs": [
+          "P177"
+        ],
         "order": 4,
         "basis": "Remaining acceptance scope from D02; existing tested foundation is reused, not rebuilt."
       },
@@ -7268,16 +7292,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P176 fold-local preparation",
-      "recorded_on": "2026-11-13",
-      "inventory_source_commit": "8c4285ecc32989c07b2dbf7f916f375e55715028",
+      "label": "Before P177 fold provenance export",
+      "recorded_on": "2026-11-14",
+      "inventory_source_commit": "53889d05c7fa665c7759a23df53a2e6a0e537edf",
       "total": 66,
       "counts": {
         "ready": 4,
         "in_progress": 0,
-        "waiting": 41,
+        "waiting": 40,
         "blocked": 7,
-        "done": 14
+        "done": 15
       }
     },
     "baseline_history": [
@@ -7461,6 +7485,20 @@
           "waiting": 41,
           "blocked": 7,
           "done": 13
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P176 fold-local preparation",
+        "recorded_on": "2026-11-13",
+        "inventory_source_commit": "8c4285ecc32989c07b2dbf7f916f375e55715028",
+        "total": 66,
+        "counts": {
+          "ready": 4,
+          "in_progress": 0,
+          "waiting": 41,
+          "blocked": 7,
+          "done": 14
         }
       }
     ]
