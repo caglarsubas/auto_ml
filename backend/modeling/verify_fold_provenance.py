@@ -14,6 +14,29 @@ def _digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, allow_nan=False).encode()).hexdigest()
 
 
+def verify_encoder_folds(mapping, outer_train):
+    """A cross-fit mapping covers each outer training row exactly once."""
+    fits = mapping.get('oof_fits')
+    if fits is None or fits == [] and mapping.get('oof') is False:
+        return False
+    if mapping.get('oof') is not True or mapping.get('fit_on_train_only') is not True or not isinstance(fits, list) or not fits:
+        raise ValueError('Target encoding has invalid fold provenance.')
+    outer = set(outer_train)
+    covered = set()
+    for fit in fits:
+        train, valid = fit['train_rows'], fit['validation_rows']
+        tr, va = set(train), set(valid)
+        if (not isinstance(train, list) or not isinstance(valid, list) or not tr or not va
+                or any(type(row) not in (int, str) for row in train + valid)
+                or len(tr) != len(train) or len(va) != len(valid) or tr & va or va & covered
+                or tr | va != outer or not isinstance(fit['mapping'], dict)):
+            raise ValueError('Target encoding has invalid fold provenance.')
+        covered.update(va)
+    if covered != outer:
+        raise ValueError('Target encoding has incomplete out-of-fold coverage.')
+    return True
+
+
 def verify(raw, expected):
     if (not isinstance(raw, bytes) or len(raw) > MAX_BYTES or not isinstance(expected, str)
             or not re.fullmatch('[a-f0-9]{64}', expected) or hashlib.sha256(raw).hexdigest() != expected):
@@ -60,7 +83,14 @@ def verify(raw, expected):
                 row_digest = receipt.get(name + '_rows_sha256')
                 if row_digest is not None and _digest(rows) != row_digest:
                     raise ValueError
-            if state['purifier'] and state['purifier']['fit_rows'] != tr:
+            for entry in state['encoding']:
+                if 'before_stats' in entry or 'after_stats' in entry:
+                    raise ValueError
+                mapping = entry.get('mapping') or {}
+                if mapping.get('type') == 'target_encoding':
+                    verify_encoder_folds(mapping, tr)
+            if state['purifier'] and (state['purifier']['fit_rows'] != tr
+                                      or state['purifier']['raw_input_sha256'] != data['raw_input_sha256']):
                 raise ValueError
             if state['internal'] and (state['internal']['fit_partition'] != 'train'
                                      or state['internal']['fit_input_sha256'] != receipt['train']['sha256']):

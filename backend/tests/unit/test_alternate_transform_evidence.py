@@ -54,7 +54,7 @@ def test_fitted_state_is_portable_and_bound_to_the_training_partition(temporal_c
 
 
 def test_nonwinning_search_candidates_retain_their_folds(temporal_context, monkeypatch):
-    from execution_jobs import selection_provenance
+    from execution_jobs import legacy_selection_provenance
     from modeling.sfs_utils import run_sfs_with_progress
 
     c = temporal_context
@@ -62,7 +62,7 @@ def test_nonwinning_search_candidates_retain_their_folds(temporal_context, monke
     X, V, _ = prepare_fold(c, train, valid)
     y, y_valid = c['labels'].loc[train], c['labels'].loc[valid]
     recorded = {}
-    monkeypatch.setattr(selection_provenance, 'record', recorded.update)
+    monkeypatch.setattr(legacy_selection_provenance, 'record', recorded.update)
     result = run_sfs_with_progress(X, y, V, y_valid, X, V, ['forward'], {'max_features': 1},
                                    cv_folds=2, top_k=2, validation_context=c)
     assert result['status'] == 'completed', result.get('error')
@@ -80,3 +80,43 @@ def test_nonwinning_search_candidates_retain_their_folds(temporal_context, monke
         assert tr.end.max() < va.date.min()
         assert set(tr.entity).isdisjoint(va.entity)
         assert fold['native_fit']['train']['features'] == [nonwinner]
+
+
+
+def test_encoding_export_replays_nested_training_fits_and_excludes_diagnostics():
+    from encoding.encoding_utils import apply_encoding
+    from modeling.fold_evidence import FoldEvidence
+
+    df = pd.DataFrame({
+        'feature': ['a', 'a', 'b', 'b', 'a', 'b', 'validation-only', 'protected-only'],
+        'fallback': ['a', 'b', 'b', 'a', 'a', 'b', 'validation-only', 'protected-only'],
+        'outcome': [0, 1, 0, 1, 0, 1, 1, 0],
+    })
+    train, valid = [0, 1, 2, 3, 4, 5], [6]
+    encoded, reports = apply_encoding(df, [
+        {'feature': 'feature', 'encoding_method': 'target_encoding'},
+        {'feature': 'fallback', 'encoding_method': 'manual_grouping'},
+    ], target_col='outcome', use_native=False, fit_idx=pd.Index(train))
+    model = get_alt_adapter('logistic_regression').train(
+        encoded.loc[train, ['feature', 'fallback']], df.loc[train, 'outcome'],
+        encoded.loc[valid, ['feature', 'fallback']], df.loc[valid, 'outcome'], {},
+    )
+    evidence = FoldEvidence(train + valid)
+    evidence.record('model/fit', model.fit_receipt, {'encoding': reports}, train_rows=train, valid_rows=valid)
+    exported = evidence.result()
+    state, = exported['transform_states'].values()
+    target, fallback = state['encoding']
+    assert not exported['unverified']
+    assert 'protected-only' in json.dumps(reports)
+    assert all(text not in json.dumps(exported) for text in ('protected-only', 'validation-only', 'before_stats', 'after_stats'))
+    assert fallback['strategy_applied'] == 'label_encoding'
+    assert fallback['mapping']['fit_on_train_only']
+    assert encoded.loc[valid[0], 'fallback'] == -1
+    for fold in target['mapping']['oof_fits']:
+        assert set(fold['train_rows']).isdisjoint(fold['validation_rows'])
+        for row in fold['validation_rows']:
+            assert encoded.loc[row, 'feature'] == pytest.approx(
+                fold['mapping'].get(df.loc[row, 'feature'], fold['global_mean']))
+    target['mapping']['oof_fits'][0]['train_rows'][0] = 7
+    with pytest.raises(ValueError, match='invalid fold provenance'):
+        evidence.record('model/fit', model.fit_receipt, {'encoding': reports}, train_rows=train, valid_rows=valid)

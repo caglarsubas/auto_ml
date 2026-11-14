@@ -13,7 +13,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from deployment.reviews import digest
-from execution_jobs import legacy_execution as legacy, selection_provenance
+from execution_jobs import legacy_execution as legacy, legacy_selection_provenance
 from execution_jobs.models import NativeJob
 
 
@@ -59,8 +59,8 @@ def checkpoint_files(actor, file_id, options, source):
     files = {record["path"]: raw}
     extra = record.get("selection_fit_artifact")
     if extra:
-        name = selection_provenance.NAME
-        artifact = legacy.read(path.parents[1] / name, selection_provenance.MAX_BYTES)
+        name = legacy_selection_provenance.NAME
+        artifact = legacy.read(path.parents[1] / name, legacy_selection_provenance.MAX_BYTES)
         if len(artifact) != extra["bytes"] or hashlib.sha256(artifact).hexdigest() != extra["sha256"]:
             legacy.conflict("checkpoint_changed")
         files[name] = artifact
@@ -102,10 +102,10 @@ def retain_checkpoint(job, token, control, work):
         # its complete recorded basis is validated by the same replay reader.
         restore_sfs_resume(path, value["resume_basis"])
         path.chmod(0o400)
-        extra = work / selection_provenance.NAME
+        extra = work / legacy_selection_provenance.NAME
         selection_fit_artifact = None
         if extra.exists():
-            artifact = legacy.read(extra, selection_provenance.MAX_BYTES)
+            artifact = legacy.read(extra, legacy_selection_provenance.MAX_BYTES)
             extra.chmod(0o400)
             selection_fit_artifact = {"bytes": len(artifact), "sha256": hashlib.sha256(artifact).hexdigest()}
         event(
@@ -143,7 +143,7 @@ def execute(job, token, check):
     work.mkdir()
     control = attempt / "control"
     control.mkdir()
-    mutable = ({f"sfs_results/{job.dataset_id}_sfs_results.json", selection_provenance.NAME}
+    mutable = ({f"sfs_results/{job.dataset_id}_sfs_results.json", legacy_selection_provenance.NAME}
                if plan["options"].get("resume") else set())
     for name, raw in frozen.items():
         path = work / name

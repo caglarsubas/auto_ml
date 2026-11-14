@@ -3,11 +3,17 @@
 from collections.abc import Mapping
 
 from modeling.fit_receipts import receipt_digest
+from modeling.verify_fold_provenance import verify_encoder_folds
+
+
+ENCODER_FIELDS = ('feature', 'strategy', 'strategy_applied', 'mapping', 'new_columns',
+                  'categories', 'fit_on_train_only')
 
 
 class FoldEvidence:
-    def __init__(self, development_rows):
+    def __init__(self, development_rows, *, raw_input_sha256=None):
         self.development_rows = set(development_rows)
+        self.raw_input_sha256 = raw_input_sha256
         self.partitions = {}
         self.transforms = {}
         self.fits = []
@@ -45,7 +51,7 @@ class FoldEvidence:
             if declared is not None and declared != receipt_digest(rows):
                 raise ValueError('Ordered development row identities do not match the native fit receipt.')
         if any(fit.get(name + '_rows_sha256') is None for name in ('train', 'valid')):
-            self.gaps.append({'stage': stage, 'reason': 'historical_ordered_membership_unverified'})
+            self.gaps.append({'stage': stage, 'reason': 'ordered_membership_digest_unavailable'})
         if refit and (valid or fit.get('validation_role') == 'early_stopping'
                       or fit['train']['sha256'] != fit['valid']['sha256']):
             raise ValueError('An all-development refit cannot consume a validation partition.')
@@ -57,6 +63,8 @@ class FoldEvidence:
         purifier = state.get('purifier')
         if purifier and purifier.get('fit_rows') != train_rows:
             raise ValueError('Purifier evidence was fitted on a different partition.')
+        if purifier and purifier.get('raw_input_sha256') != self.raw_input_sha256:
+            raise ValueError('Purifier evidence does not identify the frozen raw input.')
         internal = fit.get('fitted_transforms')
         if internal and (internal.get('fit_partition') != 'train'
                          or internal.get('fit_input_sha256') != fit['train']['sha256']):
@@ -65,7 +73,14 @@ class FoldEvidence:
             self.gaps.append({'stage': stage, 'reason': 'upstream_preparation_unverified'})
         if fit.get('algorithm') in {'logistic_regression', 'scorecard', 'isolation_forest'} and not internal:
             self.gaps.append({'stage': stage, 'reason': 'historical_internal_transforms_unavailable'})
-        transforms = {'encoding': state.get('encoding', []), 'impute_means': state.get('impute_means', {}),
+        encoding = [{key: entry[key] for key in ENCODER_FIELDS if key in entry}
+                    for entry in state.get('encoding', [])]
+        for entry in encoding:
+            mapping = entry.get('mapping') or {}
+            if mapping.get('type') == 'target_encoding' and not verify_encoder_folds(mapping, train_rows):
+                self.gaps.append({'stage': stage, 'reason': 'inner_target_encoding_folds_unverified',
+                                  'feature': entry['feature']})
+        transforms = {'encoding': encoding, 'impute_means': state.get('impute_means', {}),
                       'purifier': purifier, 'internal': internal, 'class_weight': state.get('class_weight')}
         # The hash still binds the full fitted state; reference it once in the
         # export instead of repeating it in the receipt and transformation table.

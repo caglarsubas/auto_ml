@@ -4,7 +4,7 @@ import hashlib
 import json
 import uuid
 
-from execution_jobs import csv_scoring, history, legacy_execution as legacy, selection_provenance, service, training_search
+from execution_jobs import csv_scoring, history, legacy_execution as legacy, legacy_selection_provenance, service, training_search
 from execution_jobs.models import NativeJob
 from modeling.fold_evidence import FoldEvidence
 from modeling.verify_fold_provenance import MAX_BYTES, SCOPE
@@ -154,33 +154,42 @@ def _legacy(actor, job, scopes):
             or result.get('plan_sha256') != job.specification['legacy_sha256']
             or result.get('inputs_sha256') != service.digest(plan['inputs'])):
         _conflict()
+    source = None
+    source_evidence = {}
+    if operation != 'training':
+        source_ref = plan['source']
+        service.execution_reference(source_ref, 'job_id', 'result_sha256')
+        source = NativeJob.objects.get(pk=source_ref['job_id'])
+        scopes.extend(service.read_authority(actor, source))
+        if (source.state != 'succeeded' or source.project_id != job.project_id or source.dataset_id != job.dataset_id
+                or service.execution_specification(source).get('kind') != legacy.KIND
+                or source.result_sha256 != source_ref['result_sha256']):
+            _conflict()
+        source_evidence = {'source_job_id': str(source.pk), 'source_execution_id': source_ref['execution_id'],
+                           'source_result_sha256': source.result_sha256}
     if operation in ('training', 'champion'):
         execution = result['payload']['execution_id']
         model, state, train, valid = _snapshot(job, execution)
-        output = FoldEvidence(train + valid)
+        if state['parent_execution_id'] != source_evidence.get('source_execution_id'):
+            _conflict()
+        output = FoldEvidence(train + valid, raw_input_sha256=state.get('raw_input_sha256'))
         calibration = _model_evidence(output, 'model', model, state, train, valid)
-        return {**output.result(), 'execution_id': execution, 'calibration': calibration,
+        return {**output.result(), **source_evidence, 'execution_id': execution, 'calibration': calibration,
                 'input_snapshot_sha256': state['input_snapshot_sha256'],
                 'raw_input_sha256': state.get('raw_input_sha256'),
                 'validation_specification': state['validation_specification'],
                 'prediction_contract_sha256': state['prediction_contract_sha256']}
-    source_ref = plan['source']
-    service.execution_reference(source_ref, 'job_id', 'result_sha256')
-    source = NativeJob.objects.get(pk=source_ref['job_id'])
-    scopes.extend(service.read_authority(actor, source))
-    if (source.state != 'succeeded' or source.project_id != job.project_id or source.dataset_id != job.dataset_id
-            or service.execution_specification(source).get('kind') != legacy.KIND
-            or source.result_sha256 != source_ref['result_sha256']):
+    if source is None:
         _conflict()
-    execution = source_ref['execution_id']
+    execution = source_evidence['source_execution_id']
     _, state, train, valid = _snapshot(source, execution)
-    output = FoldEvidence(train + valid)
+    output = FoldEvidence(train + valid, raw_input_sha256=state.get('raw_input_sha256'))
     payload = result['payload']
     candidates = {}
     parent_rows = set(train)
     if operation == 'sfs':
-        extra = (_artifact_bytes(job, selection_provenance.NAME)
-                 if selection_provenance.NAME in result['files'] else b'')
+        extra = (_artifact_bytes(job, legacy_selection_provenance.NAME)
+                 if legacy_selection_provenance.NAME in result['files'] else b'')
         for key, baseline in (payload.get('baselines') or {}).items():
             for i, row in enumerate(baseline['fold_provenance'], 1):
                 output.fold(f'baseline/{key}/{i}', row, parent_rows=parent_rows)
@@ -225,7 +234,7 @@ def _legacy(actor, job, scopes):
         stage = f'candidate/{name}'
         calibration = _model_evidence(output, stage, model, candidate_state, tr, va)
         assessments.append({'stage': stage, 'execution_id': identifier, 'calibration': calibration})
-    return {**output.result(), 'source_execution_id': execution, 'source_result_sha256': source.result_sha256,
+    return {**output.result(), **source_evidence,
             'input_snapshot_sha256': state['input_snapshot_sha256'],
             'raw_input_sha256': state.get('raw_input_sha256'), 'candidate_assessments': assessments,
             'validation_specification': state['validation_specification'],
@@ -238,7 +247,7 @@ def _selection_step(output, prefix, step, raw, state, train, valid, parent_rows)
         reason = reference['status'] if reference else 'historical_additional_selection_fits_unavailable'
         output.gaps.append({'stage': prefix, 'reason': reason})
         return
-    evidence = selection_provenance.read(raw, reference)
+    evidence = legacy_selection_provenance.read(raw, reference)
     screening, other = evidence['screening'], evidence['other_top_k']
     if (set(step['screening_scores']) != set(screening)
             or set(step['top_k_evaluated']) - {step['feature_name']} != set(other)):

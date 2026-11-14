@@ -696,7 +696,7 @@ def _run_selection_step(
     mode,
     objective,
 ):
-    from execution_jobs.selection_provenance import record
+    from execution_jobs.legacy_selection_provenance import record
     from modeling.development_assessment import development_metrics
 
     primary = objective["primary_metric"]

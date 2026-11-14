@@ -12,8 +12,8 @@ The request pins the job result digest. The response returns the export digest
 in `X-DeclarAI-Export-SHA256`. Current project read authority applies to the job
 and every bound source job. Successful responses and errors use `no-store`.
 The exporter reads frozen JSON metadata and the referenced selection-fit
-artifact. It excludes model bytes, protected row memberships, predictions
-and outcome values.
+artifact. It excludes model bytes, protected row memberships, predictions,
+outcome values and descriptive encoding statistics.
 
 Verify the saved file with the digest retained in the review record.
 
@@ -27,7 +27,8 @@ training and validation roles, native fit receipt and fitted state. It records
 purifier steps, encoding, imputation, alternate design matrices or scorecard
 WOE, anomaly score reference and fit weights where applicable. Binary
 calibration records its development-validation rows, input digest and fitted
-mapping. The legacy route pins the immutable input snapshot and original raw
+mapping. For supported random-split target encoding, each inner mapping
+identifies its ordered fit and application rows. The legacy route pins the immutable input snapshot and original raw
 input when the fitted purifier has a replay recipe. The numeric route pins its
 development CSV and accepted validation declaration.
 

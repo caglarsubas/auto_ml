@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from execution_jobs import legacy_execution, selection_provenance, service
+from execution_jobs import legacy_execution, legacy_selection_provenance, service
 from execution_jobs.models import NativeJob
 from modeling.verify_fold_provenance import verify
 from tests.unit.test_durable_training_search import admission, queue, world  # noqa: F401
@@ -83,16 +83,23 @@ def test_export_rejects_protected_rows_in_fitted_membership():
 
 
 def test_legacy_evidence_pins_exact_source_and_never_reads_protected_artifacts(world, monkeypatch):
+    import uuid
     from tests.unit.test_durable_legacy_execution import launch, options, post
 
     w = world
+    w.frame['category'] = ['a', 'b'] * 40 + ['protected-only'] * 40
+    w.frame.to_csv(w.path, index=False)
     prepared = post(w.clients['developer'], '/api/preprocessing/run/', {
         'file_id': w.file_id, 'options': [29], 'target_column': 'outcome',
         'split': {'strategy': 'oot', 'date_column': 'date', 'label_end_column': 'end',
                   'group_column': 'entity', 'cutoff': '2020-03-20'},
     })
     assert prepared.status_code == 200, prepared.content
-    identifier, _, _ = launch(w, 'training', {**options(w), 'processed_file': prepared.json()['processed_file']})
+    identifier, _, _ = launch(w, 'training', {
+        **options(w), 'processed_file': prepared.json()['processed_file'],
+        'encoding_plan': [{'feature': 'category', 'encoding_method': 'frequency_encoding'}],
+        'encoding_use_native': False,
+    })
     service.execute(identifier)
     source = NativeJob.objects.get(pk=identifier)
     assert source.state == 'succeeded', source.reason_code
@@ -110,6 +117,18 @@ def test_legacy_evidence_pins_exact_source_and_never_reads_protected_artifacts(w
     service.execute(hpo_id)
     hpo = NativeJob.objects.get(pk=hpo_id)
     assert hpo.state == 'succeeded', list(hpo.events.values('event_type', 'detail'))
+    champion_options = {key: args[key] for key in ('file_id', 'source_job_id', 'source_result_sha256', 'execution_id')}
+    champion_options.update(features=['x'], hyperparam={'n_estimators': 8})
+    preview = legacy_execution.preview(w.users['developer'], w.file_id, 'champion', champion_options)
+    receipt = legacy_execution.submit(w.users['developer'], w.file_id, {
+        'kind': legacy_execution.KIND, 'operation': 'champion', 'options': champion_options,
+        'plan_sha256': preview['plan_sha256'], 'inputs_sha256': preview['inputs_sha256'],
+        'request_id': str(uuid.uuid4()),
+    })
+    champion = receipt['id']
+    service.execute(champion)
+    champion = NativeJob.objects.get(pk=champion)
+    assert champion.state == 'succeeded', list(champion.events.values('event_type', 'detail'))
     original = legacy_execution.read
     captured = []
 
@@ -121,13 +140,14 @@ def test_legacy_evidence_pins_exact_source_and_never_reads_protected_artifacts(w
 
     monkeypatch.setattr(legacy_execution, 'read', read)
     outputs = {}
-    for job in (source, search, hpo):
+    for job in (source, search, hpo, champion):
         res = w.clients['reviewer'].get(f'/api/jobs/{job.pk}/fold-provenance/?sha256={job.result_sha256}')
         assert res.status_code == 200, res.content
         evidence = outputs[job.pk] = res.json()
         audited = verify(res.content, res['X-DeclarAI-Export-SHA256'])
         assert audited['fit_count'] and not evidence['unverified'], evidence['unverified']
         assert b'final_holdout' not in res.content and b'train_data.pkl' not in res.content
+        assert b'protected-only' not in res.content and b'before_stats' not in res.content
         for fit in evidence['fits']:
             if '/cv/' not in fit['stage'] and '/other_top_k/' not in fit['stage']:
                 continue
@@ -144,6 +164,8 @@ def test_legacy_evidence_pins_exact_source_and_never_reads_protected_artifacts(w
     assert {'forward/1/screen/1', 'forward/1/other_top_k/1/1', 'candidate/forward/cv/1'} <= stages
     stages = {row['stage'] for row in outputs[hpo.pk]['fits']}
     assert {'trial/0/fit', 'trial/0/cv/1', 'curve/1/point/1/cv/1', 'candidate/winner/cv/1'} <= stages
+    assert outputs[champion.pk]['source_job_id'] == str(source.pk)
+    assert outputs[champion.pk]['source_result_sha256'] == source.result_sha256
     for kind in (search, hpo):
         assert outputs[kind.pk]['candidate_assessments'][0]['execution_id']
 
@@ -160,16 +182,16 @@ def test_legacy_evidence_pins_exact_source_and_never_reads_protected_artifacts(w
 def test_selection_sidecar_bounds_integrity_and_keeps_result_references_small(tmp_path, settings, monkeypatch):
     import types
 
-    monkeypatch.setattr(selection_provenance.legacy_context, 'active', lambda: types.SimpleNamespace())
-    monkeypatch.setattr(selection_provenance, 'MAX_BYTES', 200)
+    monkeypatch.setattr(legacy_selection_provenance.legacy_context, 'active', lambda: types.SimpleNamespace())
+    monkeypatch.setattr(legacy_selection_provenance, 'MAX_BYTES', 200)
     settings.MEDIA_ROOT = tmp_path
     payload = {'screening': {'value': 'x' * 120}, 'other_top_k': {}}
-    ref = selection_provenance.record(payload)
+    ref = legacy_selection_provenance.record(payload)
     assert len(json.dumps(ref)) < len(json.dumps(payload))
-    assert selection_provenance.record(payload) == {'status': 'evidence_budget_exceeded'}
-    raw = (tmp_path / selection_provenance.NAME).read_bytes()
-    assert selection_provenance.read(raw, ref) == payload
+    assert legacy_selection_provenance.record(payload) == {'status': 'evidence_budget_exceeded'}
+    raw = (tmp_path / legacy_selection_provenance.NAME).read_bytes()
+    assert legacy_selection_provenance.read(raw, ref) == payload
     with pytest.raises(ValueError, match='digest'):
-        selection_provenance.read(raw, {**ref, 'sha256': '0' * 64})
+        legacy_selection_provenance.read(raw, {**ref, 'sha256': '0' * 64})
     with pytest.raises(ValueError, match='extent'):
-        selection_provenance.read(raw, {**ref, 'offset': len(raw)})
+        legacy_selection_provenance.read(raw, {**ref, 'offset': len(raw)})
