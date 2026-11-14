@@ -36,12 +36,21 @@ def remote_json(repo, endpoint):
                 raise
 
 
-def run_record(repo, number, expected):
+BASE_CHECKS = {'Backend tests (pytest)', 'PostgreSQL runtime and metadata', 'Backend lint (ruff)',
+               'Frontend unit tests (Karma)', 'Frontend lint (ESLint + Prettier)', 'Frontend E2E (Playwright)'}
+
+
+def run_record(repo, number, expected, required_checks=None):
+    required = sorted(BASE_CHECKS) if required_checks is None else required_checks
+    if (not isinstance(required, list) or any(not isinstance(name, str) or not name.strip() for name in required)
+            or len(set(required)) != len(required) or not BASE_CHECKS.issubset(required)):
+        raise ValueError('Invalid qualified check inventory')
     raw = remote_json(repo, f'repos/caglarsubas/auto_ml/actions/runs/{number}')
     jobs = remote_json(repo, f'repos/caglarsubas/auto_ml/actions/runs/{number}/attempts/{raw["run_attempt"]}/jobs?per_page=100')['jobs']
     checks = [{'name': x['name'], 'conclusion': x['conclusion']} for x in jobs]
     verified = (raw['head_sha'] == expected and raw['status'] == 'completed'
-                and raw['conclusion'] == 'success' and len(checks) == 6
+                and raw['conclusion'] == 'success' and len(checks) == len(required)
+                and {check['name'] for check in checks} == set(required)
                 and all(x['conclusion'] == 'success' for x in checks))
     return {k: raw[k] for k in ['id', 'head_sha', 'event', 'run_attempt', 'status', 'conclusion', 'html_url', 'updated_at']} | {'jobs': checks, 'verified': verified}
 
@@ -76,8 +85,8 @@ def build(repo):
             record = {'packet': latest, 'pr': pr['number'], 'url': pr['html_url'], 'merged': pr['merged'],
                       'head': pr['head']['sha'], 'merge': pr['merge_commit_sha'], 'merged_at': pr['merged_at'],
                       'receipt': str(audit_path), 'receipt_sha256': hashlib.sha256(audit_path.read_bytes()).hexdigest()}
-            record['pr_ci'] = run_record(repo, audit['ci_run'], audit['qualified_head'])
-            record['main_ci'] = run_record(repo, audit['main_run'], audit['merge'])
+            record['pr_ci'] = run_record(repo, audit['ci_run'], audit['qualified_head'], audit.get('required_checks'))
+            record['main_ci'] = run_record(repo, audit['main_run'], audit['merge'], audit.get('required_checks'))
             record['receipt_qualified'] = all(audit.get(key) is True for key in (
                 'main_qualified', 'merged_tree_matches_qualified_pr',
                 'original_case_skip_workload_limits_preserved', 'source_hashes_match'))
