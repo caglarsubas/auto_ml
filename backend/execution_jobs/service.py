@@ -427,6 +427,7 @@ def recheck_execution(job):
     if spec['kind'] == legacy_execution.KIND:
         legacy_execution.recheck(job)
     if spec["kind"] == native_assessment.KIND:
+        execution_reference(spec, "protected_input_id", "assessment_sha256")
         native_assessment.recheck(job)
     if spec["kind"] == training_scoring.KIND:
         execution_reference(spec, "training_job_id", "training_result_sha256")
@@ -680,6 +681,8 @@ def finish(identifier, token, state, reason="", result=None, *, deadline=None):
             close(job, "blocked", "job_time_budget_exceeded", metadata_only=True)
             return
         if (job.specification["kind"] == native_assessment.KIND and state == "succeeded"
+                and (job.specification.get("schema_version") == native_assessment.PLAN_SCHEMA
+                     or prepared_result and prepared_result.get("confirmatory"))
                 and (not prepared_result or not native_assessment.publish_assessment(job, prepared_result))):
             close(job, "blocked", "job_assessment_receipt_changed", metadata_only=True)
             return

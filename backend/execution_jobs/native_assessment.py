@@ -30,6 +30,7 @@ from modeling.holdout_evidence import holdout_spec, reserve_holdout_access
 from modeling.models import HoldoutAccess
 
 KIND = "native_protected_assessment_v1"
+PLAN_SCHEMA = 2
 BUDGET = {**training_search.BUDGET, "chunk_size": 500}
 SCOPE = "development_candidate_for_protected_assessment_only"
 PROSPECTIVE = "prospective_temporal_v1"
@@ -420,7 +421,7 @@ def plan(actor, protected_id):
         conflict("native_protected_scope_changed")
     projects.recheck(spec["authority"])
     result = {
-        "schema_version": 2,
+        "schema_version": PLAN_SCHEMA,
         "kind": KIND,
         "project_id": str(job.project_id),
         "adoption_id": str(adoption.pk),
@@ -509,9 +510,6 @@ def verify_plan(job, prepared):
 
 
 def recheck(job):
-    from execution_jobs import service
-
-    service.execution_reference(job.specification, "protected_input_id", "assessment_sha256")
     actor = get_user_model().objects.get(pk=job.authority["actor_id"])
     prepared, _, _, _ = plan(actor, job.specification["protected_input_id"])
     verify_plan(job, prepared)
@@ -732,6 +730,8 @@ def publish_assessment(job, result):
 
 def applicability(job):
     """Check current use of frozen evidence without reopening the sealed input."""
+    from execution_jobs import service
+
     result = job.result
     status = {
         "status": "exploratory", "confirmation_usable": False,
@@ -740,9 +740,10 @@ def applicability(job):
     }
     if result.get("confirmatory") is not True:
         return status
-    if job.specification.get("schema_version") != 2:
+    if job.specification.get("schema_version") != PLAN_SCHEMA:
         return {**status, "status": "historical_unverified", "reason_code": "legacy_assessment_binding_unverified"}
     try:
+        service.execution_reference(job.specification, "protected_input_id", "assessment_sha256")
         recheck(job)
         if not bound_access(job, result).filter(evidence_status="confirmatory").exists():
             conflict("job_assessment_receipt_changed")
