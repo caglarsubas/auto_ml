@@ -257,6 +257,42 @@ def test_export_selects_exact_assessment_and_preserves_manifest_bytes(trained):
     assert tampered.status_code == 409
 
 
+def test_late_assessment_publishes_exact_evidence_without_displacing_current(trained, settings, monkeypatch):
+    from evaluation import views
+    from modeling.execution_artifacts import load_assessment
+    from modeling.models import PipelineRun
+
+    file_id, parent = trained
+    pipeline = PipelineRun.objects.create(file_id=file_id, name='Current pipeline', current_step='modeling')
+    original_publish = views.publish_assessment
+    current = {}
+
+    def publish_after_newer_assessment(execution_id, receipt_id, payload, card):
+        if execution_id == parent['execution_id']:
+            child = ChampionPromoteView.as_view()(APIRequestFactory().post('/modeling/champion/',
+                {'file_id': file_id, 'execution_id': execution_id, 'features': ['x']}, format='json'))
+            assert child.status_code == 200, child.data
+            newer = assess(file_id, child.data['execution_id'])
+            assert newer.status_code == 200, newer.data
+            pipeline.refresh_from_db()
+            current.update(execution_id=child.data['execution_id'], payload=newer.data, state=pipeline.state)
+        return original_publish(execution_id, receipt_id, payload, card)
+
+    monkeypatch.setattr(views, 'publish_assessment', publish_after_newer_assessment)
+    older = assess(file_id, parent['execution_id'])
+    assert older.status_code == 200, older.data
+    older_receipt = older.data['evaluation']['holdout_access_id']
+    assert load_assessment(parent['execution_id'], older_receipt, file_id) == older.data
+    assert HoldoutAccess.objects.get(pk=older_receipt).attempt_state == 'completed'
+
+    root = Path(settings.MEDIA_ROOT) / 'evaluation'
+    assert json.loads((root / f'{file_id}_evaluation.json').read_text()) == current['payload']
+    assert json.loads((root / f'{file_id}_model_card.json').read_text()) == current['payload']['model_card']
+    pipeline.refresh_from_db()
+    assert pipeline.state == current['state']
+    assert pipeline.state['evaluation']['execution_id'] == current['execution_id']
+
+
 @pytest.mark.auth_boundary
 @pytest.mark.django_db
 def test_history_requires_real_authentication_without_exposing_final_inputs(settings, tmp_path, django_user_model):

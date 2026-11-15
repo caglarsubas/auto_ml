@@ -10,9 +10,10 @@ import json
 import os
 import platform
 import shutil
+import tempfile
 import uuid
 import fcntl
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -117,25 +118,37 @@ def replace_projection(source, destination):
 
 def publish_assessment(execution_id, receipt_id, payload, card):
     """Append an independently verified assessment without changing a run."""
-    load_execution(execution_id, payload['file_id'])
+    from access_control.projects import governed, register_artifact
+    from django.db import transaction
+
+    file_id = payload['file_id']
+    load_execution(execution_id, file_id)
     root = execution_root(execution_id) / 'assessments' / str(uuid.UUID(str(receipt_id)))
-    root.mkdir(parents=True, exist_ok=False)
+    root.parent.mkdir(parents=True, exist_ok=True)
     payload['evaluation_path'] = str((root / 'evaluation.json').relative_to(settings.MEDIA_ROOT))
     payload['model_card_path'] = str((root / 'model_card.json').relative_to(settings.MEDIA_ROOT))
-    for name, value in [('evaluation.json', payload), ('model_card.json', card)]:
-        with (root / name).open('x', encoding='utf-8') as stream:
-            stream.write(json.dumps(value, default=str, allow_nan=False, separators=(',', ':')))
-    manifest = {'execution_id': execution_id, 'assessment_id': str(receipt_id),
-                'file_id': payload['file_id'], 'files': {
-                    name: {'sha256': digest_file(root / name), 'bytes': (root / name).stat().st_size}
-                    for name in ('evaluation.json', 'model_card.json')}}
-    (root / 'manifest.json').write_text(json.dumps(manifest, separators=(',', ':')), encoding='utf-8')
-    from access_control.projects import governed, register_artifact
-    if governed():
-        from django.db import transaction
-        with transaction.atomic():
-            for name in ('evaluation.json', 'model_card.json', 'manifest.json'):
-                register_artifact(root / name, file_id=payload['file_id'])
+    artifacts = {'evaluation.json': payload, 'model_card.json': card}
+    with tempfile.TemporaryDirectory(prefix='.assessment-', dir=root.parent) as directory:
+        staged = Path(directory)
+        files = {}
+        for name, value in artifacts.items():
+            path = staged / name
+            raw = json.dumps(value, default=str, allow_nan=False, separators=(',', ':')).encode('utf-8')
+            path.write_bytes(raw)
+            files[name] = {'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw)}
+        manifest = {'execution_id': str(execution_id), 'assessment_id': root.name,
+                    'file_id': file_id, 'files': files}
+        (staged / 'manifest.json').write_text(json.dumps(manifest, separators=(',', ':')), encoding='utf-8')
+
+        private = governed()
+        with projection_lock(file_id):
+            if os.path.lexists(root):
+                raise FileExistsError(f'Assessment version already exists: {root.name}')
+            with transaction.atomic() if private else nullcontext():
+                if private:
+                    for name in (*artifacts, 'manifest.json'):
+                        register_artifact(root / name, file_id=file_id)
+                os.rename(staged, root)
     return root
 
 
@@ -246,7 +259,7 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
     # All fit/metric/CV checks precede staging or adoption. No failed candidate is published.
     dataset_name = next(name for name in manifest['files'] if name.startswith('dataset.'))
     execution_id, root, _ = begin_execution(parent_root / dataset_name)
-    for name in ('raw_input.csv', 'purifier_recipe.json', 'purifier.json'):
+    for name in ('raw_input.csv', 'purifier_recipe.json', 'purifier.json', 'preprocessing_stage.json'):
         if name in manifest['files']:
             shutil.copyfile(parent_root / name, root / name)
     if selection_evidence is not None:
@@ -280,12 +293,13 @@ def publish_candidate(parent_id, file_id, adapter, features, params, source, ado
         n_train=len(data['y_train']), n_valid=len(data['y_valid']))
     lineage.update(execution_id=execution_id, parent_execution_id=parent_id, source=source,
                    prediction_contract=contract, encoding_report=data.get('encoding_report', []),
-                   purifier=data.get('purifier_state'), fit_receipt=fit_receipt, cv=cv)
+                   purifier=data.get('purifier_state'), fit_receipt=fit_receipt, cv=cv,
+                   preprocessing=parent['model'].get('preprocessing', {'status': 'historical_unverified'}))
     lineage_path = root / 'lineage.json'
     lineage_path.write_text(json.dumps(lineage, separators=(',', ':'), allow_nan=False), encoding='utf-8')
     # Only invariant declarations and input provenance can cross a model change.
     invariant = ('prediction_contract', 'holdout_spec', 'input_stage', 'purifier_provenance', 'diagnostic_limitations',
-                 'impute_fit_on_train_only')
+                 'impute_fit_on_train_only', 'preprocessing')
     model = {key: parent['model'][key] for key in invariant if key in parent['model']}
     model.update(model_type=f'{algorithm}_{"regressor" if task == "regression" else "anomaly" if task == "anomaly" else "classifier"}',
         task=task, pipeline_family='alternate' if type(adapter) is SklearnModelAdapter else 'boosting',

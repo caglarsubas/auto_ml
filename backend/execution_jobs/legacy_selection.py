@@ -3,7 +3,7 @@
 import hashlib
 import json
 import os
-import shutil
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -15,6 +15,7 @@ from deployment.scoring_receipts import require_digest
 from execution_jobs import legacy_execution as legacy, service
 from execution_jobs.models import NativeJob
 from modeling.execution_artifacts import projection_lock, replace_projection
+from modeling.sfs_evidence import _sync_directory
 
 
 def bound_job(actor, identifier, expected=None):
@@ -41,6 +42,81 @@ def member(job, name):
     if len(raw) != entry["bytes"] or hashlib.sha256(raw).hexdigest() != entry["sha256"]:
         legacy.conflict("selection_artifact_changed")
     return raw
+
+
+def publication_path(name):
+    root = Path(settings.MEDIA_ROOT).resolve()
+    path = root / legacy.relative(name)
+    for parent in (path, *path.parents):
+        if parent == root:
+            break
+        if parent.is_symlink():
+            legacy.conflict("selection_target_invalid")
+    return path
+
+
+def write_member(path, raw):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("xb") as stream:
+        stream.write(raw)
+        stream.flush()
+        os.fchmod(stream.fileno(), 0o400)
+        os.fsync(stream.fileno())
+
+
+def publish_execution(job, execution):
+    """Publish one complete execution under the dataset and queue locks."""
+    prefix = f"execution_runs/{uuid.UUID(str(execution))}/"
+    entries = {name for name in job.result["files"] if name.startswith(prefix)}
+    if not {prefix + "manifest.json", prefix + "modeling_status.json"} <= entries:
+        legacy.conflict("selection_artifact_missing")
+    destination = publication_path(prefix.rstrip("/"))
+    if os.path.lexists(destination):
+        if not destination.is_dir():
+            legacy.conflict("selection_target_occupied")
+        actual = set()
+        for parent, directories, files in os.walk(destination):
+            parent = Path(parent)
+            if any((parent / directory).is_symlink() for directory in directories):
+                legacy.conflict("selection_target_invalid")
+            if parent == destination and "assessments" in directories:
+                directories.remove("assessments")  # Independently published descendants.
+            actual.update(prefix + (parent / name).relative_to(destination).as_posix() for name in files)
+        if actual != entries:
+            legacy.conflict("selection_target_occupied")
+        for name in sorted(entries):
+            if legacy.read(publication_path(name)) != member(job, name):
+                legacy.conflict("selection_target_occupied")
+    else:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=destination.parent, prefix=".staging-") as staging:
+            staged = Path(staging) / destination.name
+            for name in sorted(entries):
+                write_member(staged / legacy.relative(name)[len(prefix):], member(job, name))
+            for parent, _, _ in os.walk(staged, topdown=False):
+                _sync_directory(parent)
+            staged.rename(destination)
+    _sync_directory(destination.parent)
+    return entries
+
+
+def publish_history_member(job, name):
+    """Publish digest-verified history without ever replacing an existing file."""
+    path = publication_path(name)
+    raw = member(job, name)
+    if not os.path.lexists(path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=path.parent, prefix=".staging-") as staging:
+            staged = Path(staging) / path.name
+            write_member(staged, raw)
+            try:
+                os.link(staged, path)
+            except FileExistsError:
+                pass  # Replay inspects the published bytes below.
+    if legacy.read(publication_path(name)) != raw:
+        legacy.conflict("selection_target_occupied")
+    _sync_directory(path.parent)
+    return path
 
 
 def candidate(job, execution):
@@ -209,35 +285,7 @@ def select(actor, identifier, data):
             already = (existing or {}).get("native_job_selection") == stamp
             if actual != expected and not already:
                 legacy.conflict("selection_base_changed")
-            destination = Path(settings.MEDIA_ROOT) / prefix
-            entries = {name: entry for name, entry in job.result["files"].items() if name.startswith(prefix)}
-            if not entries:
-                legacy.conflict("selection_artifact_missing")
-            if destination.is_symlink() or destination.parent.is_symlink():
-                legacy.conflict("selection_target_invalid")
-            if destination.exists():
-                actual_files = {str(p.relative_to(settings.MEDIA_ROOT)) for p in destination.rglob("*") if p.is_file()}
-                if actual_files != set(entries):
-                    legacy.conflict("selection_target_occupied")
-                for name, entry in entries.items():
-                    raw = legacy.read(Path(settings.MEDIA_ROOT) / name)
-                    if len(raw) != entry["bytes"] or hashlib.sha256(raw).hexdigest() != entry["sha256"]:
-                        legacy.conflict("selection_target_occupied")
-            else:
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                staged = destination.with_name("." + destination.name + "-" + uuid.uuid4().hex)
-                staged.mkdir()
-                try:
-                    for name in entries:
-                        raw = member(job, name)
-                        path = staged / name[len(prefix) :]
-                        path.parent.mkdir(parents=True, exist_ok=True)
-                        path.write_bytes(raw)
-                        path.chmod(0o400)
-                    staged.rename(destination)
-                finally:
-                    if staged.exists():
-                        shutil.rmtree(staged)
+            entries = publish_execution(job, execution)
             model = payload["model"]
             root = Path(settings.MEDIA_ROOT)
             for key in ("train_data_path", "lineage_path"):

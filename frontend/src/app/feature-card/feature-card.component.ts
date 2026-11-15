@@ -579,7 +579,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
     const fid = Number(this.data.fileId);
     if (!isFinite(fid)) return;
     this.dataService
-      .getDatqSummaryRow(fid, this.selectedFeatureName || this.data.columnName)
+      .getDatqSummaryRow(fid, this.selectedFeatureName || this.data.columnName, this.data.processedFile)
       .subscribe({
         next: (resp: any) => {
           if (resp?.row) {

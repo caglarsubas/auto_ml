@@ -581,14 +581,14 @@ export class SharedService {
   }
 
   // Active process tracking for pipeline resume (preprocessing/modeling/sfs)
-  private activeProcessSubject = new BehaviorSubject<{ type: string; file_id: number } | null>(null);
-  activeProcess$: Observable<{ type: string; file_id: number } | null> = this.activeProcessSubject.asObservable();
+  private activeProcessSubject = new BehaviorSubject<{ type: string; file_id: number; request_id?: string } | null>(null);
+  activeProcess$ = this.activeProcessSubject.asObservable();
 
-  setActiveProcess(process: { type: string; file_id: number } | null): void {
+  setActiveProcess(process: { type: string; file_id: number; request_id?: string } | null): void {
     this.activeProcessSubject.next(process);
   }
 
-  getActiveProcess(): { type: string; file_id: number } | null {
+  getActiveProcess(): { type: string; file_id: number; request_id?: string } | null {
     return this.activeProcessSubject.getValue();
   }
 }

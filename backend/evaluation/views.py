@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
 import pickle
+import tempfile
 import zipfile
 import uuid
 from contextlib import nullcontext
@@ -13,6 +15,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 from django.conf import settings
+from django.db import transaction
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -36,6 +39,8 @@ from modeling.execution_artifacts import publish_assessment, replace_projection,
 from modeling.lineage import load_lineage
 from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
 
+logger = logging.getLogger(__name__)
+
 
 def _load_bu_from_request_or_run(data: dict, file_id: int):
     bu = normalize_business_understanding(data.get('business_understanding'))
@@ -45,7 +50,7 @@ def _load_bu_from_request_or_run(data: dict, file_id: int):
         run = None
         run_id = data.get('pipeline_run_id')
         if run_id:
-            run = PipelineRun.objects.filter(pk=int(run_id)).first()
+            run = PipelineRun.objects.filter(pk=int(run_id), file_id=file_id).first()
         if run is None:
             run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
         if run is not None:
@@ -89,6 +94,50 @@ def _load_modeling_status(file_id: int):
             return json.load(f)
     except Exception:
         return None
+
+
+def _write_projection(path, value):
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8') as staged:
+        json.dump(value, staged, indent=2, default=str)
+        staged.flush()
+        replace_projection(staged.name, path)
+
+
+def _update_evaluated_pipeline(file_id, run_id, payload, bu, gov, lineage):
+    from modeling.models import PipelineRun
+
+    step_order = {'declaration': 0, 'preprocessing': 1, 'data_quality': 2, 'modeling': 3,
+                  'sfs': 4, 'evaluation': 5, 'deployment': 6, 'monitoring': 7}
+    card = payload['model_card']
+    evaluation = payload['evaluation']
+    with transaction.atomic():
+        runs = PipelineRun.objects.select_for_update().filter(file_id=file_id)
+        run = runs.filter(pk=run_id).first() if run_id is not None else runs.order_by('-updated_at').first()
+        if run is None:
+            return
+        state = dict(run.state or {})
+        state['evaluation'] = {
+            'execution_id': evaluation.get('execution_id'),
+            'assessment_id': evaluation.get('holdout_access_id'),
+            'evaluation_path': payload['evaluation_path'],
+            'model_card_path': payload['model_card_path'],
+            'metrics': evaluation.get('metrics'),
+            'lineage_id': card.get('lineage_id'),
+            'deploy_ready': card.get('deploy_ready'),
+            'deployment_readiness': (card.get('sections') or {}).get('deployment_readiness'),
+            'success_criteria_result': card.get('success_criteria_result'),
+        }
+        state['crisp_dm'] = merge_crisp_dm(state.get('crisp_dm'), {
+            'business_understanding': bu,
+            'governance_checks': gov,
+            'phase_status': {'evaluation': 'completed'},
+        })
+        if lineage:
+            state['lineage'] = {'lineage_id': lineage.get('lineage_id'), 'path': f'lineage/{file_id}_lineage.json'}
+        if step_order['evaluation'] >= step_order.get(run.current_step or 'modeling', 0):
+            run.current_step = 'evaluation'
+        run.state = state
+        run.save(update_fields=['current_step', 'state', 'updated_at'])
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -372,61 +421,47 @@ class EvaluationRunView(APIView):
                 'evaluation_path': os.path.relpath(eval_path, settings.MEDIA_ROOT),
                 'model_card_path': os.path.relpath(card_path, settings.MEDIA_ROOT),
             }
+            assessment_dir = None
             if execution_id:
                 assessment_dir = publish_assessment(execution_id, receipt.pk, payload, card)
-                with projection_lock(file_id):
-                    replace_projection(assessment_dir / 'evaluation.json', eval_path)
-                    replace_projection(assessment_dir / 'model_card.json', card_path)
-            else:
-                with open(eval_path, 'w', encoding='utf-8') as f:
-                    json.dump(payload, f, indent=2, default=str)
-                with open(card_path, 'w', encoding='utf-8') as f:
-                    json.dump(card, f, indent=2, default=str)
+                receipt.attempt_state = 'completed'
+                receipt.save(update_fields=['attempt_state'])
 
-            # Attach lineage pointer onto PipelineRun state when possible
             try:
-                from modeling.models import PipelineRun
-                from modeling.crisp_dm import merge_crisp_dm
-                step_order = {
-                    'declaration': 0, 'preprocessing': 1, 'data_quality': 2,
-                    'modeling': 3, 'sfs': 4, 'evaluation': 5, 'deployment': 6,
-                    'monitoring': 7,
-                }
-                run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
-                if run is not None:
-                    st = dict(run.state or {})
-                    st['evaluation'] = {
-                        'evaluation_path': payload['evaluation_path'],
-                        'model_card_path': payload['model_card_path'],
-                        'metrics': evaluation.get('metrics'),
-                        'lineage_id': card.get('lineage_id'),
-                        'deploy_ready': card.get('deploy_ready'),
-                        'deployment_readiness': (card.get('sections') or {}).get('deployment_readiness'),
-                        'success_criteria_result': card.get('success_criteria_result'),
-                    }
-                    st['crisp_dm'] = merge_crisp_dm(st.get('crisp_dm'), {
-                        'business_understanding': bu,
-                        'governance_checks': gov,
-                        'phase_status': {'evaluation': 'completed'},
-                    })
-                    if lineage:
-                        st['lineage'] = {
-                            'lineage_id': lineage.get('lineage_id'),
-                            'path': f'lineage/{file_id}_lineage.json',
-                        }
-                    cur = run.current_step or 'modeling'
-                    if step_order.get('evaluation', 5) >= step_order.get(cur, 0):
-                        run.current_step = 'evaluation'
-                    run.state = st
-                    run.save(update_fields=['current_step', 'state', 'updated_at'])
-            except Exception as pe:
-                print(f"[Evaluation] PipelineRun update skipped: {pe}")
+                with projection_lock(file_id):
+                    current = _load_modeling_status(file_id) or {}
+                    current_model = (current.get('model') or {}) if isinstance(current, dict) else None
+                    if (not isinstance(current_model, dict) or current.get('execution_id') != execution_id
+                            or current_model.get('model_path') != model_info.get('model_path')):
+                        if assessment_dir:
+                            return Response(payload, status=status.HTTP_200_OK)
+                        receipt.attempt_state = 'completed'
+                        receipt.save(update_fields=['attempt_state'])
+                        return Response({'error': 'The model changed before assessment could be published.',
+                                         'holdout_access_id': str(receipt.pk)}, status=status.HTTP_409_CONFLICT)
 
-            receipt.attempt_state = 'completed'
-            receipt.save(update_fields=['attempt_state'])
+                    if assessment_dir:
+                        replace_projection(assessment_dir / 'model_card.json', card_path)
+                        replace_projection(assessment_dir / 'evaluation.json', eval_path)
+                    else:
+                        _write_projection(card_path, card)
+                        _write_projection(eval_path, payload)
+
+                    try:
+                        _update_evaluated_pipeline(file_id, data.get('pipeline_run_id'), payload, bu, gov, lineage)
+                    except Exception:
+                        logger.exception('Could not project assessment onto pipeline for dataset %s', file_id)
+            except OSError:
+                if assessment_dir is None:
+                    raise
+                logger.exception('Could not refresh current assessment for dataset %s', file_id)
+
+            if receipt.attempt_state != 'completed':
+                receipt.attempt_state = 'completed'
+                receipt.save(update_fields=['attempt_state'])
             return Response(payload, status=status.HTTP_200_OK)
         except Exception as e:
-            if receipt is not None:
+            if receipt is not None and receipt.attempt_state != 'completed':
                 receipt.attempt_state = 'failed'
                 receipt.save(update_fields=['attempt_state'])
             import traceback
@@ -561,34 +596,34 @@ class GovernanceChecksView(APIView):
         from modeling.models import PipelineRun
         from modeling.crisp_dm import merge_crisp_dm
 
-        run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
-        if run is not None:
-            st = dict(run.state or {})
-            st['crisp_dm'] = merge_crisp_dm(st.get('crisp_dm'), {'governance_checks': checks})
-            run.state = st
-            run.save(update_fields=['state', 'updated_at'])
+        with projection_lock(file_id):
+            with transaction.atomic():
+                run = PipelineRun.objects.select_for_update().filter(file_id=file_id).order_by('-updated_at').first()
+                if run is not None:
+                    st = dict(run.state or {})
+                    st['crisp_dm'] = merge_crisp_dm(st.get('crisp_dm'), {'governance_checks': checks})
+                    run.state = st
+                    run.save(update_fields=['state', 'updated_at'])
 
-        card_path = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json')
-        if os.path.exists(card_path):
-            try:
-                with open(card_path, 'r', encoding='utf-8') as f:
-                    card = json.load(f)
-                card['governance_checks'] = checks
-                with open(card_path, 'w', encoding='utf-8') as f:
-                    json.dump(card, f, indent=2, default=str)
-            except Exception:
-                pass
+            card_path = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json')
+            if os.path.exists(card_path):
+                try:
+                    with open(card_path, 'r', encoding='utf-8') as f:
+                        card = json.load(f)
+                    card['governance_checks'] = checks
+                    _write_projection(card_path, card)
+                except Exception:
+                    pass
 
-        eval_path = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_evaluation.json')
-        if os.path.exists(eval_path):
-            try:
-                with open(eval_path, 'r', encoding='utf-8') as f:
-                    payload = json.load(f)
-                if isinstance(payload.get('model_card'), dict):
-                    payload['model_card']['governance_checks'] = checks
-                with open(eval_path, 'w', encoding='utf-8') as f:
-                    json.dump(payload, f, indent=2, default=str)
-            except Exception:
-                pass
+            eval_path = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_evaluation.json')
+            if os.path.exists(eval_path):
+                try:
+                    with open(eval_path, 'r', encoding='utf-8') as f:
+                        payload = json.load(f)
+                    if isinstance(payload.get('model_card'), dict):
+                        payload['model_card']['governance_checks'] = checks
+                    _write_projection(eval_path, payload)
+                except Exception:
+                    pass
 
         return Response({'status': 'ok', 'file_id': file_id, 'checks': checks})

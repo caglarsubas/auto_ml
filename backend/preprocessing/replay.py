@@ -5,6 +5,7 @@ reapplied to validation or scoring batches. Learned decisions use only fit rows.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import uuid
@@ -25,11 +26,12 @@ def validate_options(options):
         raise ValueError('Purifier options must be catalog identifiers from 1 through 34.')
 
 
-def save_recipe(processed_path, file_id, eligible, options, dictionary, preserve, split, original_rows):
+def save_recipe(processed_path, file_id, eligible, options, dictionary, preserve, split, original_rows, *, published_path=None):
     validate_options(options)
     root = Path(settings.MEDIA_ROOT).resolve()
     processed = Path(processed_path).resolve()
-    if not processed.is_relative_to(root):
+    published = Path(published_path).resolve() if published_path is not None else processed
+    if not processed.is_relative_to(root) or not published.is_relative_to(root):
         raise ValueError('Purifier outputs must be in managed artifact storage.')
     raw_path = processed.with_suffix('.raw.csv')
     with raw_path.open('x', encoding='utf-8', newline='') as stream:
@@ -38,22 +40,24 @@ def save_recipe(processed_path, file_id, eligible, options, dictionary, preserve
               'options': sorted(options), 'data_dictionary': dictionary or [], 'preserve': sorted(preserve),
               'outer_split': split, 'eligible_source_rows': list(map(int, original_rows)),
               'population_operation': 'Exact row deduplication before partitioning' if 2 in options else 'No row filtering',
-              'raw_input': {'path': str(raw_path.relative_to(root)), 'sha256': digest_file(raw_path)},
-              'processed_input': {'path': str(processed.relative_to(root)), 'sha256': digest_file(processed)}}
+              'raw_input': {'path': str(published.with_suffix('.raw.csv').relative_to(root)), 'sha256': digest_file(raw_path)},
+              'processed_input': {'path': str(published.relative_to(root)), 'sha256': digest_file(processed)}}
     with processed.with_suffix('.purifier.json').open('x', encoding='utf-8') as stream:
         json.dump(recipe, stream, indent=2, allow_nan=False)
     return recipe
 
 
-def load_recipe_input(processed_path, file_id):
+def load_recipe_input(processed_path, file_id, *, recipe_sha256=None):
     processed = Path(processed_path).resolve()
     sidecar = processed.with_suffix('.purifier.json')
     if not sidecar.is_file():
         if re.fullmatch(r'processed_\d+_[a-f0-9]{32}', processed.stem):
             raise ValueError('The raw-input purifier recipe is missing. Re-run preprocessing; legacy fallback is prohibited for this version.')
         return None, None
-    with sidecar.open(encoding='utf-8') as stream:
-        recipe = json.load(stream)
+    encoded_recipe = sidecar.read_bytes()
+    if recipe_sha256 is not None and hashlib.sha256(encoded_recipe).hexdigest() != recipe_sha256:
+        raise ValueError('Purifier recipe changed after preprocessing verification.')
+    recipe = json.loads(encoded_recipe)
     root = Path(settings.MEDIA_ROOT).resolve()
     if recipe.get('schema_version') != VERSION or recipe.get('file_id') != int(file_id):
         raise ValueError('Purifier recipe version or dataset identity does not match.')

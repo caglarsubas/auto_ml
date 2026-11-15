@@ -201,6 +201,7 @@ def training_files(actor, file_id, options):
     import hashlib
 
     from modeling.holdout_evidence import prospective_payload
+    from preprocessing.stage_publication import is_versioned_stage, stage_paths
 
     files = {name: read(path)}
     if prospective_payload(hashlib.sha256(files[name]).hexdigest()):
@@ -243,13 +244,25 @@ def training_files(actor, file_id, options):
             or value["raw_input"].get("sha256") != raw_sha256
         ):
             conflict("recipe_changed")
-    for name in (
-        f"splits/{file_id}_split.json",
-        f"data_quality/{file_id}_datq_summary.json",
-        f"purifier/{file_id}_purifier.json",
-    ):
-        if (root / name).exists():
-            files[name] = read(root / name, 2 * 1024**2)
+    if is_versioned_stage(path):
+        if not recipe:
+            conflict("preprocessing_stage_changed")
+        paths = stage_paths(path)
+        for role in ("receipt", "split", "purifier", "datq"):
+            member = paths[role]
+            projects.path_authority(actor.pk, member, file_id=file_id)
+            files[str(member.relative_to(root))] = read(member, 2 * 1024**2)
+        stage = json.loads(files[str(paths["receipt"].relative_to(root))])
+        expected_roles = ("processed", "raw", "recipe", "split", "purifier", "datq")
+        captured = {role: files.get(str(paths[role].relative_to(root))) for role in expected_roles}
+        if (stage.get("file_id") != file_id or stage.get("processed_file") != str(path.relative_to(root))
+                or any(raw is None or {"sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}
+                       != (stage.get("files") or {}).get(role) for role, raw in captured.items())):
+            conflict("preprocessing_stage_changed")
+    elif not recipe:
+        split = f"splits/{file_id}_split.json"
+        if (root / split).exists():
+            files[split] = read(root / split, 2 * 1024**2)
     return files
 
 

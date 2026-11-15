@@ -59,7 +59,8 @@ class DeploymentBundleView(APIView):
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             file_id = int(file_id)
-            payload = build_score_bundle(file_id, request.data.get('execution_id'), request.data.get('assessment_id'))
+            payload = build_score_bundle(file_id, request.data.get('execution_id'), request.data.get('assessment_id'),
+                                         request_id=request.data.get('request_id'))
             # Persist summary + advance pipeline when possible
             out_dir = os.path.join(settings.MEDIA_ROOT, 'deployment')
             os.makedirs(out_dir, exist_ok=True)
@@ -67,42 +68,22 @@ class DeploymentBundleView(APIView):
             # Compatibility summary is not authoritative; exact status reads verify the bundle.
             if payload['adoption_status'] == 'adopted':
                 from modeling.execution_artifacts import projection_lock, replace_projection
-                from deployment.evidence import read_json
+                from deployment.evidence import current_selection, read_json
                 from deployment.deploy_utils import bundle_dir
                 with projection_lock(file_id):
                     current = read_json(os.path.join(os.path.dirname(os.path.dirname(bundle_dir(file_id, payload['bundle_id']))), 'current.json'), {})
-                    if current.get('bundle_id') == payload['bundle_id']:
+                    execution, assessment = payload['execution_id'], payload['assessment_id']
+                    if (current.get('bundle_id') == payload['bundle_id']
+                            and (not execution or current_selection(file_id) == (execution, execution, assessment))):
                         with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8') as staged:
                             json.dump(payload, staged, indent=2, default=str)
                             staged.flush()
                             replace_projection(staged.name, summary_path)
-            payload['summary_path'] = os.path.relpath(summary_path, settings.MEDIA_ROOT)
-            try:
-                from modeling.models import PipelineRun
-                run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
-                if run is not None and payload['adoption_status'] == 'adopted':
-                    st = dict(run.state or {})
-                    st['deployment'] = {
-                        'bundle_path': payload.get('bundle_path'),
-                        'bundle_id': payload['bundle_id'],
-                        'execution_id': payload['execution_id'],
-                        'assessment_id': payload['assessment_id'],
-                        'manifest_sha256': payload['manifest_sha256'],
-                        'lineage_id': (payload.get('manifest') or {}).get('lineage_id'),
-                        'package_ready': True,
-                        'production_use_approved': False,
-                    }
-                    step_order = {
-                        'declaration': 0, 'preprocessing': 1, 'data_quality': 2,
-                        'modeling': 3, 'sfs': 4, 'evaluation': 5, 'deployment': 6,
-                    }
-                    cur = run.current_step or 'evaluation'
-                    if step_order.get('deployment', 6) >= step_order.get(cur, 0):
-                        run.current_step = 'deployment'
-                    run.state = st
-                    run.save(update_fields=['current_step', 'state', 'updated_at'])
-            except Exception as pe:
-                print(f"[Deployment] PipelineRun update skipped: {pe}")
+                        self._project_pipeline(file_id, payload)
+                    else:
+                        payload['adoption_status'] = 'version_only_current_changed'
+            payload['summary_path'] = (os.path.relpath(summary_path, settings.MEDIA_ROOT)
+                                       if payload['adoption_status'] == 'adopted' else None)
             return Response(payload, status=status.HTTP_200_OK)
         except DeployNotReadyError as e:
             return Response({
@@ -119,6 +100,24 @@ class DeploymentBundleView(APIView):
             import traceback
             print("[DeploymentBundle] ERROR:\n" + traceback.format_exc())
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @staticmethod
+    def _project_pipeline(file_id, payload):
+        from modeling.models import PipelineRun
+
+        run = PipelineRun.objects.filter(file_id=file_id).order_by('-updated_at').first()
+        if run is None:
+            return
+        deployment = {key: payload[key] for key in (
+            'bundle_path', 'bundle_id', 'execution_id', 'assessment_id', 'manifest_sha256',
+        )}
+        deployment.update(lineage_id=payload['manifest'].get('lineage_id'), package_ready=True,
+                          production_use_approved=False)
+        state = run.state or {}
+        if state.get('deployment') != deployment or run.current_step != 'deployment':
+            run.state = {**state, 'deployment': deployment}
+            run.current_step = 'deployment'
+            run.save(update_fields=['current_step', 'state', 'updated_at'])
 
 
 @method_decorator(csrf_exempt, name='dispatch')

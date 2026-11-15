@@ -5,21 +5,23 @@ browser clients request the reviewed protocol and select candidates separately.
 Both routes retain immutable runs; search candidates require normal selection.
 """
 
-import hashlib
-import json
 import os
+import tempfile
 import time
 import uuid
 from pathlib import Path
 
-from django.conf import settings
 from rest_framework.response import Response
 
 from access_control import projects
+from deployment.reviews import lock_authority
 from execution_jobs import legacy_execution as legacy, service
-from execution_jobs.legacy_selection import bound_job, current, member, select
+from execution_jobs.legacy_selection import (
+    bound_job, current, member, publication_path, publish_execution, publish_history_member, select, write_member,
+)
 from execution_jobs.models import NativeJob
 from modeling.execution_artifacts import projection_lock
+from modeling.sfs_evidence import _sync_directory
 
 PROTOCOL = "v1"
 
@@ -55,58 +57,53 @@ def materialize(actor, identifier):
         job, scopes = bound_job(actor, identifier)
         if job.specification["legacy"]["options"].get("legacy_response_contract") != PROTOCOL:
             return
-        root = Path(settings.MEDIA_ROOT).resolve()
+        lock_authority(actor, job.dataset_id, None)
         history = f"modeling/{job.dataset_id}_runs/"
+        executions, archives = set(), []
         for name in job.result["files"]:
-            # Only new immutable executions and UUID-named history records are
-            # made visible. A fitted-state file is copied as bytes, never loaded.
-            if not (name.startswith("execution_runs/") or name.startswith(history)):
-                continue
-            parts = Path(name).parts
-            str(uuid.UUID(parts[1] if parts[0] == "execution_runs" else Path(name).stem.split("_run_", 1)[-1]))
-            raw = member(job, name)
-            path = root / legacy.relative(name)
-            if any(p.is_symlink() for p in [path, *path.parents] if p != root.parent):
-                legacy.conflict("selection_target_invalid")
-            if path.exists():
-                if legacy.read(path) != raw:
-                    legacy.conflict("selection_target_occupied")
-            else:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                with path.open("xb") as stream:
-                    stream.write(raw)
-                path.chmod(0o400)
-            if path.suffix in {".json", ".csv", ".png", ".svg", ".pdf"}:
+            if name.startswith("execution_runs/"):
+                parts = Path(legacy.relative(name)).parts
+                if len(parts) < 3 or str(uuid.UUID(parts[1])) != parts[1]:
+                    legacy.conflict("selection_target_invalid")
+                executions.add(parts[1])
+            elif name.startswith(history):
+                uuid.UUID(Path(name).stem.split("_run_", 1)[-1])
+                archives.append(name)
+        for execution in sorted(executions):
+            for name in sorted(publish_execution(job, execution)):
+                if Path(name).suffix.lower() in {".json", ".csv", ".png", ".svg", ".pdf"}:
+                    projects.register_artifact(publication_path(name), file_id=job.dataset_id)
+        for name in sorted(archives):
+            path = publish_history_member(job, name)
+            if path.suffix.lower() in {".json", ".csv", ".png", ".svg", ".pdf"}:
                 projects.register_artifact(path, file_id=job.dataset_id)
         # Legacy search projections are derived from this exact terminal job.
         # The durable receipt remains authoritative; immutable history is above.
         operation = job.specification["legacy"]["operation"]
-        newer = NativeJob.objects.filter(
-            dataset_id=job.dataset_id,
-            state="succeeded",
-            specification__kind=legacy.KIND,
-            specification__legacy__operation=operation,
-            created_at__gt=job.created_at,
-        ).exists()
-        if operation in {"sfs", "hpo"} and not newer:
-            folder, suffix = (
-                ("sfs_results", "sfs_results") if operation == "sfs" else ("hyperparam_results", "hyperparam")
-            )
-            name = f"{folder}/{job.dataset_id}_{suffix}.json"
-            raw = member(job, name)
-            path = root / name
-            if path.is_symlink() or path.parent.is_symlink():
-                legacy.conflict("selection_target_invalid")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            stage = path.with_name("." + path.name + "." + uuid.uuid4().hex)
-            try:
-                stage.write_bytes(raw)
-                for scope in scopes:
-                    projects.recheck(scope)
-                os.replace(stage, path)
-            finally:
-                stage.unlink(missing_ok=True)
-            projects.register_artifact(path, file_id=job.dataset_id)
+        if operation in {"sfs", "hpo"}:
+            latest = NativeJob.objects.filter(
+                dataset_id=job.dataset_id,
+                state="succeeded",
+                specification__kind=legacy.KIND,
+                specification__legacy__operation=operation,
+            ).order_by("-created_at", "-pk").values_list("pk", flat=True).first()
+            if latest == job.pk:
+                folder, suffix = (
+                    ("sfs_results", "sfs_results") if operation == "sfs" else ("hyperparam_results", "hyperparam")
+                )
+                name = f"{folder}/{job.dataset_id}_{suffix}.json"
+                raw = member(job, name)
+                path = publication_path(name)
+                if not os.path.lexists(path) or legacy.read(path) != raw:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    with tempfile.TemporaryDirectory(dir=path.parent, prefix=".staging-") as staging:
+                        staged = Path(staging) / path.name
+                        write_member(staged, raw)
+                        for scope in scopes:
+                            projects.recheck(scope)
+                        os.replace(staged, path)
+                _sync_directory(path.parent)
+                projects.register_artifact(path, file_id=job.dataset_id)
         for scope in scopes:
             projects.recheck(scope)
         if not job.events.filter(

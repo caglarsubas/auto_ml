@@ -77,12 +77,19 @@ describe('DeploymentComponent', () => {
     component.createBundle();
     const http = TestBed.inject(HttpTestingController);
     const create = http.expectOne((req) => req.url.endsWith('/deployment/bundle/'));
+    const requestId = create.request.body.request_id;
+    expect(requestId).toMatch(/^[0-9a-f-]{36}$/);
     expect(create.request.body).toEqual({
       file_id: 1,
       execution_id: 'model-version',
       assessment_id: 'assessment-version',
+      request_id: requestId,
     });
-    create.flush({
+    create.error(new ProgressEvent('error'));
+    component.createBundle();
+    const retry = http.expectOne((req) => req.url.endsWith('/deployment/bundle/'));
+    expect(retry.request.body).toEqual(create.request.body);
+    retry.flush({
       status: 'ok',
       bundle_id: 'frozen-bundle',
       manifest: { readiness: component.readiness },

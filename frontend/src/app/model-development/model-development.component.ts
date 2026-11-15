@@ -2701,8 +2701,11 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   enrichDatqRecommendations(): void {
     if (this.currentFileId == null || !this.datqSummary?.length) return;
-    this.dataService.getDatqEnriched(this.currentFileId).subscribe({
+    const fileId = this.currentFileId;
+    const processedFile = this.processedFilePath ?? undefined;
+    this.dataService.getDatqEnriched(fileId, processedFile).subscribe({
       next: (resp) => {
+        if (fileId !== this.currentFileId || processedFile !== (this.processedFilePath ?? undefined)) return;
         const rows = resp?.datq_summary;
         if (Array.isArray(rows) && rows.length) {
           this.datqSummary = rows;
@@ -3024,7 +3027,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           s.active_process.type === 'preprocessing' &&
           s.active_process.file_id
         ) {
-          this.resumePreprocessing(s.active_process.file_id);
+          this.resumePreprocessing(s.active_process.file_id, s.active_process.request_id);
         }
 
         setTimeout(() => {
@@ -3044,10 +3047,10 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   }
 
   /** Resume preprocessing: check if it completed while the user was away */
-  private resumePreprocessing(fileId: number): void {
+  private resumePreprocessing(fileId: number, requestId?: string): void {
     console.log('[Pipeline] Checking preprocessing status for resume, file_id:', fileId);
     this.isProcessing = true;
-    this.dataService.getPreprocessingStatus(fileId).subscribe({
+    this.dataService.getPreprocessingStatus(fileId, requestId).subscribe({
       next: (resp: any) => {
         this.isProcessing = false;
         if (resp.status === 'completed' && resp.result) {
@@ -3251,8 +3254,12 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     }
 
     this.isProcessing = true;
-    // Track active process for pipeline resume
-    this.sharedService.setActiveProcess({ type: 'preprocessing', file_id: this.currentFileId });
+    const requestId = crypto.randomUUID();
+    this.sharedService.setActiveProcess({
+      type: 'preprocessing',
+      file_id: this.currentFileId,
+      request_id: requestId,
+    });
     this.detailedStep = '2a_purifier_declaration';
     this.saveCheckpoint('preprocessing', true); // force-save so active_process is persisted
     this.dataService
@@ -3262,6 +3269,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
         split,
         excludedVariables,
         this.dataDictionaryCache,
+        requestId,
       )
       .pipe(
         finalize(() => {
@@ -3273,6 +3281,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
           console.log('[Preprocessing] run result:', result);
           this.sharedService.setPreprocessingRunResult(result);
           this.sharedService.setProcessedFilePath(result?.processed_file ?? null);
+          this.processedFilePath = result?.processed_file ?? null;
           // Capture breakdown of dropped columns per purifier step (if provided)
           this.droppedColumnsByStep = Array.isArray(result?.dropped_columns_by_step)
             ? result.dropped_columns_by_step
