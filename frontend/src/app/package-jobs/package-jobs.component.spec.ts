@@ -1,10 +1,11 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { PackageJobsComponent } from './package-jobs.component';
 import { AuthService } from '../services/auth.service';
 
 describe('Durable package job receipts', () => {
+  let fixture: ComponentFixture<PackageJobsComponent>;
   let component: PackageJobsComponent;
   let http: HttpTestingController;
   const directory = { jobs_enabled: true, jobs: [], total: 0, next_offset: null };
@@ -24,7 +25,8 @@ describe('Durable package job receipts', () => {
         { provide: AuthService, useValue: { apiRoot: '/api/', user: { id: 4 } } },
       ],
     });
-    component = TestBed.createComponent(PackageJobsComponent).componentInstance;
+    fixture = TestBed.createComponent(PackageJobsComponent);
+    component = fixture.componentInstance;
     http = TestBed.inject(HttpTestingController);
     component.fileId = 1;
     component.projectId = 'project-a';
@@ -100,6 +102,62 @@ describe('Durable package job receipts', () => {
       .flush({}, { status: 403, statusText: 'Forbidden' });
     expect(create).not.toHaveBeenCalled();
     expect(component.job).toBeNull();
+  });
+  it('refreshes confirmation applicability without rewriting the recorded assessment decision', () => {
+    const save = spyOn(URL, 'createObjectURL').and.returnValue('blob:assessment-test');
+    spyOn(HTMLAnchorElement.prototype, 'click');
+    const receipt = {
+      ...job,
+      state: 'succeeded',
+      specification: { kind: 'native_protected_assessment_v1' },
+      result: {
+        n_assessed: 30,
+        metric: { primary_metric: 'roc_auc' },
+        primary_value: 0.7,
+        confirmatory: true,
+        evidence_status: 'confirmatory',
+        confirmation_reason: 'first_prospective_assessment_completed',
+        outcome_access_id: 'outcome-1',
+        training_result_sha256: 'a'.repeat(64),
+        input_sha256: 'b'.repeat(64),
+        reuse_adjudication: {
+          policy: 'protected_assessment_reuse_v1',
+          total: 0,
+          counts: { exact_input: 0, overlapping_project: 0, unclassified_project: 0 },
+          records: [],
+        },
+      },
+      assessment_applicability: {
+        status: 'current',
+        reason_code: 'first_prospective_assessment_completed',
+        assessment_sha256: 'c'.repeat(64),
+        confirmation_usable: true,
+      },
+    };
+    component.open('job-1');
+    http.expectOne('/api/jobs/job-1/?project_id=project-a').flush(receipt);
+    fixture.detectChanges();
+    const text = () => fixture.nativeElement.textContent;
+    expect(text()).toContain('Confirmatory evidence applies');
+
+    component.download();
+    http.expectOne('/api/jobs/job-1/?project_id=project-a').flush({
+      ...receipt,
+      assessment_applicability: {
+        ...receipt.assessment_applicability,
+        status: 'invalidated',
+        reason_code: 'native_adoption_not_approved',
+        confirmation_usable: false,
+      },
+    });
+    fixture.detectChanges();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(text()).not.toContain('Confirmatory evidence applies');
+    expect(text()).toContain('Confirmation no longer applies');
+    expect(text()).toContain('The independent approval is no longer active');
+    expect(text()).toContain('native_adoption_not_approved');
+    expect(text()).toContain('first_prospective_assessment_completed');
+    expect(component.job.result).toEqual(receipt.result);
   });
   it('refreshes receipt authority before emitting an explicit review selection', () => {
     component.evidenceEnabled = true;

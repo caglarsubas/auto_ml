@@ -97,6 +97,9 @@ def runtime(kind=KIND):
                      "modeling/fit_receipts.py", "modeling/split_contract.py", "modeling/sfs_objective.py", "evaluation/eval_utils.py",
                      "preprocessing/purifier_contract.py", "deployment/scoring_receipts.py", "access_control/project_http.py"]:
             result["sources"][name] = hashlib.sha256((Path(settings.BASE_DIR) / name).read_bytes()).hexdigest()
+    if kind == native_assessment.KIND:
+        for name in ("execution_jobs/assessment_intake.py", "execution_jobs/assessment_reuse.py"):
+            result["sources"][name] = hashlib.sha256((Path(settings.BASE_DIR) / name).read_bytes()).hexdigest()
     if kind == legacy_execution.KIND:
         result['packages'].update({p: version(p) for p in ['numpy', 'pandas', 'scipy', 'scikit-learn', 'xgboost', 'lightgbm', 'catboost', 'shap', 'djangorestframework', 'optuna', 'joblib', 'matplotlib', 'threadpoolctl']})
         paths = []
@@ -377,6 +380,9 @@ def serialize(job, *, replayed=False):
 def authorized_receipt(job, scopes, *, replayed=False):
     """Prepare a receipt before the final live authority checks, inside its transaction."""
     result = serialize(job, replayed=replayed)
+    if (_saved_kind(job) == native_assessment.KIND and job.state == "succeeded"
+            and isinstance(job.result, dict)):
+        result["assessment_applicability"] = native_assessment.applicability(job)
     for current in scopes:
         projects.recheck(current)
     return result
@@ -421,7 +427,6 @@ def recheck_execution(job):
     if spec['kind'] == legacy_execution.KIND:
         legacy_execution.recheck(job)
     if spec["kind"] == native_assessment.KIND:
-        execution_reference(spec, "protected_input_id", "assessment_sha256")
         native_assessment.recheck(job)
     if spec["kind"] == training_scoring.KIND:
         execution_reference(spec, "training_job_id", "training_result_sha256")
@@ -674,9 +679,9 @@ def finish(identifier, token, state, reason="", result=None, *, deadline=None):
         if state == "succeeded" and deadline is not None and time.monotonic() >= deadline:
             close(job, "blocked", "job_time_budget_exceeded", metadata_only=True)
             return
-        if (job.specification["kind"] == native_assessment.KIND and prepared_result
-                and prepared_result.get("confirmatory") and not native_assessment.publish_confirmation(job, prepared_result)):
-            close(job, "blocked", "job_confirmation_receipt_changed", metadata_only=True)
+        if (job.specification["kind"] == native_assessment.KIND and state == "succeeded"
+                and (not prepared_result or not native_assessment.publish_assessment(job, prepared_result))):
+            close(job, "blocked", "job_assessment_receipt_changed", metadata_only=True)
             return
         job.result, job.result_sha256 = prepared_result, prepared_digest
         close(job, state, reason)

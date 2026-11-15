@@ -45,7 +45,7 @@ def _export(actor, identifier, expected):
     return raw
 
 
-def prepare(actor, file_id, identifier, expected, input_id, check=lambda: None, expected_source=None):
+def prepare(actor, file_id, identifier, expected, input_id, check=lambda: None, expected_source=None, *, preview=False):
     from execution_jobs import service
 
     authority = service.scope(actor, file_id)
@@ -67,6 +67,11 @@ def prepare(actor, file_id, identifier, expected, input_id, check=lambda: None, 
         f"splits/{input_id}_split.json", f"modeling/{input_id}_status.json", f"train_data/{input_id}_train_data.pkl"
     )) or HoldoutAccess.objects.filter(Q(file_id=input_id) | Q(dataset_sha256=source["sha256"])).exists():
         raise service.JobConflict("job_scoring_requires_unprotected_feature_input")
+    if preview:
+        from execution_jobs.assessment_intake import admit_generic_input
+
+        if not admit_generic_input(actor, [authority, source_authority], source['sha256'], 'native_scoring_preview'):
+            raise service.JobConflict('job_prospective_outcomes_protected')
     native_candidate.numeric_input(raw, native_candidate.validate(raw_export, native_candidate.sha(raw_export)))
     plan = {
         "schema_version": 1, "kind": KIND, "training_job_id": str(trained.pk),
@@ -87,7 +92,8 @@ def preview(actor, identifier, data):
         raise ValueError("Supply the selected training result and feature-only input dataset ID.")
     trained = NativeJob.objects.get(pk=identifier)
     authority = service.scope(actor, trained.dataset_id)
-    plan, raw_export, _ = prepare(actor, trained.dataset_id, identifier, require_digest(data["training_result_sha256"]), data["input_file_id"])
+    plan, raw_export, _ = prepare(actor, trained.dataset_id, identifier,
+                                  require_digest(data["training_result_sha256"]), data["input_file_id"], preview=True)
     candidate = json.loads(raw_export)
     result = {
         "kind": KIND, "training_job_id": str(identifier), "training_result_sha256": plan["training_result_sha256"],

@@ -328,12 +328,15 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   download(): void {
     if (!this.job || this.busy) return;
     // Refresh authority and the retained receipt before every download.
+    this.busy = true;
     const generation = this.generation,
       id = this.job.id;
     this.requests.add(
       this.http.get<any>(this.url(id), { params: this.params, transferCache: false }).subscribe({
         next: (job) => {
           if (generation !== this.generation) return;
+          this.busy = false;
+          if (job.specification.kind === 'native_protected_assessment_v1') this.job = job;
           this.save(
             new Blob([JSON.stringify(job, null, 2)], { type: 'application/json' }),
             `job-${id}.json`,

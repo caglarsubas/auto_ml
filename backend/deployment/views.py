@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -141,11 +142,19 @@ class DeploymentScoreView(APIView):
             if request.FILES.get('file'):
                 uploaded = request.FILES['file']
                 name = getattr(uploaded, 'name', 'upload.csv').lower()
+                digest = hashlib.sha256()
                 with tempfile.NamedTemporaryFile(suffix=os.path.splitext(name)[1] or '.csv', delete=False) as tmp:
                     for chunk in uploaded.chunks():
                         tmp.write(chunk)
+                        digest.update(chunk)
                     tmp_path = tmp.name
                 try:
+                    from access_control import projects
+                    from execution_jobs.assessment_intake import admit_generic_input
+                    if projects.governed() and not admit_generic_input(
+                        request.user, request._request._project_scopes, digest.hexdigest(), 'native_scoring',
+                    ):
+                        return Response({'error_code': 'prospective_outcomes_protected'}, status=409)
                     from deployment.evidence import verify_bundle
                     from encoding.fitted import constrained_text_columns
                     requested_bundle = request.data.get('bundle_id')

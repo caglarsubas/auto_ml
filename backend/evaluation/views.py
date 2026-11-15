@@ -8,6 +8,7 @@ import os
 import pickle
 import zipfile
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timezone
 
 import numpy as np
@@ -149,10 +150,15 @@ class EvaluationRunView(APIView):
             dataset_digest = next((value['sha256'] for name, value in dataset_files.items() if name.startswith('dataset.')), '')
             if execution_id and features is not None and features != model_info.get('selected_features'):
                 return Response({'error': 'Assessment features must match the exact frozen model. Create and select a new candidate version.'}, status=status.HTTP_409_CONFLICT)
-            receipt, history = reserve_holdout_access(model_info.get('holdout_spec'), file_id,
-                execution_id, request.user,
-                {'threshold': data.get('threshold'), 'features': features,
-                 'contract_sha256': contract.get('sha256')}, dataset_digest)
+            from access_control.projects import governed
+            from execution_jobs.service import locked
+            # Serialize governed legacy and prospective reservations, then let
+            # each evaluator access outcomes only after the reservation commits.
+            with locked(write=True) if governed() else nullcontext():
+                receipt, history = reserve_holdout_access(model_info.get('holdout_spec'), file_id,
+                    execution_id, request.user,
+                    {'threshold': data.get('threshold'), 'features': features,
+                     'contract_sha256': contract.get('sha256')}, dataset_digest)
             with open(train_data_path, 'rb') as f:
                 train_data = pickle.load(f)
             final_data = train_data

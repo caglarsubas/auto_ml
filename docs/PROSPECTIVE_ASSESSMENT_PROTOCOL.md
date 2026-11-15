@@ -47,13 +47,38 @@ receipt. A new assessment request consumes a separate access and cannot earn
 a second confirmation of the same window.
 
 Protected storage is absent from generic dataset, media, artifact, scoring and
-MCP selectors. Governed upload and native CSV and legacy job preparation reject
-known byte-identical prospective inputs before decoding them as development
-data. Modified external copies require independent provenance. Historical
-assessments and seals without the prospective attestation remain exploratory.
-The protocol does not grant production-use approval or advance package review.
-Full invalidation and exception adjudication across derived evidence belong to
-D03-T02 and D09-T02.
+MCP selectors. Governed upload and scoring, native training previews, and
+native and legacy job preparation reject known byte-identical prospective
+inputs before decoding them as development data. Exact earlier development
+input admissions recorded by supported paths also withhold confirmation.
+Modified external copies and older unrecorded admissions require independent
+provenance. Historical assessments and seals without the prospective attestation
+remain exploratory. Production-use and package approval have their own reviews.
+
+## Check whether confirmation still applies
+
+The assessment plan binds the candidate export, training result and specification,
+prediction contract, metric, independent approval payload, sealed input bytes,
+policy, runtime, and budget. The result and its outcome-access receipt retain the
+plan digest and the basis for the reuse decision. Same-project evidence is
+attributable, including interrupted and failed attempts. Exact matches outside
+the project are redacted. The displayed sample is bounded and carries counts
+for the whole decision.
+
+Open or download the exact job receipt to see current applicability alongside
+the original decision. A withdrawn approval, changed bound evidence or runtime,
+or inconsistent outcome-access receipt invalidates current confirmation. The
+original decision and result digest remain available as historical evidence.
+The applicability check reads metadata and the development basis. It never
+reopens sealed outcomes. Earlier receipts without these bindings retain their
+original classification with current applicability unverified.
+
+An independent reviewer can seal an exploratory assessment with an attributable
+rationale. A requested first-use assessment that has reuse evidence also remains
+exploratory, with a recorded reason. Neither path grants a confirmation override.
+A changed candidate or policy needs its own prospective assessment on an eligible
+unused population. Independent reproduction and later review actions have their
+own acceptance checks.
 
 ## Operator checks
 

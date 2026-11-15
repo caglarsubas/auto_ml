@@ -157,9 +157,10 @@
         "[P172 qualification contract](evidence/p172-assessment-protocol-contract.json)",
         "[P172 prospective protected assessment qualification](evidence/p172-qualification.json)",
         "[Implementation PR #280](https://github.com/caglarsubas/auto_ml/pull/280)",
-        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)"
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)",
+        "[Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)"
       ],
-      "progress": "Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Foundation evidence was exploratory. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. P10 evidence remained exploratory. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. PR and independent main qualification pass for the prospective native temporal profile. D03-T02 retains broader lineage invalidation and reuse adjudication."
+      "progress": "Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Foundation evidence was exploratory. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. P10 evidence remained exploratory. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. PR and independent main qualification pass for the prospective native temporal profile. D03-T02 retains broader lineage invalidation and reuse adjudication. P179 implements exact-version confirmation and attributable reuse adjudication for protected assessment. Independent merged-main qualification is pending."
     },
     {
       "id": "D04",
@@ -2200,6 +2201,10 @@
     {
       "date": "2026-11-15",
       "change": "Qualify D02-T03 with implementation PR #293 and independent push-main CI 43621786630. Backlog moves from 16/43/7 to 17/42/7 done/open/blocked across 66 tasks."
+    },
+    {
+      "date": "2026-11-15",
+      "change": "Implement P179 for D03-T02. Verify assessment invalidation and reuse before taking backlog credit."
     }
   ],
   "implementation_packets": [
@@ -5366,6 +5371,21 @@
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43621786630)"
       ],
       "remaining": "D02-T03 is qualified on the supported modeling, search, export and scoring paths. The full D02 outcome gate still requires milestone qualification."
+    },
+    {
+      "id": "P179",
+      "kind": "product_implementation",
+      "title": "Protected assessment applicability and reuse evidence",
+      "items": [
+        "D03"
+      ],
+      "owner": "Backend/ML",
+      "status": "implemented",
+      "description": "Bind confirmation to the frozen candidate, approval, input and policy. Preserve the original decision, check current applicability and retain attributable reuse reasons.",
+      "evidence": [
+        "[Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)"
+      ],
+      "remaining": "D03-T02 awaits pull-request and independent merged-main qualification."
     }
   ],
   "release_qualification": {
@@ -5527,8 +5547,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P177",
-    "source_commit": "d56c1b44ebecd05f040edd6a0caf5f7f6cac5852",
+    "packet": "P178",
+    "source_commit": "b5780a725dbac56d1b60a106e5de0249eeda8049",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5538,9 +5558,9 @@
       }
     },
     "packets": {
-      "total": 177,
+      "total": 178,
       "counts": {
-        "done": 176,
+        "done": 177,
         "open": 0,
         "blocked": 1
       }
@@ -5726,7 +5746,7 @@
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [
           "D03-T01",
           "D02-T02"
@@ -5736,8 +5756,12 @@
           "Reuse and exceptions are explicit, attributable and reproducible."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)"
+        ],
+        "packet_refs": [
+          "P179"
+        ],
         "order": 7,
         "basis": "Remaining acceptance scope from D03; existing tested foundation is reused, not rebuilt."
       },
@@ -7345,16 +7369,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P178 constrained target encoding",
+      "label": "Before P179 protected final assessment",
       "recorded_on": "2026-11-15",
-      "inventory_source_commit": "d56c1b44ebecd05f040edd6a0caf5f7f6cac5852",
+      "inventory_source_commit": "b5780a725dbac56d1b60a106e5de0249eeda8049",
       "total": 66,
       "counts": {
-        "ready": 5,
+        "ready": 4,
         "in_progress": 0,
         "waiting": 38,
         "blocked": 7,
-        "done": 16
+        "done": 17
       }
     },
     "baseline_history": [
@@ -7566,6 +7590,20 @@
           "waiting": 40,
           "blocked": 7,
           "done": 15
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P178 constrained target encoding",
+        "recorded_on": "2026-11-15",
+        "inventory_source_commit": "d56c1b44ebecd05f040edd6a0caf5f7f6cac5852",
+        "total": 66,
+        "counts": {
+          "ready": 5,
+          "in_progress": 0,
+          "waiting": 38,
+          "blocked": 7,
+          "done": 16
         }
       }
     ]
