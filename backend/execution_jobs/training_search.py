@@ -73,7 +73,7 @@ def parsed_frame(raw):
         raise JobConflict("job_training_csv_profile_invalid") from None
 
 
-def prepare(actor_id, file_id, options, check=lambda: None, expected=None):
+def prepare(actor_id, file_id, options, check=lambda: None, expected=None, *, preview_actor=None):
     """Bind the displayed declaration and exact input before queue admission."""
     from execution_jobs import service
     from execution_jobs.service import JobConflict
@@ -102,6 +102,11 @@ def prepare(actor_id, file_id, options, check=lambda: None, expected=None):
         or HoldoutAccess.objects.filter(Q(file_id=file_id) | Q(dataset_sha256=source["sha256"])).exists()
     ):
         raise JobConflict("job_training_requires_fresh_development_input")
+    if preview_actor is not None:
+        from execution_jobs.assessment_intake import admit_generic_input
+
+        if not admit_generic_input(preview_actor, [authority], source['sha256'], 'native_training_preview'):
+            raise JobConflict('job_prospective_outcomes_protected')
     frame = parsed_frame(raw)
     business = options["business_understanding"]
     if not isinstance(business, dict) or any(
@@ -186,7 +191,7 @@ def preview(actor, file_id, options):
     from execution_jobs import service
 
     authority = service.scope(actor, file_id)
-    plan, _ = prepare(actor.pk, file_id, options)
+    plan, _ = prepare(actor.pk, file_id, options, preview_actor=actor)
     result = {
         "kind": KIND,
         "input_sha256": plan["source"]["sha256"],

@@ -112,7 +112,8 @@ def holdout_history(spec, file_id, *, exclude_id=None, limit=50, offset=0):
             else:
                 relation = 'overlapping_final_rows'
                 overlap += 1
-        if private and receipt.file_id not in same_project:
+        recorded_project = receipt.parameters.get('project_id')
+        if private and (recorded_project != str(project_id) if recorded_project else receipt.file_id not in same_project):
             matches.append({'relation': relation, 'overlap_rows': n_overlap,
                 'visibility': 'outside_project', 'evidence_status': 'exploratory',
                 'limitation': 'Related outcome access exists outside this project; identifiers and parameters are withheld.'})
@@ -138,6 +139,9 @@ def reserve_holdout_access(spec, file_id, execution_id, actor, parameters, datas
     Serialize reservations for the same source/target, across different splits
     and file IDs. Started/failed attempts count conservatively as possible access.
     """
+    from access_control.models import ProjectDataset
+    from access_control.projects import governed
+
     spec = verify_holdout_spec(spec)
     key = _digest([spec['source_sha256'], spec['target_column']]) if spec else _digest(['legacy', file_id])
     directory = Path(settings.MEDIA_ROOT) / 'holdout_access_locks'
@@ -147,6 +151,12 @@ def reserve_holdout_access(spec, file_id, execution_id, actor, parameters, datas
         try:
             with transaction.atomic():
                 history = holdout_history(spec, file_id)
+                if governed():
+                    project = ProjectDataset.objects.filter(dataset_id=file_id).values_list('project_id', flat=True).first()
+                    if project:
+                        if parameters.get('project_id', str(project)) != str(project):
+                            raise ValueError('The project changed before final-outcome access.')
+                        parameters = {**parameters, 'project_id': str(project)}
                 authenticated = actor is not None and actor.is_authenticated
                 receipt = HoldoutAccess.objects.create(execution_id=execution_id, file_id=file_id,
                     dataset_sha256=spec['source_sha256'] if spec else dataset_sha256,

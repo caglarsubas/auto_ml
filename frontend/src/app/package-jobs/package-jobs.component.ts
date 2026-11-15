@@ -44,6 +44,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   source: any = null;
   pending: { url: string; body: any } | null = null;
   private generation = 0;
+  private receiptRequest = 0;
   private requests = new Subscription();
   constructor(
     private http: HttpClient,
@@ -329,17 +330,21 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     if (!this.job || this.busy) return;
     // Refresh authority and the retained receipt before every download.
     const generation = this.generation,
+      request = ++this.receiptRequest,
       id = this.job.id;
     this.requests.add(
       this.http.get<any>(this.url(id), { params: this.params, transferCache: false }).subscribe({
         next: (job) => {
-          if (generation !== this.generation) return;
+          if (generation !== this.generation || request !== this.receiptRequest) return;
+          if (job.specification.kind === 'native_protected_assessment_v1') this.job = job;
           this.save(
             new Blob([JSON.stringify(job, null, 2)], { type: 'application/json' }),
             `job-${id}.json`,
           );
         },
-        error: (error) => this.fail(generation, error, false),
+        error: (error) => {
+          if (request === this.receiptRequest) this.fail(generation, error, false);
+        },
       }),
     );
   }

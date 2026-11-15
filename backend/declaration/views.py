@@ -229,7 +229,7 @@ class DeclarationViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         from access_control.projects import governed
-        from modeling.holdout_evidence import prospective_payload
+        from execution_jobs.assessment_intake import admit_generic_input
 
         files = request.FILES
         first_line_is_not_header = request.POST.get('first_line_is_not_header') == 'true'
@@ -248,7 +248,10 @@ class DeclarationViewSet(viewsets.ModelViewSet):
             for file_key in files:
                 file = files[file_key]
                 file_content = file.read()
-                if governed() and prospective_payload(hashlib.sha256(file_content).hexdigest()):
+                if governed() and not admit_generic_input(
+                    request.user, request._request._project_scopes, hashlib.sha256(file_content).hexdigest(),
+                    'native_declaration',
+                ):
                     return Response({
                         'error_code': 'prospective_outcomes_protected',
                         'error': 'Use the protected assessment workspace for these outcomes.',

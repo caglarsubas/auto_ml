@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 4 (6.1%); in_progress: 0 (0.0%); waiting: 38 (57.6%); blocked: 7 (10.6%); done: 17 (25.8%).
+Inventory: 66 tasks; ready: 3 (4.5%); in_progress: 1 (1.5%); waiting: 38 (57.6%); blocked: 7 (10.6%); done: 17 (25.8%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -142,7 +142,7 @@ Separate exploratory evidence from protected final assessment and document the a
 
 ### D03-T02 — Qualify evidence invalidation after holdout inspection
 
-**Priority / status:** P0 / ready. **Owner:** Backend/ML. **Outcomes:** D03.
+**Priority / status:** P0 / in_progress. **Owner:** Backend/ML. **Outcomes:** D03.
 
 Bind final-assessment status to exact candidate/input/policy versions.
 
@@ -151,6 +151,8 @@ Bind final-assessment status to exact candidate/input/policy versions.
 **Acceptance:** Changed candidates cannot inherit confirmatory evidence.; Reuse and exceptions are explicit, attributable and reproducible.
 
 **Source / rationale:** Remaining acceptance scope from D03; existing tested foundation is reused, not rebuilt.
+
+**Packet / evidence:** P179; [Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)
 
 ### D04-T01 — Finish immutable stage coverage and distributed publication
 
@@ -2688,6 +2690,16 @@ Fit nested target encoders inside declared training partitions. Preserve a label
 
 **Remaining:** D02-T03 is qualified on the supported modeling, search, export and scoring paths. The full D02 outcome gate still requires milestone qualification.
 
+### P179 — Protected assessment applicability and reuse evidence
+
+**Packet status:** implemented. **Mapped outcomes:** D03.
+
+Bind confirmation to the frozen candidate, approval, input and policy. Preserve the original decision, check current applicability and retain attributable reuse reasons.
+
+**Evidence:** [Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)
+
+**Remaining:** D03-T02 awaits pull-request and independent merged-main qualification.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.
@@ -2742,9 +2754,9 @@ Separate development, calibration, and threshold choice from final holdout asses
 
 **Source mapping:** Claude CC-6; GPT P03; Gemini C3.
 
-**Progress:** Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Foundation evidence was exploratory. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. P10 evidence remained exploratory. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. PR and independent main qualification pass for the prospective native temporal profile. D03-T02 retains broader lineage invalidation and reuse adjudication.
+**Progress:** Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Foundation evidence was exploratory. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. P10 evidence remained exploratory. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. PR and independent main qualification pass for the prospective native temporal profile. D03-T02 retains broader lineage invalidation and reuse adjudication. P179 implements exact-version confirmation and attributable reuse adjudication for protected assessment. Independent merged-main qualification is pending.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md); [P10 source qualification](evidence/p10-qualification-2026-10-09.json); [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json); [P172 prospective protected assessment qualification](evidence/p172-qualification.json); [Implementation PR #280](https://github.com/caglarsubas/auto_ml/pull/280); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P10 holdout reuse and limits](HOLDOUT_REUSE_IMPLEMENTATION.md); [P10 source qualification](evidence/p10-qualification-2026-10-09.json); [Prospective protected assessment protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md); [P172 qualification contract](evidence/p172-assessment-protocol-contract.json); [P172 prospective protected assessment qualification](evidence/p172-qualification.json); [Implementation PR #280](https://github.com/caglarsubas/auto_ml/pull/280); [Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353); [Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)
 
 ### D04 Immutable runs and reliable scoring
 

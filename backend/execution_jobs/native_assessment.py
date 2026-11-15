@@ -13,11 +13,11 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models.functions import Substr
 from django.utils import timezone
 
 from access_control import projects
-from access_control.models import ProjectDataset
 from access_control.authority import actor_snapshot
 from deployment import native_candidate
 from deployment.reviews import digest, lock_authority
@@ -30,9 +30,17 @@ from modeling.holdout_evidence import holdout_spec, reserve_holdout_access
 from modeling.models import HoldoutAccess
 
 KIND = "native_protected_assessment_v1"
+PLAN_SCHEMA = 2
 BUDGET = {**training_search.BUDGET, "chunk_size": 500}
 SCOPE = "development_candidate_for_protected_assessment_only"
 PROSPECTIVE = "prospective_temporal_v1"
+ASSESSMENT_POLICY = {
+    "version": "native_assessment_policy_v2",
+    "confirmation_protocol": PROSPECTIVE,
+    "reuse": "possible_access_counts; exact_input_or_intersecting_project_window_withholds_confirmation",
+    "exception": "reviewer_attested_exploratory_only",
+    "evaluation": "frozen_candidate_and_development_objective",
+}
 PROSPECTIVE_LIMITATION = (
     "Prospective temporal protocol. The exact independent approval precedes the prediction window. "
     "First use and external custody are reviewer attestations. Reuse, uncertain access and incomplete "
@@ -315,20 +323,6 @@ def prospective_window(window, approval, as_of):
             "external_first_use": "attested_by_independent_reviewer"}
 
 
-def prior_prospective_use(job, window):
-    # Same-project legacy or uncertain history cannot establish a first use.
-    files = ProjectDataset.objects.filter(project_id=job.project_id).values("dataset_id")
-    history = HoldoutAccess.objects.filter(file_id__in=files)
-    if history.exclude(parameters__has_key="prospective_window").exists():
-        return "prior_unclassified_project_access"
-    # All admitted windows use fixed-width UTC timestamps. Block intersecting
-    # windows across candidates, dataset IDs, row order and custody uploads.
-    if history.filter(parameters__prospective_window__start__lte=window["end"],
-                      parameters__prospective_window__end__gte=window["start"]).exists():
-        return "prior_overlapping_project_access"
-    return None
-
-
 def seal(actor, adoption_id, data, upload):
     from execution_jobs import service
 
@@ -427,15 +421,24 @@ def plan(actor, protected_id):
         conflict("native_protected_scope_changed")
     projects.recheck(spec["authority"])
     result = {
-        "schema_version": 1,
+        "schema_version": PLAN_SCHEMA,
         "kind": KIND,
+        "project_id": str(job.project_id),
         "adoption_id": str(adoption.pk),
         "proposal_sha256": adoption.proposal_sha256,
         "approval_event_id": str(approval.pk),
+        "approval_sha256": approval.payload_sha256,
         "protected_input_id": str(protected.pk),
         "protected_input_sha256": protected.specification_sha256,
+        "input_sha256": spec["input_sha256"],
         "training_job_id": str(job.pk),
         "training_result_sha256": job.result_sha256,
+        "candidate_export_sha256": native_candidate.sha(raw_export),
+        "training_specification_sha256": digest(job.specification),
+        "prediction_contract_sha256": digest(job.result["prediction_contract"]),
+        "metric_sha256": digest(job.result["metric"]),
+        "assessment_policy": ASSESSMENT_POLICY,
+        "assessment_policy_sha256": digest(ASSESSMENT_POLICY),
         "runtime": service.runtime(KIND),
         "limits": service.limits(KIND),
     }
@@ -496,11 +499,20 @@ def submit(actor, file_id, data):
         return service.authorized_receipt(job, [authority])
 
 
+def verify_plan(job, prepared):
+    saved = job.specification
+    if saved.get("assessment_policy_sha256") != prepared["assessment_policy_sha256"]:
+        conflict("native_assessment_policy_changed")
+    if saved.get("runtime") != prepared["runtime"] or saved.get("limits") != prepared["limits"]:
+        conflict("job_runtime_changed")
+    if saved != {**prepared, "assessment_sha256": digest(prepared)}:
+        conflict("native_assessment_plan_changed")
+
+
 def recheck(job):
     actor = get_user_model().objects.get(pk=job.authority["actor_id"])
     prepared, _, _, _ = plan(actor, job.specification["protected_input_id"])
-    if digest(prepared) != job.specification["assessment_sha256"]:
-        conflict("native_assessment_plan_changed")
+    verify_plan(job, prepared)
 
 
 def population(frame, development, validation, as_of):
@@ -538,6 +550,8 @@ def population(frame, development, validation, as_of):
 
 
 def assess(job, check):
+    from execution_jobs.assessment_intake import prior_development_use
+    from execution_jobs.assessment_reuse import classify_reuse
     from execution_jobs import service
 
     actor = get_user_model().objects.get(pk=job.authority["actor_id"])
@@ -547,27 +561,32 @@ def assess(job, check):
     with service.locked():
         check()
         prepared, sealed, raw_export, _ = plan(actor, job.specification["protected_input_id"])
-        if digest(prepared) != job.specification["assessment_sha256"]:
-            conflict("native_assessment_plan_changed")
+        verify_plan(job, prepared)
         spec = sealed.specification
         contract = sealed.adoption.training_job.result["prediction_contract"]
         identity = holdout_spec(
             spec["input_sha256"], contract["target_column"], list(range(spec["rows"])), "raw_snapshot"
         )
         protocol = prepared.get("confirmation_protocol")
+        window = protocol["window"] if protocol else None
+        reuse = classify_reuse(job, window, spec["input_sha256"])
+        prior_development = prior_development_use(spec["input_sha256"], str(job.project_id), sealed_at=sealed.created_at)
+        if prior_development:
+            reuse["prior_development"] = prior_development
+            reuse["reason"] = reuse["reason"] or "prior_development_input_access"
+        reason = reuse["reason"] or (None if protocol else "reviewer_selected_exploratory")
         parameters = {
             "scope": KIND,
+            "project_id": str(job.project_id),
             "job_id": str(job.pk),
             "adoption_id": prepared["adoption_id"],
             "protected_input_id": str(sealed.pk),
-            "assessment_sha256": digest(prepared),
+            "assessment_sha256": job.specification["assessment_sha256"],
+            "assessment_policy_sha256": prepared["assessment_policy_sha256"],
+            "reuse_adjudication": reuse,
+            "reuse_adjudication_sha256": digest(reuse),
         }
-        reason = None
         if protocol:
-            window = protocol["window"]
-            reason = prior_prospective_use(job, window)
-            if HoldoutAccess.objects.filter(dataset_sha256=spec["input_sha256"]).exists():
-                reason = "prior_exact_input_access"
             parameters["prospective_window"] = window
             parameters["confirmation_protocol"] = protocol["version"]
         access, history = reserve_holdout_access(
@@ -577,8 +596,6 @@ def assess(job, check):
             actor,
             parameters,
         )
-        if protocol and history["total_related_accesses"] and not reason:
-            reason = "prior_related_access"
     try:
         check()
         raw = bytes(
@@ -637,9 +654,11 @@ def assess(job, check):
             "scope": KIND,
             "job_id": str(job.pk),
             **prepared,
+            "assessment_sha256": job.specification["assessment_sha256"],
             "outcome_access_id": str(access.pk),
             "prior_related_accesses": history["total_related_accesses"],
-            "input_sha256": spec["input_sha256"],
+            "reuse_adjudication": reuse,
+            "confirmation_reason": reason or "first_prospective_assessment_completed",
             "n_assessed": len(frame),
             "metric": metric,
             "primary_value": primary,
@@ -656,8 +675,6 @@ def assess(job, check):
             "production_use_approved": False,
             "legacy_projection_updated": False,
         }
-        if protocol:
-            result["confirmation_reason"] = reason or "first_prospective_assessment_completed"
         return result
     except BaseException:
         access.attempt_state = "failed"
@@ -665,12 +682,72 @@ def assess(job, check):
         raise
 
 
-def publish_confirmation(job, result):
-    """Record confirmation in the same transaction as the fenced job result."""
-    return HoldoutAccess.objects.filter(
-        pk=result["outcome_access_id"], execution_id=job.specification["training_job_id"],
+def bound_access(job, result):
+    spec = job.specification
+    access_id = result.get("outcome_access_id")
+    if (
+        not isinstance(access_id, str) or str(uuid.UUID(access_id)) != access_id
+        or any(result.get(key) != value for key, value in spec.items())
+        or result.get("job_id") != str(job.pk)
+        or digest(result.get("prediction_contract")) != spec["prediction_contract_sha256"]
+        or digest(result.get("metric")) != spec["metric_sha256"]
+        or not isinstance(result.get("reuse_adjudication"), dict)
+    ):
+        conflict("job_assessment_receipt_changed")
+    reuse = result["reuse_adjudication"]
+    confirmed = bool(spec.get("confirmation_protocol") and not reuse.get("reason"))
+    reason = reuse.get("reason") or (
+        "first_prospective_assessment_completed" if confirmed else "reviewer_selected_exploratory"
+    )
+    if (result.get("confirmatory") is not confirmed or result.get("confirmation_reason") != reason
+            or result.get("evidence_status") != ("confirmatory" if confirmed else "exploratory")):
+        conflict("job_assessment_receipt_changed")
+    access = HoldoutAccess.objects.filter(
+        pk=access_id, execution_id=spec["training_job_id"],
         file_id=job.dataset_id, actor_id=job.actor_id, attempt_state="completed",
-        evidence_status="exploratory", parameters__job_id=str(job.pk),
-        parameters__assessment_sha256=job.specification["assessment_sha256"],
-        parameters__confirmation_protocol=PROSPECTIVE,
-    ).update(evidence_status="confirmatory") == 1
+        dataset_sha256=spec["input_sha256"], parameters__job_id=str(job.pk),
+        parameters__project_id=spec["project_id"], parameters__adoption_id=spec["adoption_id"],
+        parameters__protected_input_id=spec["protected_input_id"],
+        parameters__assessment_sha256=spec["assessment_sha256"],
+        parameters__assessment_policy_sha256=spec["assessment_policy_sha256"],
+        parameters__reuse_adjudication_sha256=digest(reuse),
+        parameters__reuse_adjudication=reuse,
+    )
+    if confirmed:
+        access = access.filter(parameters__confirmation_protocol=PROSPECTIVE,
+                               parameters__prospective_window=spec["confirmation_protocol"]["window"])
+    return access
+
+
+def publish_assessment(job, result):
+    """Bind the outcome-access receipt in the same transaction as the fenced result."""
+    try:
+        access = bound_access(job, result).filter(evidence_status="exploratory")
+        return access.update(evidence_status="confirmatory") == 1 if result["confirmatory"] else access.exists()
+    except (ValueError, KeyError, TypeError):
+        return False
+
+
+def applicability(job):
+    """Check current use of frozen evidence without reopening the sealed input."""
+    from execution_jobs import service
+
+    result = job.result
+    status = {
+        "status": "exploratory", "confirmation_usable": False,
+        "assessment_sha256": job.specification.get("assessment_sha256"),
+        "reason_code": result.get("confirmation_reason", "exploratory_assessment"),
+    }
+    if result.get("confirmatory") is not True:
+        return status
+    if job.specification.get("schema_version") != PLAN_SCHEMA:
+        return {**status, "status": "historical_unverified", "reason_code": "legacy_assessment_binding_unverified"}
+    try:
+        service.execution_reference(job.specification, "protected_input_id", "assessment_sha256")
+        recheck(job)
+        if not bound_access(job, result).filter(evidence_status="confirmatory").exists():
+            conflict("job_assessment_receipt_changed")
+    except (ObjectDoesNotExist, projects.ProjectDenied, OSError, ValueError, KeyError, TypeError) as error:
+        return {**status, "status": "invalidated",
+                "reason_code": getattr(error, "code", "native_assessment_evidence_unavailable")}
+    return {**status, "status": "current", "confirmation_usable": True}

@@ -217,17 +217,102 @@
       } @else if (job.specification.kind === 'native_protected_assessment_v1') {
         <p>
           Protected assessment: {{ job.result.n_assessed }} rows ·
-          {{ job.result.metric.primary_metric }} {{ job.result.primary_value }} ·
-          {{ job.result.evidence_status }}
+          {{ job.result.metric.primary_metric }} {{ job.result.primary_value }}
         </p>
-        <p>{{ job.result.limitation }}</p>
-        @if (job.result.confirmation_reason) {
-          <p>Confirmation decision: {{ job.result.confirmation_reason }}</p>
+        @if (
+          job.assessment_applicability?.status === 'current' &&
+          job.assessment_applicability.confirmation_usable === true
+        ) {
+          <p>Confirmatory evidence applies to the exact assessed candidate and input.</p>
+        } @else if (job.assessment_applicability?.status === 'invalidated') {
+          <p>Confirmation no longer applies. Retain this result as historical evidence.</p>
+          @if (job.assessment_applicability.reason_code === 'native_adoption_not_approved') {
+            <p>The independent approval is no longer active.</p>
+          }
+        } @else if (
+          job.assessment_applicability?.status === 'historical_unverified' ||
+          job.result.confirmatory === true ||
+          job.result.evidence_status === 'confirmatory'
+        ) {
+          <p>Current confirmation could not be verified for this historical assessment.</p>
+        } @else {
+          <p>This assessment is exploratory.</p>
         }
-        <p>
-          Outcome access {{ job.result.outcome_access_id }} · Prior related accesses
-          {{ job.result.prior_related_accesses }}. No production approval.
-        </p>
+        <p>{{ job.result.limitation }}</p>
+        <details>
+          <summary>Assessment decision and outcome access</summary>
+          <p>
+            Outcome access <code>{{ job.result.outcome_access_id }}</code>
+          </p>
+          @if (job.result.confirmation_reason) {
+            <p>
+              Recorded decision <code>{{ job.result.confirmation_reason }}</code>
+            </p>
+          }
+          @if (job.assessment_applicability; as applicability) {
+            <p>
+              Current decision <code>{{ applicability.reason_code }}</code> · Assessment plan
+              SHA-256 <code>{{ applicability.assessment_sha256 }}</code>
+            </p>
+          }
+          <p>
+            Candidate result SHA-256 <code>{{ job.result.training_result_sha256 }}</code> · Sealed
+            input SHA-256 <code>{{ job.result.input_sha256 }}</code>
+          </p>
+          @if (job.result.reuse_adjudication; as reuse) {
+            <p>
+              Reuse policy <code>{{ reuse.policy }}</code>
+            </p>
+            <p>
+              {{ reuse.total }} earlier outcome accesses · {{ reuse.counts.exact_input }} exact
+              input · {{ reuse.counts.overlapping_project }} overlapping window ·
+              {{ reuse.counts.unclassified_project }} unclassified project history
+            </p>
+            @if (reuse.prior_development; as admission) {
+              <p>These exact outcome bytes were previously available as development input.</p>
+              <p>
+                @if (admission.visibility === 'same_project') {
+                  Development input record <code>{{ admission.id }}</code> ·
+                  {{ admission.recorded_at }} ·
+                  {{ admission.actor?.username || 'Actor unavailable' }}
+                } @else {
+                  The development input belongs to another project. Its details are restricted.
+                }
+              </p>
+            }
+            @if (reuse.records.length) {
+              <ul aria-label="Earlier outcome accesses">
+                @for (access of reuse.records; track $index) {
+                  <li>
+                    @switch (access.relation) {
+                      @case ('exact_input') {
+                        Exact input
+                      }
+                      @case ('overlapping_project') {
+                        Overlapping project window
+                      }
+                      @default {
+                        Unclassified project history
+                      }
+                    }
+                    @if (access.visibility === 'same_project') {
+                      · {{ access.attempt_state }} · {{ access.accessed_at }} ·
+                      {{ access.actor?.username || 'Actor unavailable' }} ·
+                      <code>{{ access.access_id }}</code>
+                    } @else {
+                      · Outside this project. Access details are restricted.
+                    }
+                  </li>
+                }
+              </ul>
+            }
+            @if (reuse.truncated) {
+              <p>The receipt displays {{ reuse.records.length }} of {{ reuse.total }} matches.</p>
+            }
+          } @else {
+            <p>Prior related accesses {{ job.result.prior_related_accesses }}</p>
+          }
+        </details>
       } @else if (job.specification.kind === 'native_numeric_training_search_v1') {
         <p>
           Development search: {{ job.result.prediction_contract.task }} ·
