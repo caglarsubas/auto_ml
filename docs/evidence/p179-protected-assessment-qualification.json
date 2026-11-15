@@ -1,0 +1,204 @@
+{
+  "schema": "protected_assessment_acceptance_v1",
+  "packet": "P179",
+  "task": "D03-T02",
+  "pr": 295,
+  "qualified_head": "a352e2a0dd8905fbab792ce5e51de569e00ead3b",
+  "merge": "d49c6c05f0ed66eeadaf548d590f12874c43a384",
+  "ci_run": 43676651468,
+  "main_run": 43684654014,
+  "required_checks": [
+    "Backend lint (ruff)",
+    "Backend tests (pytest)",
+    "Frontend E2E (Playwright)",
+    "Frontend lint (ESLint + Prettier)",
+    "Frontend unit tests (Karma)",
+    "PostgreSQL runtime and metadata",
+    "Private expert worker (gVisor)"
+  ],
+  "main_qualified": true,
+  "merged_tree_matches_qualified_pr": true,
+  "source_hashes_match": true,
+  "original_case_skip_workload_limits_preserved": true,
+  "previous_backlog": {
+    "done": 17,
+    "open": 42,
+    "blocked": 7,
+    "total": 66
+  },
+  "qualified_backlog": {
+    "done": 18,
+    "open": 41,
+    "blocked": 7,
+    "total": 66
+  },
+  "done_percentage_point_change": 1.5,
+  "pr_qualification": {
+    "run": 43676651468,
+    "run_attempt": 2,
+    "head": "a352e2a0dd8905fbab792ce5e51de569e00ead3b",
+    "event": "pull_request",
+    "required_checks": [
+      "Backend lint (ruff)",
+      "Backend tests (pytest)",
+      "Frontend E2E (Playwright)",
+      "Frontend lint (ESLint + Prettier)",
+      "Frontend unit tests (Karma)",
+      "PostgreSQL runtime and metadata",
+      "Private expert worker (gVisor)"
+    ],
+    "jobs": {
+      "PostgreSQL runtime and metadata": 132710738955,
+      "Backend lint (ruff)": 132710739915,
+      "Frontend unit tests (Karma)": 132710740485,
+      "Frontend E2E (Playwright)": 132710763190,
+      "Private expert worker (gVisor)": 132710767179,
+      "Backend tests (pytest)": 132710773861,
+      "Frontend lint (ESLint + Prettier)": 132710774030
+    },
+    "seven_jobs_passed": true,
+    "original_case_skip_workload_limits_preserved": true,
+    "source_hashes_match": true,
+    "application_source_sha256": "8640e7674ccbde1f856da9bceecd60f758ea802d0972d45f82044e647b3255fc",
+    "native": {
+      "tests": 7800,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 784.233,
+      "workers": 2,
+      "worker_restarts": 0,
+      "cap_seconds": 900,
+      "added_cases": [
+        "tests.unit.test_assessment_intake::test_imported_outcomes_remain_exploratory_and_cannot_be_scored_after_seal",
+        "tests.unit.test_assessment_intake::test_native_preview_alone_records_outcome_exposure",
+        "tests.unit.test_assessment_reuse::test_pre_snapshot_native_history_recovers_original_project",
+        "tests.unit.test_assessment_reuse::test_reuse_survives_reassignment_and_redacts_outside_project_receipts",
+        "tests.unit.test_assessment_reuse::test_unknown_history_blocks_confirmation_with_bounded_stable_evidence",
+        "tests.unit.test_final_assessment_binding::test_changed_candidate_and_reordered_outcomes_have_distinct_exploratory_evidence",
+        "tests.unit.test_final_assessment_binding::test_confirmation_receipt_keeps_history_but_checks_live_approval_policy_and_access"
+      ]
+    },
+    "artifacts": {
+      "postgresql-runtime-reports": {
+        "id": 14149459139,
+        "sha256": "34fbbc9f7be5e0597720d85ae6f1889125defdc01f653f19007d2295befa4ea7"
+      },
+      "backend-test-reports": {
+        "id": 14147206145,
+        "sha256": "07e4be53c1e038da3679661df00e69ef6b96bac57819be3f34e030a30932b39e"
+      },
+      "private-expert-worker-report": {
+        "id": 14146707859,
+        "sha256": "4e28e06f44d001bd11da32f9f19e5c4d4a33aeebaf03f3095faaf8862b785e97"
+      }
+    },
+    "prior_rejected_attempts": [
+      {
+        "run": 43676651468,
+        "attempt": 1,
+        "job": 132698229488,
+        "head": "a352e2a0dd8905fbab792ce5e51de569e00ead3b",
+        "artifact_id": 14148391734,
+        "artifact_sha256": "7be236773728950a0388806cd3b4619138881313206f7bbd449d044096adf143",
+        "native_cap_seconds": 900,
+        "qualified": false,
+        "finished_cases": 5081,
+        "reason": "native_process_timeout"
+      }
+    ],
+    "retry_scope": "PostgreSQL runtime and metadata"
+  },
+  "main_qualification": {
+    "run": 43684654014,
+    "run_attempt": 2,
+    "head": "d49c6c05f0ed66eeadaf548d590f12874c43a384",
+    "event": "push",
+    "required_checks": [
+      "Backend lint (ruff)",
+      "Backend tests (pytest)",
+      "Frontend E2E (Playwright)",
+      "Frontend lint (ESLint + Prettier)",
+      "Frontend unit tests (Karma)",
+      "PostgreSQL runtime and metadata",
+      "Private expert worker (gVisor)"
+    ],
+    "jobs": {
+      "PostgreSQL runtime and metadata": 132735365470,
+      "Private expert worker (gVisor)": 132735366569,
+      "Frontend lint (ESLint + Prettier)": 132735366865,
+      "Backend tests (pytest)": 132735386552,
+      "Frontend E2E (Playwright)": 132735388620,
+      "Frontend unit tests (Karma)": 132735393941,
+      "Backend lint (ruff)": 132735403975
+    },
+    "seven_jobs_passed": true,
+    "original_case_skip_workload_limits_preserved": true,
+    "source_hashes_match": true,
+    "application_source_sha256": "8640e7674ccbde1f856da9bceecd60f758ea802d0972d45f82044e647b3255fc",
+    "native": {
+      "tests": 7800,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 848.013,
+      "workers": 2,
+      "worker_restarts": 0,
+      "cap_seconds": 900,
+      "added_cases": [
+        "tests.unit.test_assessment_intake::test_imported_outcomes_remain_exploratory_and_cannot_be_scored_after_seal",
+        "tests.unit.test_assessment_intake::test_native_preview_alone_records_outcome_exposure",
+        "tests.unit.test_assessment_reuse::test_pre_snapshot_native_history_recovers_original_project",
+        "tests.unit.test_assessment_reuse::test_reuse_survives_reassignment_and_redacts_outside_project_receipts",
+        "tests.unit.test_assessment_reuse::test_unknown_history_blocks_confirmation_with_bounded_stable_evidence",
+        "tests.unit.test_final_assessment_binding::test_changed_candidate_and_reordered_outcomes_have_distinct_exploratory_evidence",
+        "tests.unit.test_final_assessment_binding::test_confirmation_receipt_keeps_history_but_checks_live_approval_policy_and_access"
+      ]
+    },
+    "artifacts": {
+      "postgresql-runtime-reports": {
+        "id": 14153018501,
+        "sha256": "ae1235cc7c1138422a9cf1845a35c89a78daff449b42bee9ac321a8581964551"
+      },
+      "backend-test-reports": {
+        "id": 14149923000,
+        "sha256": "57ea6b3e08b4751e0c3cadf06dc496a92cbab42f1d49452689b1f93990afbef6"
+      },
+      "private-expert-worker-report": {
+        "id": 14149991031,
+        "sha256": "1fef8142e13a08a848f224fe4c5d9b43b1dc167665a28d3f0232cef1297ab77f"
+      }
+    },
+    "prior_rejected_attempts": [
+      {
+        "run": 43684654014,
+        "attempt": 1,
+        "job": 132722468919,
+        "head": "d49c6c05f0ed66eeadaf548d590f12874c43a384",
+        "artifact_id": 14151577010,
+        "artifact_sha256": "7d636681f1bbb7abb843d03b0bd299d07d8768e20f1b0f7733d9e21638479bfd",
+        "native_cap_seconds": 900,
+        "qualified": false,
+        "finished_cases": 6522,
+        "reason": "native_process_timeout"
+      }
+    ],
+    "retry_scope": "PostgreSQL runtime and metadata"
+  },
+  "independent_model_reproduction_verified": false,
+  "release_qualified": false,
+  "rejected_implementation": [
+    {
+      "head": "27629d2e2ab7fe6eb00fd0b28f768c20fe2ee69f",
+      "run": 43674788418,
+      "failed_job": "Frontend unit tests (Karma)",
+      "reason": "A receipt download prevented history refresh from superseding it."
+    },
+    {
+      "head": "44c30bf601c14b722d5ef61de88d12356a9824a0",
+      "run": 43675191739,
+      "failed_job": "Backend tests (pytest)",
+      "reason": "The queue boundary did not reject malformed references before the assessment hook, and an unversioned completion control was rejected."
+    }
+  ]
+}

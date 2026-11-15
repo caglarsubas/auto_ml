@@ -158,9 +158,14 @@
         "[P172 prospective protected assessment qualification](evidence/p172-qualification.json)",
         "[Implementation PR #280](https://github.com/caglarsubas/auto_ml/pull/280)",
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42231084353)",
-        "[Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)"
+        "[Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)",
+        "[P179 protected assessment qualification](evidence/p179-protected-assessment-qualification.json)",
+        "[Implementation PR #295](https://github.com/caglarsubas/auto_ml/pull/295)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43684654014)",
+        "[Frontend unit tests (Karma) rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43674788418)",
+        "[Backend tests (pytest) rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43675191739)"
       ],
-      "progress": "Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Foundation evidence was exploratory. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. P10 evidence remained exploratory. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. PR and independent main qualification pass for the prospective native temporal profile. D03-T02 retains broader lineage invalidation and reuse adjudication. P179 implements exact-version confirmation and attributable reuse adjudication for protected assessment. Independent merged-main qualification is pending."
+      "progress": "Development artifacts exclude final outcomes; explicit assessment records attributable holdout access. Binary thresholds use development labels, and anomaly assessment has no holdout threshold search. Foundation evidence was exploratory. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. P10 evidence remained exploratory. P172 implements prospective temporal confirmation for independently approved native candidates with explicit first-use custody. PR and independent main qualification pass for the prospective native temporal profile. D03-T02 extends the prospective profile with lineage invalidation and reuse adjudication. P179 qualifies exact-version confirmation, live applicability and attributable reuse adjudication for the supported protected assessment profile."
     },
     {
       "id": "D04",
@@ -2205,6 +2210,10 @@
     {
       "date": "2026-11-15",
       "change": "Implement P179 for D03-T02. Verify assessment invalidation and reuse before taking backlog credit."
+    },
+    {
+      "date": "2026-11-15",
+      "change": "Qualify D03-T02 with implementation PR #295 and independent push-main CI 43684654014. Backlog moves from 17/42/7 to 18/41/7 done/open/blocked across 66 tasks."
     }
   ],
   "implementation_packets": [
@@ -5380,12 +5389,17 @@
         "D03"
       ],
       "owner": "Backend/ML",
-      "status": "implemented",
+      "status": "tested",
       "description": "Bind confirmation to the frozen candidate, approval, input and policy. Preserve the original decision, check current applicability and retain attributable reuse reasons.",
       "evidence": [
-        "[Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)"
+        "[Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)",
+        "[P179 protected assessment qualification](evidence/p179-protected-assessment-qualification.json)",
+        "[Implementation PR #295](https://github.com/caglarsubas/auto_ml/pull/295)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43684654014)",
+        "[Frontend unit tests (Karma) rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43674788418)",
+        "[Backend tests (pytest) rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43675191739)"
       ],
-      "remaining": "D03-T02 awaits pull-request and independent merged-main qualification."
+      "remaining": "D03-T02 is qualified for the supported native prospective profile. Clean-environment reproduction, broader review workflows and release qualification remain separate."
     }
   ],
   "release_qualification": {
@@ -5740,13 +5754,13 @@
       {
         "id": "D03-T02",
         "title": "Qualify evidence invalidation after holdout inspection",
-        "description": "Bind final-assessment status to exact candidate/input/policy versions.",
+        "description": "Bind final assessment to the exact candidate, sealed input, approval and policy. Preserve the original receipt and check current confirmation and reuse.",
         "items": [
           "D03"
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [
           "D03-T01",
           "D02-T02"
@@ -5757,7 +5771,12 @@
         ],
         "blockers": [],
         "evidence": [
-          "[Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)"
+          "[Protected assessment and applicability protocol](PROSPECTIVE_ASSESSMENT_PROTOCOL.md)",
+          "[P179 protected assessment qualification](evidence/p179-protected-assessment-qualification.json)",
+          "[Implementation PR #295](https://github.com/caglarsubas/auto_ml/pull/295)",
+          "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43684654014)",
+          "[Frontend unit tests (Karma) rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43674788418)",
+          "[Backend tests (pytest) rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43675191739)"
         ],
         "packet_refs": [
           "P179"
