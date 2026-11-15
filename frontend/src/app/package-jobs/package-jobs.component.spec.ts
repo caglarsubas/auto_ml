@@ -141,6 +141,8 @@ describe('Durable package job receipts', () => {
     expect(text()).toContain('Confirmatory evidence applies');
 
     component.download();
+    const outdated = http.expectOne('/api/jobs/job-1/?project_id=project-a');
+    component.download();
     http.expectOne('/api/jobs/job-1/?project_id=project-a').flush({
       ...receipt,
       assessment_applicability: {
@@ -150,6 +152,7 @@ describe('Durable package job receipts', () => {
         confirmation_usable: false,
       },
     });
+    outdated.flush(receipt);
     fixture.detectChanges();
     expect(save).toHaveBeenCalledTimes(1);
     expect(text()).not.toContain('Confirmatory evidence applies');
