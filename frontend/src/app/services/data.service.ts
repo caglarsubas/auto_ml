@@ -202,12 +202,13 @@ export class DataService {
   // Run preprocessing. If options omitted, backend uses previously saved config.
   // Optional split: { strategy: 'random' | 'oot', date_column?: string, cutoff?: string, percent?: number }
   // Optional excluded_variables: list of variables to exclude (Model_Usage='No')
-  runPreprocessing(fileId: number, options?: number[], split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }, excludedVariables?: string[], dataDictionary?: any[]): Observable<any> {
+  runPreprocessing(fileId: number, options?: number[], split?: { strategy?: string; date_column?: string; cutoff?: string; percent?: number }, excludedVariables?: string[], dataDictionary?: any[], requestId?: string): Observable<any> {
     const payload: any = { file_id: fileId };
     if (options) payload.options = options;
     if (split) payload.split = split;
     if (excludedVariables && excludedVariables.length > 0) payload.excluded_variables = excludedVariables;
     if (dataDictionary && dataDictionary.length > 0) payload.data_dictionary = dataDictionary;
+    if (requestId) payload.request_id = requestId;
     return this.http.post(`${this.apiUrl}preprocessing/run/`, payload).pipe(
       catchError((error: any) => {
         console.error('Error running preprocessing:', error);
@@ -217,8 +218,9 @@ export class DataService {
   }
 
   // Check preprocessing completion status for a file (used for pipeline resume)
-  getPreprocessingStatus(fileId: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}preprocessing/status/${fileId}/`).pipe(
+  getPreprocessingStatus(fileId: number, requestId?: string): Observable<any> {
+    const params: Record<string, string> = requestId ? { request_id: requestId } : {};
+    return this.http.get(`${this.apiUrl}preprocessing/status/${fileId}/`, { params }).pipe(
       catchError((error: any) => {
         console.error('Error getting preprocessing status:', error);
         return throwError(() => new Error(error.message || 'Failed to get preprocessing status'));
@@ -227,8 +229,9 @@ export class DataService {
   }
 
   // Get quality summary row for a specific variable from saved datq_summary JSON
-  getDatqSummaryRow(fileId: number, column: string): Observable<any> {
-    return this.http.get(`${this.apiUrl}preprocessing/datq_summary_row/${fileId}/`, { params: { column } }).pipe(
+  getDatqSummaryRow(fileId: number, column: string, processedFile?: string): Observable<any> {
+    const params: Record<string, string> = processedFile ? { column, processed_file: processedFile } : { column };
+    return this.http.get(`${this.apiUrl}preprocessing/datq_summary_row/${fileId}/`, { params }).pipe(
       catchError((error: any) => {
         console.error('Error getting datq summary row:', error);
         return throwError(() => new Error(error.message || 'Failed to get quality summary'));
@@ -956,8 +959,8 @@ export class DataService {
     );
   }
 
-  createDeploymentBundle(fileId: number, executionId?: string, assessmentId?: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}deployment/bundle/`, { file_id: fileId, execution_id: executionId, assessment_id: assessmentId }).pipe(
+  createDeploymentBundle(fileId: number, executionId?: string, assessmentId?: string, requestId?: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}deployment/bundle/`, { file_id: fileId, execution_id: executionId, assessment_id: assessmentId, request_id: requestId }).pipe(
       catchError((error: any) => {
         console.error('Error creating deployment bundle:', error);
         // Preserve structured 409 readiness payload for the deployment UI.
@@ -1042,8 +1045,9 @@ export class DataService {
     );
   }
 
-  getDatqEnriched(fileId: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}crisp/datq/${fileId}/`).pipe(
+  getDatqEnriched(fileId: number, processedFile?: string): Observable<any> {
+    const params: Record<string, string> = processedFile ? { processed_file: processedFile } : {};
+    return this.http.get(`${this.apiUrl}crisp/datq/${fileId}/`, { params }).pipe(
       catchError((err: any) => {
         console.error('Error fetching enriched DATQ:', err);
         return throwError(() => err);

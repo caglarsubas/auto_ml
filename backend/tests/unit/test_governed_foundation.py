@@ -247,9 +247,12 @@ def test_real_training_and_assessment_preserve_exact_execution(_use_tmp_media, s
     assert evidence['evidence_status'] == 'exploratory'
     assert HoldoutAccess.objects.filter(execution_id=first['execution_id']).count() == 1
     assert load_execution(first['execution_id'], file.pk)[0]['execution_id'] == first['execution_id']
-    from deployment.deploy_utils import build_score_bundle, score_frame
-    with pytest.raises(ValueError, match='different execution'):
+    from deployment.deploy_utils import DeployNotReadyError, build_score_bundle, score_frame
+    with pytest.raises(DeployNotReadyError) as blocked:
         build_score_bundle(file.pk)
+    assert blocked.value.readiness['execution_id'] == second['execution_id']
+    assert blocked.value.readiness['assessment_id'] is None
+    assert 'evaluation_missing' in {item['code'] for item in blocked.value.readiness['blocking']}
     assessed_latest = EvaluationRunView.as_view()(factory.post('/evaluation/run/', {'file_id': file.pk, 'execution_id': second['execution_id']}, format='json'))
     assert assessed_latest.status_code == 200, assessed_latest.data
     bundle = build_score_bundle(file.pk)

@@ -1,4 +1,4 @@
-from pathlib import Path
+from access_control import projects
 from access_control.storage import managed_path
 import json
 import math
@@ -13,7 +13,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from declaration.models import Declaration
+from modeling.execution_artifacts import digest_file
 from .data_quality import Data_Quality
+from . import stage_publication
 from .purifier_catalog import (
     PURIFIER_OPTIONS,
     DEFAULT_SELECTED_IDS,
@@ -30,7 +32,6 @@ from .purifier_contract import (
     build_outer_split_indices,
     remap_indices_to_positions,
     resolve_fit_index,
-    save_purifier_artifact,
 )
 import pandas as pd
 import numpy as np
@@ -185,6 +186,7 @@ class PreprocessingDatqTimeseriesView(APIView):
             full_path = managed_path(processed_file, table=True)
             if not os.path.exists(full_path):
                 return Response({'error': f'processed_file not found at {full_path}'}, status=status.HTTP_404_NOT_FOUND)
+            recorded_split = stage_publication.read_split(file_id, full_path)
 
             # Read processed dataframe
             lower = full_path.lower()
@@ -299,6 +301,8 @@ class PreprocessingDatqTimeseriesView(APIView):
 
             # Build train/test split consistent with Data Quality summary logic
             def _build_split_indices(frame: pd.DataFrame):
+                if recorded_split is not None:
+                    return pd.Index(recorded_split['train_idx']), pd.Index(recorded_split['test_idx'])
                 try:
                     if isinstance(split, dict) and split.get('strategy') == 'oot':
                         # Prefer explicit date_column from split, otherwise use payload's date_column
@@ -521,6 +525,8 @@ class PreprocessingDatqTimeseriesView(APIView):
                 overall = None
 
             return Response({'series': out_series, 'metric': metric, 'overall': overall}, status=status.HTTP_200_OK)
+        except stage_publication.StageConflict as error:
+            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
         except Exception as e:
             import traceback
             print("[PreprocessingDatqTimeseriesView] ERROR:\n" + traceback.format_exc())
@@ -565,8 +571,21 @@ class PreprocessingRunView(APIView):
             if not isinstance(options, list) or not all(isinstance(x, int) for x in options):
                 return Response({'error': 'options must be a list of integers'}, status=status.HTTP_400_BAD_REQUEST)
             print(f"[PreprocessingRun] options={sorted(options)} (outlier cleaning 28-30: {[o for o in options if o in (28,29,30)]})")
-            from preprocessing.replay import validate_options, save_recipe
+            from preprocessing.replay import validate_options
             validate_options(options)
+
+            file_id = int(file_id)
+            requested_id = data.get('request_id')
+            identifier = uuid.UUID(str(requested_id)) if requested_id is not None else uuid.uuid4()
+            path = stage_publication.stage_path(file_id, identifier)
+            request_sha256 = stage_publication.request_digest({
+                'file_id': file_id, 'actor_id': request.user.pk,
+                'options': options, 'split': split, 'excluded_variables': excluded_variables,
+                'target_column': data.get('target_column'), 'data_dictionary': data.get('data_dictionary'),
+            })
+            previous = stage_publication.replay_stage(request, path, file_id, request_sha256)
+            if previous is not None:
+                return Response(previous, status=status.HTTP_200_OK)
 
             file_path = decl.file.path
             if not os.path.exists(file_path):
@@ -574,7 +593,10 @@ class PreprocessingRunView(APIView):
 
             # Read CSV/Excel
             t_read_start = time.monotonic()
+            source_sha256 = digest_file(file_path)
             df = self._read_dataframe(file_path)
+            if digest_file(file_path) != source_sha256:
+                raise stage_publication.StageConflict('The source changed during preprocessing. Start a new version.')
             print(f"[PreprocessingRun] read_dataframe ok in {time.monotonic()-t_read_start:.3f}s shape={df.shape}")
             
             # Track columns before any drops
@@ -659,37 +681,11 @@ class PreprocessingRunView(APIView):
                 train_idx_sv = pd.Index(train_idx_sv)
                 test_idx_sv = pd.Index(test_idx_sv)
 
-            # Persist purifier fit artifact (train-learned decisions)
-            purifier_artifact_path = None
-            try:
-                saved_purifier = save_purifier_artifact(int(file_id), {
-                    **purifier_artifact,
-                    'split_strategy': (split_meta_built or {}).get('strategy')
-                    if isinstance(split, dict) else 'random',
-                    'n_rows_after': int(len(df_processed)),
-                    'n_cols_after': int(df_processed.shape[1]),
-                })
-                purifier_artifact_path = saved_purifier.get('path')
-            except Exception as pur_err:
-                print(f"[PreprocessingRun] failed to save purifier artifact: {pur_err}")
-
-            # Save processed file
-            out_name = f"processed_{file_id}_{uuid.uuid4().hex}.csv"
-            out_rel = os.path.join('data_files', out_name)
-            out_full = os.path.join(settings.MEDIA_ROOT, out_rel)
-            os.makedirs(os.path.dirname(out_full), exist_ok=True)
-            t_save_start = time.monotonic()
-            df_processed.to_csv(out_full, index=False)
-            from access_control.projects import register_artifact
-            register_artifact(out_full, file_id=int(file_id))
-            recipe = save_recipe(out_full, file_id, eligible_raw, options, data_dictionary_payload, preserve_cols,
-                {'strategy': split_meta_built['strategy'], 'split_config': split or {'strategy': 'random'},
-                 'train_idx': train_idx_sv.tolist(), 'test_idx': test_idx_sv.tolist()}, eligible_source_rows)
-            # Bind generated raw/replay evidence at the governed API boundary;
-            # recipe serialization itself remains a pure filesystem operation.
-            register_artifact(os.path.join(settings.MEDIA_ROOT, recipe['raw_input']['path']), file_id=int(file_id))
-            register_artifact(Path(out_full).with_suffix('.purifier.json'), file_id=int(file_id))
-            print(f"[PreprocessingRun] saved processed csv in {time.monotonic()-t_save_start:.3f}s -> {out_rel}")
+            split_manifest = {'strategy': split_meta_built['strategy'],
+                              'split_config': split or {'strategy': 'random'},
+                              'train_idx': train_idx_sv.tolist(), 'test_idx': test_idx_sv.tolist()}
+            purifier_artifact.update(split_strategy=split_manifest['strategy'],
+                                     n_rows_after=len(df_processed), n_cols_after=df_processed.shape[1])
 
             # Compute AFTER-preprocessing per-feature descriptive stats
             t_stats_after = time.monotonic()
@@ -700,32 +696,11 @@ class PreprocessingRunView(APIView):
                 feature_stats_after = None
                 print(f"[PreprocessingRun] feature_stats_after failed: {e}")
 
-            def _build_split_indices(frame: pd.DataFrame):
-                train, test, _meta = build_outer_split_indices(frame, split=split)
-                return train, test
-
             # ── Split Validation: target distribution per split ──
             # train_idx_sv / test_idx_sv were built + remapped before CSV save so
             # they match the RangeIndex of the persisted processed file.
             split_validation = None
             try:
-                if train_idx_sv is None or test_idx_sv is None:
-                    train_idx_sv, test_idx_sv = _build_split_indices(df_processed)
-                # Persist canonical outer split for modeling / evaluation
-                try:
-                    from modeling.split_contract import save_split_artifact
-                    save_split_artifact(
-                        int(file_id),
-                        train_idx_sv,
-                        test_idx_sv,
-                        split if isinstance(split, dict) else {'strategy': 'random'},
-                        frame_index=df_processed.index,
-                        source='preprocessing',
-                    )
-                    print(f"[PreprocessingRun] saved split artifact for file_id={file_id} "
-                          f"train={len(train_idx_sv)} test={len(test_idx_sv)}")
-                except Exception as split_save_err:
-                    print(f"[PreprocessingRun] failed to save split artifact: {split_save_err}")
                 target_col = 'Target' if 'Target' in df_processed.columns else None
                 if target_col and train_idx_sv is not None and test_idx_sv is not None:
                     y_train = df_processed.loc[train_idx_sv, target_col].dropna()
@@ -772,17 +747,14 @@ class PreprocessingRunView(APIView):
                 sample_rows = int(os.environ.get('DATQ_SAMPLE_ROWS', '20000'))  # 20k default
                 n_cells = df_processed.shape[0] * max(1, df_processed.shape[1])
                 if n_cells > max_cells:
-                    print(f"[PreprocessingRun] datq_summary skipped due to size n_cells={n_cells} > max_cells={max_cells}")
-                    datq_summary_records = None
+                    raise ValueError(f'Data quality summary exceeds the {max_cells} cell limit.')
+                if df_processed.shape[0] > sample_rows:
+                    df_for_datq = df_processed.sample(n=sample_rows, random_state=42)
+                    print(f"[PreprocessingRun] datq using sampled rows: {sample_rows}/{df_processed.shape[0]}")
                 else:
-                    # Optionally sample rows to keep PSI/binning fast on large datasets
-                    if df_processed.shape[0] > sample_rows:
-                        df_for_datq = df_processed.sample(n=sample_rows, random_state=42)
-                        print(f"[PreprocessingRun] datq using sampled rows: {sample_rows}/{df_processed.shape[0]}")
-                    else:
-                        df_for_datq = df_processed
-                # Construct splitter based on requested strategy on the frame being analyzed (df_for_datq)
-                train_idx, test_idx = _build_split_indices(df_for_datq)
+                    df_for_datq = df_processed
+                train_idx = train_idx_sv.intersection(df_for_datq.index, sort=False)
+                test_idx = test_idx_sv.intersection(df_for_datq.index, sort=False)
                 class _Splitter:
                     def __init__(self, tr, te):
                         self.train_data_indeces = tr
@@ -1055,18 +1027,6 @@ class PreprocessingRunView(APIView):
                 datq_summary_records = None
                 print(f"[PreprocessingRun] datq_summary error: {dq_err}")
 
-            # Save datq_summary as JSON for later use in modeling
-            if datq_summary_records:
-                try:
-                    datq_dir = os.path.join(settings.MEDIA_ROOT, 'data_quality')
-                    os.makedirs(datq_dir, exist_ok=True)
-                    datq_json_path = os.path.join(datq_dir, f'{file_id}_datq_summary.json')
-                    with open(datq_json_path, 'w', encoding='utf-8') as f:
-                        json.dump(datq_summary_records, f)
-                    print(f"[PreprocessingRun] saved datq_summary JSON -> {datq_json_path}")
-                except Exception as e:
-                    print(f"[PreprocessingRun] failed to save datq_summary JSON: {e}")
-
             preview = {
                 'file_id': file_id,
                 'options': options,
@@ -1079,16 +1039,9 @@ class PreprocessingRunView(APIView):
                 'original_columns_count': len(cols_before),
                 'new_columns_count': len(df_processed.columns),
                 'head': df_processed.head(5).replace({np.nan: None}).to_dict(orient='records'),
-                'processed_file': out_rel,
-                'purifier_recipe_id': recipe['recipe_id'],
                 'modeling_input_stage': 'raw_eligible_input_with_partition_fitted_purifier',
                 'datq_summary': datq_summary_records,
                 'split_validation': split_validation,
-                'split_artifact': (
-                    f'splits/{file_id}_split.json'
-                    if train_idx_sv is not None and test_idx_sv is not None else None
-                ),
-                'purifier_artifact': purifier_artifact_path,
                 'purifier_fit_scope': purifier_artifact.get('fit_scope'),
                 'purifier_n_fit': purifier_artifact.get('n_fit'),
                 'feature_stats_before': feature_stats_before,
@@ -1125,19 +1078,18 @@ class PreprocessingRunView(APIView):
 
             preview = _final_sanitize(preview)
 
-            # Save full preprocessing result for resume-on-return
-            try:
-                pp_result_dir = os.path.join(settings.MEDIA_ROOT, 'preprocessing_results')
-                os.makedirs(pp_result_dir, exist_ok=True)
-                pp_result_path = os.path.join(pp_result_dir, f'{file_id}_result.json')
-                with open(pp_result_path, 'w', encoding='utf-8') as f:
-                    json.dump(preview, f)
-                print(f"[PreprocessingRun] saved full result JSON -> {pp_result_path}")
-            except Exception as e:
-                print(f"[PreprocessingRun] failed to save full result JSON: {e}")
+            preview = stage_publication.publish_stage(
+                request, path, file_id, request_sha256, source_sha256, df_processed, eligible_raw,
+                (options, data_dictionary_payload, preserve_cols, split_manifest, eligible_source_rows),
+                split_manifest, _final_sanitize(purifier_artifact), preview,
+            )
 
             print(f"[PreprocessingRun] completed in {time.monotonic()-t0:.3f}s")
             return Response(preview, status=status.HTTP_200_OK)
+        except stage_publication.StageConflict as error:
+            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+        except projects.ProjectDenied as error:
+            return Response({'error_code': error.code}, status=status.HTTP_403_FORBIDDEN)
         except ValueError as error:
             return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -1691,6 +1643,7 @@ class PreprocessingDatqDetailView(APIView):
             full_path = managed_path(processed_file, table=True)
             if not os.path.exists(full_path):
                 return Response({'error': f'processed_file not found at {full_path}'}, status=status.HTTP_404_NOT_FOUND)
+            recorded_split = stage_publication.read_split(file_id, full_path)
 
             # Read processed dataframe
             lower = full_path.lower()
@@ -1781,6 +1734,8 @@ class PreprocessingDatqDetailView(APIView):
             target_name = 'Target' if 'Target' in df.columns else None
             # Build split indices based on requested strategy
             def _build_split_indices(frame: pd.DataFrame):
+                if recorded_split is not None:
+                    return pd.Index(recorded_split['train_idx']), pd.Index(recorded_split['test_idx'])
                 try:
                     if isinstance(split, dict) and split.get('strategy') == 'oot':
                         date_col = split.get('date_column')
@@ -1853,6 +1808,8 @@ class PreprocessingDatqDetailView(APIView):
             }
 
             return Response(resp, status=status.HTTP_200_OK)
+        except stage_publication.StageConflict as error:
+            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
         except Exception as e:
             import traceback
             print(traceback.format_exc())
@@ -1868,40 +1825,54 @@ class PreprocessingDatqSummaryRowView(APIView):
         if not column:
             return Response({'error': 'column query param required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            datq_path = os.path.join(settings.MEDIA_ROOT, 'data_quality', f'{file_id}_datq_summary.json')
-            if not os.path.exists(datq_path):
-                return Response({'row': None}, status=status.HTTP_200_OK)
-            with open(datq_path, 'r', encoding='utf-8') as f:
-                records = json.load(f)
+            selected = request.query_params.get('processed_file')
+            records = stage_publication.read_datq(file_id, managed_path(selected, table=True) if selected else None)
             row = next(
                 (r for r in records
                  if str(r.get('Variable', r.get('variable', r.get('index', '')))) == str(column)),
                 None,
             )
             return Response({'row': row}, status=status.HTTP_200_OK)
+        except stage_publication.StageConflict as error:
+            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
 class PreprocessingStatusView(APIView):
-    """Check if preprocessing has completed for a given file_id and return the saved result."""
+    """Return a verified preprocessing result by processed file or latest pointer."""
 
     def get(self, request, file_id: int, *args, **kwargs):
         try:
-            pp_result_path = os.path.join(settings.MEDIA_ROOT, 'preprocessing_results', f'{file_id}_result.json')
-            if os.path.exists(pp_result_path):
-                with open(pp_result_path, 'r', encoding='utf-8') as f:
-                    result = json.load(f)
+            selected = request.query_params.get('processed_file')
+            identifier = request.query_params.get('request_id')
+            if identifier is not None:
+                if selected or len(request.query_params.getlist('request_id')) != 1:
+                    return Response({'error': 'Select one preprocessing version.'}, status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    path = stage_publication.stage_path(file_id, identifier)
+                except ValueError:
+                    return Response({'error': 'Provide a valid preprocessing request UUID.'}, status=status.HTTP_400_BAD_REQUEST)
+                if not path.parent.exists():
+                    return Response({'status': 'not_started'}, status=status.HTTP_200_OK)
+                if projects.governed():
+                    projects.path_authority(request.user.pk, path, file_id=file_id)
+                selected = stage_publication.relative(path)
+            result = stage_publication.read_result(file_id, managed_path(selected, table=True) if selected else None)
+            if result is not None:
                 return Response({
                     'status': 'completed',
                     'result': result
                 }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'status': 'not_completed',
-                    'message': 'Preprocessing results not found'
-                }, status=status.HTTP_200_OK)
+            return Response({
+                'status': 'not_completed',
+                'message': 'Preprocessing results not found'
+            }, status=status.HTTP_200_OK)
+        except stage_publication.StageConflict as error:
+            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+        except projects.ProjectDenied as error:
+            return Response({'error_code': error.code}, status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
             import traceback
             traceback.print_exc()

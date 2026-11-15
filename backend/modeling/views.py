@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from declaration.models import Declaration
 import os
+import hashlib
 from django.conf import settings
 import json
 import math
@@ -33,14 +34,14 @@ from modeling.development_validation import (
 )
 from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
 from modeling.collinearity import write_snapshot, load_snapshot, detail
-from modeling.execution_artifacts import begin_execution, publish_execution, publish_candidate, replace_projection, load_development_data, load_execution, projection_lock
+from modeling.execution_artifacts import begin_execution, digest_file, publish_execution, publish_candidate, replace_projection, load_development_data, load_execution, projection_lock
 from modeling.prediction_contract import PredictionContractError, resolve_prediction_contract
 from modeling.models import PipelineRun
 from modeling.split_contract import (
     resolve_modeling_splits, fit_numeric_imputer, transform_numeric_impute,
     normalize_boosting_algorithm,
 )
-from modeling.lineage import build_lineage, save_lineage
+from modeling.lineage import build_lineage
 from modeling.booster_adapters import get_adapter, available_boosting_algorithms
 from modeling.calibration_utils import fit_calibrator, save_calibrator, apply_calibrator
 from modeling.cv_strategy import build_cv_splitter, iter_cv_splits, pick_group_column
@@ -184,9 +185,6 @@ def execute_legacy_training(data):
     os.makedirs(modeling_dir, exist_ok=True)
     status_path = os.path.join(modeling_dir, f'{file_id}_status.json')
 
-    # mark running
-    with open(status_path, 'w', encoding='utf-8') as f:
-        json.dump({'status': 'running', 'file_id': file_id, 'processed_file': processed_file, 'algorithm': algorithm}, f)
     try:
         print(f"[ModelingStart] Starting training for file_id={file_id}, algo={algorithm}, xgb_version={getattr(xgb, '__version__', 'unknown')}")
     except Exception:
@@ -196,13 +194,33 @@ def execute_legacy_training(data):
     model_info = {}
     encoded_file_rel = None
     purifier_recipe = purifier_state = None
+    stage_evidence = {'status': 'historical_unverified'}
+    datq_records = []
     try:
         df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
         from preprocessing.replay import load_recipe_input, fit_purifier, apply_purifier
-        _, purifier_recipe = load_recipe_input(original_path, file_id)
+        from preprocessing.stage_publication import load_stage, stage_paths
+
+        stage = load_stage(original_path, file_id, include_result=False)
+        if stage:
+            receipt, _, _ = stage
+            paths = stage_paths(original_path)
+            if digest_file(snapshot_path) != receipt['files']['processed']['sha256']:
+                raise PredictionContractError('Training input changed before the preprocessing version could be captured.')
+            stage_receipt = execution_dir / 'preprocessing_stage.json'
+            stage_receipt.write_bytes(paths['receipt'].read_bytes())
+            if json.loads(stage_receipt.read_bytes()) != receipt:
+                raise PredictionContractError('Preprocessing receipt changed during capture.')
+            datq_bytes = paths['datq'].read_bytes()
+            if hashlib.sha256(datq_bytes).hexdigest() != receipt['files']['datq']['sha256']:
+                raise PredictionContractError('Data quality evidence changed during capture.')
+            datq_records = json.loads(datq_bytes)
+            stage_evidence = {'status': 'verified_stage', 'version_id': receipt['version_id'],
+                              'receipt_sha256': digest_file(stage_receipt), 'recipe_id': receipt['recipe_id']}
+        recipe_sha256 = stage[0]['files']['recipe']['sha256'] if stage else None
+        _, purifier_recipe = load_recipe_input(original_path, file_id, recipe_sha256=recipe_sha256)
         if purifier_recipe:
             import shutil
-            from modeling.execution_artifacts import digest_file
             if digest_file(snapshot_path) != purifier_recipe['processed_input']['sha256']:
                 raise PredictionContractError('Processed input changed while snapshotting the execution. Retry from a complete preprocessing version.')
             raw_snapshot = execution_dir / 'raw_input.csv'
@@ -777,16 +795,7 @@ def execute_legacy_training(data):
                             try:
                                 from declaration.models import DataDictionary
                                 # Load data quality summary from JSON saved during preprocessing
-                                dq_summary = None
-                                try:
-                                    datq_json_path = os.path.join(settings.MEDIA_ROOT, 'data_quality', f'{file_id}_datq_summary.json')
-                                    if os.path.exists(datq_json_path):
-                                        with open(datq_json_path, 'r', encoding='utf-8') as f:
-                                            datq_records = json.load(f)
-                                        # Build dict: variable_name -> {PSI, CSI, ...}
-                                        dq_summary = {rec.get('Variable', ''): rec for rec in datq_records if rec.get('Variable')}
-                                except Exception:
-                                    pass
+                                dq_summary = {rec['Variable']: rec for rec in datq_records if rec.get('Variable')}
                                 for i in order_idx:
                                     fname = feat_names[i]
                                     desc = DataDictionary.get_description(file_id, fname) or ''
@@ -990,21 +999,11 @@ def execute_legacy_training(data):
                         model_info['woe_maps'] = getattr(adapter, 'woe_maps', {})
 
                     try:
-                        try:
-                            from preprocessing.purifier_contract import load_purifier_artifact
-                            _pur_art = load_purifier_artifact(int(file_id))
-                        except Exception:
-                            _pur_art = None
                         lineage = build_lineage(
                             int(file_id),
                             algorithm=algorithm or 'xgboost',
                             processed_file=processed_file,
                             split_meta=model_info.get('split'),
-                            purifier_artifact={
-                                'path': (_pur_art or {}).get('path'),
-                                'fit_scope': (_pur_art or {}).get('fit_scope'),
-                                'n_fit': (_pur_art or {}).get('n_fit'),
-                            } if _pur_art else None,
                             encoding_plan=encoding_plan if has_encoding_plan else None,
                             encoding_use_native=use_native,
                             feature_names=list(X_train.columns),
@@ -1025,10 +1024,8 @@ def execute_legacy_training(data):
                             n_valid=len(X_valid),
                             n_test=len(X_test),
                         )
-                        model_info['lineage_path'] = save_lineage(int(file_id), lineage)
-                        model_info['lineage_id'] = lineage.get('lineage_id')
                     except Exception as lin_err:
-                        print(f"[ModelingStart] lineage save failed: {lin_err}")
+                        print(f"[ModelingStart] lineage generation failed: {lin_err}")
                 else:
                     # Continuous target → boosting regressor (same split/impute contract)
                     y_num = encoded_target
@@ -1207,6 +1204,7 @@ def execute_legacy_training(data):
         lineage['execution_id'] = execution_id
         lineage['encoding_report'] = encoding_report
         lineage['purifier'] = purifier_state
+        lineage['preprocessing'] = stage_evidence
         lineage['provenance_qualification'] = ('Partition-fitted purifier, encoding and imputation recorded; assessment remains exploratory.'
             if purifier_state else 'Input snapshot and fold membership recorded; legacy upstream purifier provenance unverified.')
         lineage_path = execution_dir / 'lineage.json'
@@ -1215,9 +1213,9 @@ def execute_legacy_training(data):
         model_info['lineage_path'] = os.path.relpath(lineage_path, settings.MEDIA_ROOT)
         model_info['lineage_id'] = lineage['lineage_id']
         model_info['fit_receipt'] = adapter.fit_receipt
-        replace_projection(lineage_path, os.path.join(settings.MEDIA_ROOT, 'lineage', f'{file_id}_lineage.json'))
     if 'prediction_contract' in locals():
         model_info['prediction_contract'] = prediction_contract
+        model_info['preprocessing'] = stage_evidence
         model_info['input_stage'] = 'raw_unencoded' if purifier_state else 'processed_unencoded'
         model_info['purifier_provenance'] = ('partition_fitted' if purifier_state else 'legacy_unverified')
         model_info['purifier_path'] = os.path.relpath(execution_dir / 'purifier.json', settings.MEDIA_ROOT) if purifier_state else None
@@ -1248,7 +1246,6 @@ def execute_legacy_training(data):
                     {'vif': None, 'vif_status': 'unavailable', 'reason': 'missing_training_predictor'})
                 feature.update(vif=recorded['vif'], vif_status=recorded['vif_status'])
         from modeling.holdout_evidence import holdout_spec
-        from modeling.execution_artifacts import digest_file
         source_path = execution_dir / 'raw_input.csv' if purifier_recipe else snapshot_path
         model_info['holdout_spec'] = holdout_spec(digest_file(source_path),
             prediction_contract['target_column'], split_meta['membership']['test'],
@@ -1281,7 +1278,9 @@ def execute_legacy_training(data):
         publish_execution(execution_id, safe_payload)
         if not failed and 'train_data_path' in locals():
             replace_projection(train_data_path, os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl'))
-        replace_projection(execution_dir / 'modeling_status.json', status_path)
+            replace_projection(lineage_path, os.path.join(settings.MEDIA_ROOT, 'lineage', f'{file_id}_lineage.json'))
+        if not failed or not os.path.exists(status_path):
+            replace_projection(execution_dir / 'modeling_status.json', status_path)
 
     return Response(safe_payload, status=status.HTTP_400_BAD_REQUEST if failed else status.HTTP_200_OK)
 

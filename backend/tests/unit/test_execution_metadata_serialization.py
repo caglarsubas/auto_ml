@@ -134,6 +134,19 @@ def test_assessment_collision_preserves_review_and_parent(execution):
     assert snapshot(root) == before
 
 
+def test_failed_assessment_staging_leaves_no_partial_version(execution):
+    identifier, root, parent = execution
+    artifacts.publish_execution(identifier, parent)
+    assessment = uuid.uuid4()
+
+    with pytest.raises(ValueError):
+        artifacts.publish_assessment(identifier, assessment, dict(file_id=42), {'metric': float('nan')})
+
+    assessments = root / 'assessments'
+    assert not list(assessments.iterdir())
+    assert artifacts.publish_assessment(identifier, assessment, dict(file_id=42), {'metric': 0.4}).is_dir()
+
+
 def test_native_runtime_binds_metadata_writer_source():
     name = 'modeling/execution_artifacts.py'
     observed = service.runtime(training_search.KIND)

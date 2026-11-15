@@ -162,6 +162,7 @@ def test_raw_recipe_training_assessment_bundle_and_candidate_replay(_use_tmp_med
     from modeling.alt_pipelines import load_model_adapter
     from modeling.calibration_utils import apply_calibrator, load_calibrator
     from modeling.execution_artifacts import publish_candidate
+    from preprocessing.stage_publication import stage_paths
     rng = np.random.default_rng(42)
     x = rng.normal(size=300)
     outcomes = np.where(x > 0, 'bad', 'good') if task == 'classification' else np.where(x > 0, 10., 20.)
@@ -188,6 +189,13 @@ def test_raw_recipe_training_assessment_bundle_and_candidate_replay(_use_tmp_med
     assert trained.status_code == 200, trained.data
     model = trained.data['model']
     assert model['input_stage'] == 'raw_unencoded'
+    assert model['preprocessing']['status'] == 'verified_stage'
+    assert model['preprocessing']['version_id'] == preprocessing.data['preprocessing_version_id']
+    receipt = stage_paths(Path(settings.MEDIA_ROOT) / preprocessing.data['processed_file'])['receipt']
+    _, execution = load_execution(trained.data['execution_id'], file.pk)
+    assert execution['files']['preprocessing_stage.json']['sha256'] == model['preprocessing']['receipt_sha256']
+    assert (Path(settings.MEDIA_ROOT) / 'execution_runs' / trained.data['execution_id'] /
+            'preprocessing_stage.json').read_bytes() == receipt.read_bytes()
     assert model['cv']['task'] == task and model['cv']['status'] == 'completed'
     assert model['cv']['metric_coverage']['rmse' if task == 'regression' else 'roc_auc']['n_valid'] == 5
     with (Path(settings.MEDIA_ROOT)/model['train_data_path']).open('rb') as stream:
@@ -243,6 +251,7 @@ def test_raw_recipe_training_assessment_bundle_and_candidate_replay(_use_tmp_med
                             bind_declared_metric({'objective': 'reg:squarederror' if task == 'regression' else 'binary:logistic'},
                                                  development['prediction_contract']), num_boost_round=10)
     candidate = publish_candidate(trained.data['execution_id'], file.pk, candidate_adapter, ['x'], {}, 'replay-test')
+    assert candidate['model']['preprocessing'] == model['preprocessing']
     assert candidate['model']['fit_receipt']['num_boost_round'] == 10
     assert candidate['model']['cv']['configuration']['features'] == ['x']
     assert candidate['model']['cv']['configuration']['num_boost_round'] == 10

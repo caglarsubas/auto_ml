@@ -16,6 +16,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from access_control.storage import managed_path
 from modeling.crisp_dm import (
     build_crisp_export_zip,
     compute_monitoring_report,
@@ -25,6 +26,7 @@ from modeling.crisp_dm import (
     normalize_business_understanding,
 )
 from modeling.models import PipelineRun
+from preprocessing.stage_publication import StageConflict, read_datq
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -244,11 +246,14 @@ class CrispDatqEnrichView(APIView):
     """Return DATQ rows with Shift_Recommendation keep/investigate/drop."""
 
     def get(self, request, file_id: int, *args, **kwargs):
-        path = os.path.join(settings.MEDIA_ROOT, 'data_quality', f'{file_id}_datq_summary.json')
-        if not os.path.exists(path):
+        processed_file = request.query_params.get('processed_file')
+        selected = managed_path(processed_file, table=True) if processed_file else None
+        try:
+            rows = read_datq(file_id, selected)
+        except StageConflict as error:
+            return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+        if not rows:
             return Response({'error': 'DATQ summary not found'}, status=status.HTTP_404_NOT_FOUND)
-        with open(path, 'r', encoding='utf-8') as f:
-            rows = json.load(f)
         if isinstance(rows, dict):
             rows = rows.get('datq_summary') or rows.get('records') or []
         enriched = enrich_datq_with_recommendations(rows if isinstance(rows, list) else [])

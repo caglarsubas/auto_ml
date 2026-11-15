@@ -456,6 +456,8 @@ def test_cancelled_sfs_resumes_only_an_exact_recorded_checkpoint(world, monkeypa
 
 def test_v1_http_contract_uses_durable_worker_and_preserves_versioned_search_evidence(world, monkeypatch):
     from execution_jobs import legacy_compatibility as compatibility
+    from execution_jobs import legacy_selection as selection
+    from modeling.execution_artifacts import load_execution
 
     w = world
     observed = []
@@ -491,13 +493,49 @@ def test_v1_http_contract_uses_durable_worker_and_preserves_versioned_search_evi
     assert sfs.status_code == 200 and sfs.json()["status"] == "started", sfs.content
     assert sfs.json()["parent_execution_id"] == trained["execution_id"]
     assert sfs.json()["sfs_completed"] is False
-    service.execute(sfs.json()["native_job_id"])
+    identifier = sfs.json()["native_job_id"]
+    service.execute(identifier)
+    search = NativeJob.objects.get(pk=identifier)
+    new_execution = search.result["payload"]["forward_execution_id"]
+    destination = w.root / "execution_runs" / new_execution
+    original_write = selection.write_member
+
+    def interrupted_stage(path, raw):
+        original_write(path, raw)
+        if path.name == "manifest.json":
+            raise OSError("interrupted execution staging")
+
+    with monkeypatch.context() as local:
+        local.setattr(selection, "write_member", interrupted_stage)
+        with pytest.raises(OSError, match="interrupted execution staging"):
+            compatibility.materialize(w.users["developer"], identifier)
+    assert not destination.exists()
+    assert not search.events.filter(event_type="legacy_compatibility_published").exists()
+
+    original_record = service.record
+
+    def lost_acknowledgement(row, kind, **kwargs):
+        if kind == "legacy_compatibility_published":
+            raise OSError("lost publication acknowledgement")
+        return original_record(row, kind, **kwargs)
+
+    with monkeypatch.context() as local:
+        local.setattr(service, "record", lost_acknowledgement)
+        with pytest.raises(OSError, match="lost publication acknowledgement"):
+            compatibility.materialize(w.users["developer"], identifier)
+    assert not search.events.filter(event_type="legacy_compatibility_published").exists()
+    assert load_execution(new_execution, w.file_id)[0]["execution_id"] == new_execution
+    archive, = (w.root / "modeling" / f"{w.file_id}_runs").glob("sfs_run_*.json")
+    projection = w.root / "sfs_results" / f"{w.file_id}_sfs_results.json"
+    published = (destination / "manifest.json", archive, projection)
+    before = [(path.stat().st_ino, path.read_bytes()) for path in published]
+
     status = w.clients["developer"].get(f"/api/modeling/sfs/status/{w.file_id}/")
     assert status.status_code == 200 and status.json()["status"] == "completed", status.content
     assert status.json()["sfs_completed"] is True
-    search = NativeJob.objects.get(pk=sfs.json()["native_job_id"])
-    new_execution = search.result["payload"]["forward_execution_id"]
-    assert (w.root / "execution_runs" / new_execution / "manifest.json").is_file()
+    compatibility.materialize(w.users["developer"], identifier)
+    assert search.events.filter(event_type="legacy_compatibility_published").count() == 1
+    assert [(path.stat().st_ino, path.read_bytes()) for path in published] == before
     history = w.clients["developer"].get(f"/api/modeling/sfs/{w.file_id}/history/")
     assert history.status_code == 200, history.content
     assert list((w.root / "modeling" / f"{w.file_id}_runs").glob("sfs_run_*.json"))
@@ -515,6 +553,11 @@ def test_v1_http_contract_uses_durable_worker_and_preserves_versioned_search_evi
     # Search completion does not replace the selected initial training model.
     selected = w.clients["developer"].get(f"/api/modeling/status/{w.file_id}/").json()
     assert selected["execution_id"] == trained["execution_id"]
+    archive.chmod(0o600)
+    archive.write_bytes(b"unrecognized prior archive")
+    with pytest.raises(service.JobConflict, match="selection_target_occupied"):
+        compatibility.materialize(w.users["developer"], identifier)
+    assert archive.read_bytes() == b"unrecognized prior archive"
 
 
 @pytest.mark.parametrize("invalid", [None, True, 123, [], {}, "not-a-job"])

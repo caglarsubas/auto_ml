@@ -44,19 +44,30 @@ def assess_file_deploy_readiness(file_id: int, execution_id=None, assessment_id=
     return resolve_handoff(file_id, execution_id, assessment_id)['readiness']
 
 
-def build_score_bundle(file_id: int, execution_id=None, assessment_id=None) -> Dict[str, Any]:
+def build_score_bundle(file_id: int, execution_id=None, assessment_id=None, *, request_id=None) -> Dict[str, Any]:
     """Stage and publish an exact native package; failures cannot publish a version."""
+    if request_id is not None and (not execution_id or not assessment_id):
+        raise ValueError('A package request ID requires an exact execution and assessment.')
+    bundle_id = str(uuid.UUID(str(request_id))) if request_id is not None else str(uuid.uuid4())
     context = resolve_handoff(file_id, execution_id, assessment_id)
     readiness = context['readiness']
     if not readiness.get('ready'):
         raise DeployNotReadyError(readiness)
     parent = Path(settings.MEDIA_ROOT) / 'deployment_bundles' / str(file_id)
     parent.mkdir(parents=True, exist_ok=True)
+    destination = Path(bundle_dir(file_id, bundle_id))
+    if request_id is not None:
+        with projection_lock(file_id):
+            if destination.exists():
+                return _publish_score_bundle(file_id, context, destination, None, retryable=True)
+            predecessor = _current_receipt_digest(parent / 'current.json')
+    else:
+        predecessor = None
     with tempfile.TemporaryDirectory(prefix='.staging-', dir=parent) as staged:
-        return _build_score_bundle(file_id, context, staged)
+        return _build_score_bundle(file_id, context, staged, destination, request_id is not None, predecessor)
 
 
-def _build_score_bundle(file_id, context, out):
+def _build_score_bundle(file_id, context, out, destination, retryable, predecessor):
     modeling = context['modeling']
     model = modeling.get('model') or {}
     exact_assessment = context['assessment'] if context['execution_id'] else None
@@ -91,7 +102,7 @@ def _build_score_bundle(file_id, context, out):
                 pass
 
     lineage = context['lineage']
-    bundle_id = str(uuid.uuid4())
+    bundle_id = destination.name
     model_basename = os.path.basename(model_abs)
     bundled_model = os.path.join(out, model_basename)
     shutil.copy2(model_abs, bundled_model)
@@ -274,6 +285,8 @@ def _build_score_bundle(file_id, context, out):
     manifest['artifact_integrity'] = {path.name: {'sha256': digest_file(path), 'bytes': path.stat().st_size}
         for path in Path(out).iterdir() if path.is_file() and path.name != 'manifest.json'}
     manifest['immutable_freeze_hash'] = hashlib.sha256(json.dumps(manifest['artifact_integrity'], sort_keys=True).encode()).hexdigest()
+    if retryable:
+        manifest['publication_request'] = {'id': bundle_id, 'predecessor_sha256': predecessor}
     with open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8') as stream:
         stream.write(json.dumps(manifest, separators=(',', ':'), allow_nan=False))
     publication = {key: manifest[key] for key in ('file_id', 'bundle_id', 'execution_id', 'assessment_id')}
@@ -300,16 +313,40 @@ def _build_score_bundle(file_id, context, out):
             copied = 'assessment_manifest.json' if name == 'manifest.json' else name
             if digest_file(assessment_root / name) != digest_file(Path(out) / copied):
                 raise ValueError('Assessment changed during package staging.')
-    destination = Path(bundle_dir(file_id, bundle_id))
     destination.parent.mkdir(parents=True, exist_ok=True)
     with projection_lock(file_id):
-        adoption = 'adopted'
-        if context['execution_id'] and current_selection(file_id) != (context['execution_id'], context['execution_id'], context['assessment_id']):
-            adoption = 'version_only_current_changed'
-        os.rename(out, destination)
-        if adoption == 'adopted':
-            replace_projection(destination / 'publication.json', destination.parent.parent / 'current.json')
-    return bundle_summary(file_id, bundle_id, adoption)
+        return _publish_score_bundle(file_id, context, destination, out, retryable=retryable)
+
+
+def _current_receipt_digest(path):
+    return digest_file(path) if path.is_file() else None
+
+
+def _publish_score_bundle(file_id, context, destination, staged, *, retryable):
+    """Publish under the dataset projection lock and recover a lost acknowledgment."""
+    bundle_id = destination.name
+    if not destination.exists():
+        os.rename(staged, destination)
+    elif not retryable:
+        raise ValueError('The package version is already occupied.')
+    result = bundle_summary(file_id, bundle_id)
+    execution, assessment = context['execution_id'], context['assessment_id']
+    publication_request = result['manifest'].get('publication_request') or {}
+    if retryable and ((result['execution_id'], result['assessment_id']) != (execution, assessment)
+                      or publication_request.get('id') != bundle_id):
+        raise ValueError('The package request ID already belongs to a different publication.')
+    pointer = destination.parent.parent / 'current.json'
+    receipt = destination / 'publication.json'
+    current_digest = _current_receipt_digest(pointer)
+    receipt_digest = digest_file(receipt)
+    adoption = 'adopted'
+    if execution and current_selection(file_id) != (execution, execution, assessment):
+        adoption = 'version_only_current_changed'
+    elif retryable and current_digest not in (publication_request['predecessor_sha256'], receipt_digest):
+        adoption = 'version_only_current_changed'
+    elif current_digest != receipt_digest:
+        replace_projection(receipt, pointer)
+    return {**result, 'adoption_status': adoption}
 
 
 def bundle_summary(file_id, bundle_id=None, adoption_status=None):

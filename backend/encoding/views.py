@@ -5,22 +5,74 @@ POST /api/encoding/analyze/  – identify categorical features & return encoding
 POST /api/encoding/apply/    – apply encoding, save encoded file, return report
 """
 
-from access_control.storage import managed_path
+from access_control import projects
+from access_control.storage import invalid_reference, managed_path, positive_file_id
 
+import errno
 import json
 import logging
 import os
+import tempfile
 import uuid
+from pathlib import Path
 
 import pandas as pd
 from django.conf import settings
+from django.db import transaction
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError
 
+from modeling.execution_artifacts import projection_lock
+from modeling.sfs_evidence import _sync_directory
+
 from .encoding_utils import analyze_categorical_features, apply_encoding
 
 logger = logging.getLogger(__name__)
+
+
+def _publish_encoding(request, file_id, frame, categorical_columns):
+    version = uuid.uuid4().hex
+    root = Path(settings.MEDIA_ROOT).resolve()
+    versions = root / 'encoded_files'
+    if versions.is_symlink():
+        invalid_reference('The encoding output directory must be inside managed artifact storage.')
+    destination = versions / version
+    path = destination / f'encoded_{file_id}_{version}.csv'
+    meta_path = path.with_suffix('.meta.json')
+    managed_path(str(path), table=True)
+    versions.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.staging-', dir=versions) as staging:
+        staged = Path(staging)
+        with (staged / path.name).open('x', encoding='utf-8', newline='') as stream:
+            frame.to_csv(stream, index=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+        with (staged / meta_path.name).open('x', encoding='utf-8') as stream:
+            json.dump({'categorical_columns': categorical_columns}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        _sync_directory(staged)
+
+        with projection_lock(file_id), transaction.atomic():
+            if os.path.lexists(destination):
+                raise FileExistsError('Encoding version already exists.')
+            if projects.governed():
+                from deployment.reviews import lock_authority
+
+                lock_authority(request.user, file_id, 'developer')
+                for scope in getattr(request._request, '_project_scopes', []):
+                    projects.recheck(scope)
+                projects.register_artifact(path, file_id=file_id)
+                projects.register_artifact(meta_path, file_id=file_id)
+            try:
+                staged.rename(destination)
+            except OSError as exc:
+                if exc.errno in (errno.EEXIST, errno.ENOTEMPTY):
+                    raise FileExistsError('Encoding version already exists.') from exc
+                raise
+            _sync_directory(versions)
+    return path.relative_to(root).as_posix()
 
 
 class EncodingAnalyzeView(APIView):
@@ -89,6 +141,7 @@ class EncodingApplyView(APIView):
             csv_path = managed_path(processed_file, table=True)
             if not os.path.exists(csv_path):
                 return Response({'error': f'Processed file not found: {processed_file}'}, status=404)
+            file_id = positive_file_id(file_id)
 
             df = pd.read_csv(csv_path)
 
@@ -103,35 +156,17 @@ class EncodingApplyView(APIView):
             # Apply encoding
             encoded_df, report = apply_encoding(df, plan, target_col='Target', use_native=use_native)
 
-            # Save encoded CSV
-            ts = uuid.uuid4().hex
-            encoded_dir = os.path.join(settings.MEDIA_ROOT, 'encoded_files')
-            os.makedirs(encoded_dir, exist_ok=True)
-            encoded_filename = f'encoded_{file_id}_{ts}.csv'
-            encoded_path = managed_path(os.path.join('encoded_files', encoded_filename), table=True)
-            encoded_df.to_csv(encoded_path, index=False, mode='x')
-            from access_control.projects import register_artifact
-            register_artifact(encoded_path, file_id=int(file_id))
-            encoded_rel = os.path.relpath(encoded_path, settings.MEDIA_ROOT)
-
             # Save sidecar metadata so the modeling step knows which columns
             # are categorical (CSV serialization loses pd.Categorical dtype).
-            cat_meta = []
-            for r in report:
-                cat_meta.append({
+            cat_meta = [
+                {
                     'feature': r.get('feature', ''),
                     'strategy': r.get('strategy_applied', ''),
                     'categories': (r.get('mapping') or {}).get('categories', []),
-                })
-            meta_path = encoded_path.replace('.csv', '.meta.json')
-            try:
-                with open(meta_path, 'x', encoding='utf-8') as mf:
-                    json.dump({'categorical_columns': cat_meta}, mf)
-                register_artifact(meta_path, file_id=int(file_id))
-                logger.info('Saved encoding metadata to %s (%d categorical cols)', meta_path, len(cat_meta))
-            except Exception:
-                os.remove(encoded_path)  # Only this request's exclusively created CSV.
-                raise
+                }
+                for r in report
+            ]
+            encoded_rel = _publish_encoding(request, file_id, encoded_df, cat_meta)
 
             # Build summary
             strategy_counts = {}
@@ -155,6 +190,8 @@ class EncodingApplyView(APIView):
                 'error_code': 'file_publication_conflict'}, status=409)
         except ValidationError:
             raise
+        except projects.ProjectDenied as exc:
+            return Response({'error_code': exc.code}, status=403)
         except Exception as exc:
             logger.exception('EncodingApplyView error')
             return Response({'error': str(exc)}, status=500)

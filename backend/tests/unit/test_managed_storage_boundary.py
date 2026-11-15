@@ -112,8 +112,11 @@ def test_managed_tables_and_encoding_remain_usable(actor_client, _use_tmp_media,
     second = actor_client.post('/api/encoding/apply/', payload, format='json')
     assert first.status_code == second.status_code == 200
     assert first.json()['encoded_file'] != second.json()['encoded_file']
-    assert (media_root / first.json()['encoded_file']).is_file()
-    assert (media_root / second.json()['encoded_file']).is_file()
+    first_path, second_path = (media_root / result.json()['encoded_file'] for result in (first, second))
+    assert first_path.parent != second_path.parent
+    for path in (first_path, second_path):
+        assert set(path.parent.iterdir()) == {path, path.with_suffix('.meta.json')}
+        assert path.read_bytes() == table.read_bytes()
 
 
 def upload(client, value):
@@ -184,15 +187,54 @@ def test_encoding_collision_preserves_csv_and_metadata(actor_client, _use_tmp_me
     assert (path.read_bytes(), metadata.read_bytes()) == before
 
 
-def test_encoding_metadata_failure_does_not_publish_csv(actor_client, _use_tmp_media, media_root, monkeypatch):
+def test_encoding_metadata_failure_does_not_publish_csv(actor_client, _use_tmp_media, media_root, monkeypatch,
+                                                         django_user_model):
+    from access_control import projects
+    from access_control.models import Project, ProjectArtifact, ProjectMembership, ProjectPolicy
+
     payload = encoding_payload(media_root)
+    versions = media_root / 'encoded_files'
+    ProjectPolicy.objects.create()
+    project = Project.objects.create(name='encoding publication fixture')
+    actor = django_user_model.objects.get(username='storage-actor')
+    ProjectMembership.objects.create(project=project, actor=actor, role='developer')
+    dataset = Declaration.objects.create(pk=payload['file_id'], name='encoding', original_name='encoding.csv',
+                                         file=payload['processed_file'])
+    projects.bind_dataset(dataset, project.pk)
+
     def broken_metadata(*args, **kwargs):
+        assert not [path for path in versions.iterdir() if not path.name.startswith('.')]
+        assert len(list(versions.glob('.staging-*/*.csv'))) == 1
         raise OSError('Synthetic metadata writer failure')
-    monkeypatch.setattr('encoding.views.json.dump', broken_metadata)
-    response = actor_client.post('/api/encoding/apply/', payload, format='json')
+
+    with monkeypatch.context() as local:
+        local.setattr('encoding.views.json.dump', broken_metadata)
+        response = actor_client.post('/api/encoding/apply/', payload, format='json')
     assert response.status_code == 500
     assert 'encoded_file' not in response.json()
-    assert not list((media_root / 'encoded_files').glob('*.csv'))
+    assert not list(versions.iterdir())
+    assert not ProjectArtifact.objects.filter(dataset=dataset).exists()
+
+    register = projects.register_artifact
+
+    def broken_registration(path, **kwargs):
+        if path.suffix == '.json':
+            raise OSError('Synthetic sidecar registration failure')
+        return register(path, **kwargs)
+
+    with monkeypatch.context() as local:
+        local.setattr(projects, 'register_artifact', broken_registration)
+        response = actor_client.post('/api/encoding/apply/', payload, format='json')
+    assert response.status_code == 500
+    assert not list(versions.iterdir())
+    assert not ProjectArtifact.objects.filter(dataset=dataset).exists()
+
+    response = actor_client.post('/api/encoding/apply/', payload, format='json')
+    assert response.status_code == 200
+    path = Path(response.json()['encoded_file'])
+    assert set(ProjectArtifact.objects.filter(dataset=dataset).values_list('relative_path', flat=True)) == {
+        path.as_posix(), path.with_suffix('.meta.json').as_posix(),
+    }
 
 
 @pytest.mark.parametrize('operation', ['upload', 'encoding'])

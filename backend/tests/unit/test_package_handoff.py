@@ -94,6 +94,39 @@ def test_failed_staging_leaves_no_version_or_current_change(packaged, settings, 
     assert not list(parent.glob('.staging-*'))
 
 
+def test_package_request_resumes_after_publication_without_readopting_over_newer_bundle(packaged, settings, monkeypatch):
+    file_id, execution, assessment, initial = packaged
+    request_id = str(uuid.uuid4())
+    parent = Path(settings.MEDIA_ROOT) / 'deployment_bundles' / str(file_id)
+    pointer = parent / 'current.json'
+
+    def interrupt(source, destination):
+        assert destination == pointer
+        assert source.parent.name == request_id and source.is_file()
+        raise OSError('interrupted adoption')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(deploy_utils, 'replace_projection', interrupt)
+        with pytest.raises(OSError, match='interrupted adoption'):
+            build_score_bundle(file_id, execution, assessment, request_id=request_id)
+    assert deploy_utils.bundle_summary(file_id)['bundle_id'] == initial['bundle_id']
+    published = deploy_utils.bundle_summary(file_id, request_id)
+    resumed = build_score_bundle(file_id, execution, assessment, request_id=request_id)
+    assert resumed['manifest_sha256'] == published['manifest_sha256']
+    assert resumed['adoption_status'] == 'adopted'
+    assert deploy_utils.bundle_summary(file_id)['bundle_id'] == request_id
+    before = set((parent / 'versions').iterdir())
+
+    with monkeypatch.context() as patch:
+        patch.setattr(deploy_utils, 'replace_projection', lambda *_: pytest.fail('replayed an adopted pointer'))
+        replayed = build_score_bundle(file_id, execution, assessment, request_id=request_id)
+    assert replayed == resumed and set((parent / 'versions').iterdir()) == before
+    latest = build_score_bundle(file_id, execution, assessment)
+    stale = build_score_bundle(file_id, execution, assessment, request_id=request_id)
+    assert stale['bundle_id'] == request_id and stale['adoption_status'] == 'version_only_current_changed'
+    assert deploy_utils.bundle_summary(file_id)['bundle_id'] == latest['bundle_id']
+
+
 @pytest.mark.parametrize('change', ['model_file', 'calibrator_file', 'feature_names', 'assessment_id', 'removed_model', 'removed_calibrator', 'missing_publication', 'size', 'model_bytes', 'path_escape'])
 def test_integrity_blocks_before_any_native_deserialization(packaged, monkeypatch, change):
     file_id, _, _, bundle = packaged

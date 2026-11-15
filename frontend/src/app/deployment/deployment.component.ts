@@ -25,6 +25,7 @@ export class DeploymentComponent implements OnInit, OnDestroy {
   private generation = 0;
   private readinessRequest = 0;
   private bundleRequest = 0;
+  private pendingBundle: { selection: string; requestId: string } | null = null;
   private subs: Subscription[] = [];
 
   constructor(
@@ -116,6 +117,7 @@ export class DeploymentComponent implements OnInit, OnDestroy {
   }
 
   createBundle(): void {
+    if (this.isBundling) return;
     if (this.currentFileId == null) {
       this.error = 'Select a declaration / modeled file before deployment.';
       return;
@@ -130,17 +132,25 @@ export class DeploymentComponent implements OnInit, OnDestroy {
     }
     const generation = this.generation;
     const request = this.readinessRequest;
+    const { execution_id: executionId, assessment_id: assessmentId } = this.readiness;
+    const selection = JSON.stringify([this.currentFileId, executionId, assessmentId]);
+    if (executionId && assessmentId && this.pendingBundle?.selection !== selection) {
+      this.pendingBundle = { selection, requestId: crypto.randomUUID() };
+    }
+    const requestId = this.pendingBundle?.selection === selection ? this.pendingBundle.requestId : undefined;
     this.bundleRequest++;
     this.subs.push(
       this.dataService
         .createDeploymentBundle(
           this.currentFileId,
-          this.readiness.execution_id,
-          this.readiness.assessment_id,
+          executionId,
+          assessmentId,
+          requestId,
         )
         .subscribe({
           next: (resp) => {
             if (generation !== this.generation) return;
+            if (this.pendingBundle?.requestId === requestId) this.pendingBundle = null;
             this.bundle = resp;
             this.scoreResult = null;
             this.isScoring = false;
