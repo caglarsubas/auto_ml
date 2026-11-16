@@ -1,0 +1,291 @@
+{
+  "schema": "scoring_parity_acceptance_v1",
+  "packet": "P181",
+  "task": "D04-T02",
+  "pr": 299,
+  "qualified_head": "ab09432408973acaefd5758f83c914ff4dda1f43",
+  "merge": "65c7a7c6db080eb9ad4cb8db14f63a29b8c59051",
+  "ci_run": 43803960785,
+  "main_run": 43809693257,
+  "required_checks": [
+    "Backend lint (ruff)",
+    "Backend tests (pytest)",
+    "Frontend E2E (Playwright)",
+    "Frontend lint (ESLint + Prettier)",
+    "Frontend unit tests (Karma)",
+    "PostgreSQL runtime and metadata",
+    "Private expert worker (gVisor)"
+  ],
+  "main_qualified": true,
+  "merged_tree_matches_qualified_pr": true,
+  "source_hashes_match": true,
+  "original_case_skip_workload_limits_preserved": true,
+  "previous_backlog": {
+    "done": 19,
+    "open": 40,
+    "blocked": 7,
+    "total": 66
+  },
+  "qualified_backlog": {
+    "done": 20,
+    "open": 39,
+    "blocked": 7,
+    "total": 66
+  },
+  "done_percentage_point_change": 1.5,
+  "pr_qualification": {
+    "run": 43803960785,
+    "run_attempt": 1,
+    "head": "ab09432408973acaefd5758f83c914ff4dda1f43",
+    "event": "pull_request",
+    "required_checks": [
+      "Backend lint (ruff)",
+      "Backend tests (pytest)",
+      "Frontend E2E (Playwright)",
+      "Frontend lint (ESLint + Prettier)",
+      "Frontend unit tests (Karma)",
+      "PostgreSQL runtime and metadata",
+      "Private expert worker (gVisor)"
+    ],
+    "jobs": {
+      "Private expert worker (gVisor)": 133090331134,
+      "Backend tests (pytest)": 133090331345,
+      "Frontend E2E (Playwright)": 133090331355,
+      "Frontend unit tests (Karma)": 133090331406,
+      "Backend lint (ruff)": 133090331415,
+      "Frontend lint (ESLint + Prettier)": 133090331436,
+      "PostgreSQL runtime and metadata": 133090332037
+    },
+    "seven_jobs_passed": true,
+    "original_case_skip_workload_limits_preserved": true,
+    "source_hashes_match": true,
+    "application_source_sha256": "d88442cb63ecd32e121efd74f158a4ee9033467036fb15e4a2e383aa5b733d55",
+    "native": {
+      "tests": 7834,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 871.151,
+      "workers": 2,
+      "worker_restarts": 0,
+      "cap_seconds": 900,
+      "covered_lines": 17714,
+      "total_lines": 22471,
+      "covered_branches": 5326,
+      "total_branches": 7674,
+      "added_cases": [
+        "tests.unit.test_alternate_transform_evidence::test_woe_numeric_level_keys_survive_fractional_imputation_in_same_batch",
+        "tests.unit.test_durable_scoring::test_changed_inputs_or_authority_and_invalid_csv_never_publish[nul_csv]",
+        "tests.unit.test_holdout_evidence::test_exact_assessment_cannot_load_scorers_outside_the_manifest",
+        "tests.unit.test_native_training_scoring::test_invalid_schema_categories_labels_nonfinite_or_bounds_rejected[x,z\\n1\\x00invalid,2\\n]",
+        "tests.unit.test_offline_scoring::test_every_replayed_batch_preserves_its_own_row_count",
+        "tests.unit.test_offline_scoring::test_malformed_csv_blocks_before_native_state[embedded-nul]",
+        "tests.unit.test_offline_scoring::test_malformed_csv_blocks_before_native_state[implicit-index]",
+        "tests.unit.test_offline_scoring::test_reordering_checks_block_layout_dependent_scores[reversed_columns]",
+        "tests.unit.test_offline_scoring::test_reordering_checks_block_layout_dependent_scores[reversed_rows]",
+        "tests.unit.test_package_handoff::test_export_uses_calibration_from_training_when_model_metadata_omits_it",
+        "tests.unit.test_package_handoff::test_frozen_numeric_category_inventory_survives_integer_and_missing_chunks",
+        "tests.unit.test_package_handoff::test_frozen_numeric_imputation_is_independent_of_missing_chunk_dtype",
+        "tests.unit.test_package_handoff::test_scoring_state_cannot_be_omitted_with_matching_receipt[calibration-Required fitted calibration]",
+        "tests.unit.test_package_handoff::test_scoring_state_cannot_be_omitted_with_matching_receipt[impute_means-Required fitted encoding or imputation]",
+        "tests.unit.test_package_handoff::test_scoring_state_cannot_be_omitted_with_matching_receipt[input_text_columns-Required scoring input types]",
+        "tests.unit.test_scoring_csv::test_csv_preserves_frozen_text_and_rejects_ambiguous_records",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[catboost-binary]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[catboost-multiclass]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[catboost-regression]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[isolation_forest-anomaly]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[lightgbm-binary]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[lightgbm-multiclass]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[lightgbm-regression]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[logistic_regression-binary]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[scorecard-binary]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[xgboost-binary]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[xgboost-multiclass]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[xgboost-regression]"
+      ]
+    },
+    "artifacts": {
+      "postgresql-runtime-reports": {
+        "id": 14200260984,
+        "sha256": "8dfd34c7d177f447d7d7fb87f54b9d1ab76d5f4c7308b7e5536a26a5ed9a953e"
+      },
+      "backend-test-reports": {
+        "id": 14198132427,
+        "sha256": "bba4e8273c873c5d8de89d5f9dbc35362e8f912e73c0f73e1afadf6e6c5e2c1c"
+      },
+      "private-expert-worker-report": {
+        "id": 14197089483,
+        "sha256": "f45adccfc5cfc8e4662c9b42c973600c18b8c11ad22b994e1db06122f59d5dae"
+      }
+    }
+  },
+  "main_qualification": {
+    "run": 43809693257,
+    "run_attempt": 2,
+    "head": "65c7a7c6db080eb9ad4cb8db14f63a29b8c59051",
+    "event": "push",
+    "required_checks": [
+      "Backend lint (ruff)",
+      "Backend tests (pytest)",
+      "Frontend E2E (Playwright)",
+      "Frontend lint (ESLint + Prettier)",
+      "Frontend unit tests (Karma)",
+      "PostgreSQL runtime and metadata",
+      "Private expert worker (gVisor)"
+    ],
+    "jobs": {
+      "PostgreSQL runtime and metadata": 133127526869,
+      "Frontend unit tests (Karma)": 133127528315,
+      "Backend lint (ruff)": 133127528801,
+      "Frontend E2E (Playwright)": 133127559920,
+      "Backend tests (pytest)": 133127563348,
+      "Private expert worker (gVisor)": 133127575453,
+      "Frontend lint (ESLint + Prettier)": 133127578341
+    },
+    "seven_jobs_passed": true,
+    "original_case_skip_workload_limits_preserved": true,
+    "source_hashes_match": true,
+    "application_source_sha256": "d88442cb63ecd32e121efd74f158a4ee9033467036fb15e4a2e383aa5b733d55",
+    "native": {
+      "tests": 7834,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 873.409,
+      "workers": 2,
+      "worker_restarts": 0,
+      "cap_seconds": 900,
+      "covered_lines": 17714,
+      "total_lines": 22471,
+      "covered_branches": 5326,
+      "total_branches": 7674,
+      "added_cases": [
+        "tests.unit.test_alternate_transform_evidence::test_woe_numeric_level_keys_survive_fractional_imputation_in_same_batch",
+        "tests.unit.test_durable_scoring::test_changed_inputs_or_authority_and_invalid_csv_never_publish[nul_csv]",
+        "tests.unit.test_holdout_evidence::test_exact_assessment_cannot_load_scorers_outside_the_manifest",
+        "tests.unit.test_native_training_scoring::test_invalid_schema_categories_labels_nonfinite_or_bounds_rejected[x,z\\n1\\x00invalid,2\\n]",
+        "tests.unit.test_offline_scoring::test_every_replayed_batch_preserves_its_own_row_count",
+        "tests.unit.test_offline_scoring::test_malformed_csv_blocks_before_native_state[embedded-nul]",
+        "tests.unit.test_offline_scoring::test_malformed_csv_blocks_before_native_state[implicit-index]",
+        "tests.unit.test_offline_scoring::test_reordering_checks_block_layout_dependent_scores[reversed_columns]",
+        "tests.unit.test_offline_scoring::test_reordering_checks_block_layout_dependent_scores[reversed_rows]",
+        "tests.unit.test_package_handoff::test_export_uses_calibration_from_training_when_model_metadata_omits_it",
+        "tests.unit.test_package_handoff::test_frozen_numeric_category_inventory_survives_integer_and_missing_chunks",
+        "tests.unit.test_package_handoff::test_frozen_numeric_imputation_is_independent_of_missing_chunk_dtype",
+        "tests.unit.test_package_handoff::test_scoring_state_cannot_be_omitted_with_matching_receipt[calibration-Required fitted calibration]",
+        "tests.unit.test_package_handoff::test_scoring_state_cannot_be_omitted_with_matching_receipt[impute_means-Required fitted encoding or imputation]",
+        "tests.unit.test_package_handoff::test_scoring_state_cannot_be_omitted_with_matching_receipt[input_text_columns-Required scoring input types]",
+        "tests.unit.test_scoring_csv::test_csv_preserves_frozen_text_and_rejects_ambiguous_records",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[catboost-binary]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[catboost-multiclass]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[catboost-regression]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[isolation_forest-anomaly]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[lightgbm-binary]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[lightgbm-multiclass]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[lightgbm-regression]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[logistic_regression-binary]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[scorecard-binary]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[xgboost-binary]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[xgboost-multiclass]",
+        "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[xgboost-regression]"
+      ]
+    },
+    "artifacts": {
+      "postgresql-runtime-reports": {
+        "id": 14203924811,
+        "sha256": "2c8bf4512bf4877ab9075741ad3395d24a2a5b9ce1eef46c5c206b8185a2b60c"
+      },
+      "backend-test-reports": {
+        "id": 14199964767,
+        "sha256": "8b61d443bdc0e82e2fc09a1459856633ba0dc62d5d5e4061c62bb7acde599c50"
+      },
+      "private-expert-worker-report": {
+        "id": 14199931850,
+        "sha256": "c7c36c9118e2256500f41ff86612d2c8a80c602bf0567ee89300764128a06443"
+      }
+    },
+    "prior_rejected_attempts": [
+      {
+        "run": 43809693257,
+        "attempt": 1,
+        "job": 133108337329,
+        "head": "65c7a7c6db080eb9ad4cb8db14f63a29b8c59051",
+        "artifact_id": 14201999061,
+        "artifact_sha256": "1b4e793f067c03ab0d66fd32a8133e0285593a61937368b4188f7d3e79c2d700",
+        "native_cap_seconds": 900,
+        "qualified": false,
+        "finished_cases": 7833,
+        "reason": "native_process_timeout"
+      }
+    ],
+    "retry_scope": "PostgreSQL runtime and metadata"
+  },
+  "independent_model_reproduction_verified": false,
+  "release_qualified": false,
+  "scoring_matrix": {
+    "native_test_cases": 12,
+    "absolute_tolerance": 1e-09,
+    "relative_tolerance": 1e-07,
+    "case_ids": [
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[catboost-binary]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[catboost-multiclass]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[catboost-regression]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[isolation_forest-anomaly]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[lightgbm-binary]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[lightgbm-multiclass]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[lightgbm-regression]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[logistic_regression-binary]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[scorecard-binary]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[xgboost-binary]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[xgboost-multiclass]",
+      "tests.unit.test_scoring_parity_matrix::test_assessed_model_matches_exported_scores[xgboost-regression]"
+    ],
+    "native_families": [
+      "xgboost",
+      "lightgbm",
+      "catboost",
+      "logistic_regression",
+      "scorecard",
+      "isolation_forest"
+    ],
+    "validated_calibrators": [
+      "platt",
+      "isotonic"
+    ]
+  },
+  "rejected_implementation": [
+    {
+      "head": "4097f5c67568ac92924bb104ecf8a5131c2b9765",
+      "run": 43786772131,
+      "attempt": 1,
+      "failed_job": "Original PostgreSQL attempt 1",
+      "job": 133036071338,
+      "artifact_sha256": "ef3f31e6d8296e0f34b46152b567c5650ffc9fe1b26568fe92f6f4f4d0fde9dd",
+      "native_cap_seconds": 900,
+      "finished_cases": 4598,
+      "reason": "native_process_timeout"
+    },
+    {
+      "head": "4097f5c67568ac92924bb104ecf8a5131c2b9765",
+      "run": 43786772131,
+      "attempt": 2,
+      "failed_job": "Original PostgreSQL attempt 2",
+      "job": 133053670294,
+      "artifact_sha256": "4241655da7e80388bf520c36add0309c95c2ad7ff5abfe1384e3de102ff807b0",
+      "native_cap_seconds": 900,
+      "finished_cases": 3979,
+      "reason": "native_process_timeout"
+    },
+    {
+      "head": "4097f5c67568ac92924bb104ecf8a5131c2b9765",
+      "run": 43786772131,
+      "attempt": 3,
+      "failed_job": "Original PostgreSQL attempt 3",
+      "job": 133071630704,
+      "artifact_sha256": "f9f18d91cd9a37574a172b55d9bf758dca6781b3e6afa6c2b7fcf35a55d989a3",
+      "native_cap_seconds": 900,
+      "finished_cases": 3125,
+      "reason": "native_process_timeout"
+    }
+  ]
+}
