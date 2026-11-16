@@ -91,11 +91,16 @@ def runtime(kind=KIND):
 
         result["scoring"] = scoring_runtime()
     if kind in {training_search.KIND, training_scoring.KIND, native_assessment.KIND}:
+        from deployment.offline_reproduce import SOURCES, native_platform
+
+        result["reproduction_platform"] = native_platform()
+        for name in SOURCES:
+            result["sources"][name] = hashlib.sha256((Path(settings.BASE_DIR) / name).read_bytes()).hexdigest()
         result["packages"].update({p: version(p) for p in ["numpy", "pandas", "scipy", "scikit-learn", "xgboost"]})
-        for name in ["execution_jobs/native_assessment.py", "modeling/holdout_evidence.py", "modeling/execution_artifacts.py", "execution_jobs/training_search.py", "execution_jobs/training_scoring.py", "deployment/native_candidate.py", "modeling/booster_adapters.py", "modeling/prediction_contract.py",
-                     "modeling/declared_metric.py", "modeling/development_validation.py", "modeling/development_assessment.py", "modeling/rank_metrics.py",
-                     "modeling/fit_receipts.py", "modeling/split_contract.py", "modeling/sfs_objective.py", "evaluation/eval_utils.py",
-                     "preprocessing/purifier_contract.py", "deployment/scoring_receipts.py", "access_control/project_http.py"]:
+        for name in ("execution_jobs/native_assessment.py", "modeling/holdout_evidence.py",
+                     "modeling/execution_artifacts.py", "execution_jobs/training_search.py",
+                     "execution_jobs/training_scoring.py", "deployment/scoring_receipts.py",
+                     "access_control/project_http.py"):
             result["sources"][name] = hashlib.sha256((Path(settings.BASE_DIR) / name).read_bytes()).hexdigest()
     if kind == native_assessment.KIND:
         for name in ("execution_jobs/assessment_intake.py", "execution_jobs/assessment_reuse.py"):

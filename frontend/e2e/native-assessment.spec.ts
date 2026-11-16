@@ -1,6 +1,21 @@
 import { test, expect, Page } from '@playwright/test';
 import { API_BASE_URL, requireTestCredentials } from './fixtures/credentials';
-import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+
+function sha256(value: Buffer) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function seededDevelopmentCsv(task: string) {
+  // Match seed_native_assessment_e2e.py, including Python's representation of 0.0.
+  const rows = Array.from(
+    { length: 80 },
+    (_, i) =>
+      `${i === 0 ? '0.0' : i / 80},${i % 7},${task === 'regression' ? i % 4 : i % 2 ? 'bad' : 'good'}`,
+  );
+  return Buffer.from(['x,z,outcome', ...rows, ''].join('\n'));
+}
 
 async function signIn(page: Page, role: string) {
   const credentials = requireTestCredentials();
@@ -118,13 +133,11 @@ for (const task of ['classification', 'regression']) {
             `${i % 3 === 0 ? '' : i % 7},${10 + i / 60},${task === 'regression' ? i % 4 : i % 2 ? 'bad' : 'good'}`,
         ),
       ].join('\n') + '\n';
-    await panel
-      .getByLabel('Protected assessment CSV', { exact: true })
-      .setInputFiles({
-        name: 'private-outcomes.csv',
-        mimeType: 'text/csv',
-        buffer: Buffer.from(rows),
-      });
+    await panel.getByLabel('Protected assessment CSV', { exact: true }).setInputFiles({
+      name: 'private-outcomes.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(rows),
+    });
     await panel
       .getByLabel('Assessment as-of with timezone', { exact: true })
       .fill('2026-10-21T00:00:00Z');
@@ -214,5 +227,56 @@ for (const task of ['classification', 'regression']) {
       path: testInfo.outputPath('protected-assessment-result.png'),
       animations: 'disabled',
     });
+
+    const manifestResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname === `/api/jobs/${job.id}/reproduction/` &&
+        url.searchParams.get('sha256') === receipt.result_sha256 &&
+        url.searchParams.get('project_id') === project &&
+        response.request().method() === 'GET'
+      );
+    });
+    const manifestDownload = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download reproduction manifest', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    const [reproduction, savedManifest] = await Promise.all([manifestResponse, manifestDownload]);
+    expect(reproduction.status()).toBe(200);
+    expect(reproduction.headers()['content-type']).toContain('application/json');
+    expect(reproduction.headers()['content-disposition']).toContain('attachment');
+    expect(reproduction.headers()['cache-control']).toBe('no-store');
+    expect(savedManifest.suggestedFilename()).toBe(`reproduction-${job.id}.json`);
+    const manifest = await readFile((await savedManifest.path())!);
+    const manifestSha = sha256(manifest);
+    expect(reproduction.headers()['x-declarai-export-sha256']).toBe(manifestSha);
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Retain this reproduction manifest SHA-256' }),
+    ).toContainText(manifestSha);
+
+    const development = seededDevelopmentCsv(task);
+    const outcomes = Buffer.from(rows);
+    expect(sha256(development)).toBe(preview.input_sha256);
+    expect(sha256(outcomes)).toBe(receipt.result.input_sha256);
+    await mkdir(testInfo.outputDir, { recursive: true });
+    // These exact synthetic inputs are consumed locally by the clean-run check.
+    // Only its metadata report is uploaded.
+    await Promise.all([
+      writeFile(testInfo.outputPath('reproduction-manifest.json'), manifest),
+      writeFile(testInfo.outputPath('reproduction-development.csv'), development),
+      writeFile(testInfo.outputPath('reproduction-outcomes.csv'), outcomes),
+    ]);
+    await writeFile(
+      testInfo.outputPath('native-reproduction-context.json'),
+      JSON.stringify({
+        task,
+        synthetic_fixture: true,
+        manifest_sha256: manifestSha,
+        development_sha256: sha256(development),
+        outcomes_sha256: sha256(outcomes),
+        assessment_result_sha256: receipt.result_sha256,
+        scores_sha256: receipt.result.scores_sha256,
+        n_assessed: receipt.result.n_assessed,
+      }),
+    );
   });
 }

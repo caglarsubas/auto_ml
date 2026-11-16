@@ -186,6 +186,20 @@
         </p>
       }
     }
+    @if (canDownloadReproduction) {
+      <button type="button" (click)="downloadReproduction()" [disabled]="busy">
+        Download reproduction manifest
+      </button>
+      <p>
+        Provide the exact development CSV and reviewer-held outcomes separately to the clean runner.
+      </p>
+      @if (reproductionExportDigest) {
+        <p role="status">
+          Retain this reproduction manifest SHA-256 separately
+          <code>{{ reproductionExportDigest }}</code>
+        </p>
+      }
+    }
     @if (
       evidenceEnabled &&
       job.state === 'succeeded' &&
