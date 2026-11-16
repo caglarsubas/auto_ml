@@ -2728,7 +2728,7 @@ Compare assessment and frozen bundle scores across the supported model matrix. B
 
 ### P182 — Independent native refit and assessment reproduction
 
-**Packet status:** implemented. **Mapped outcomes:** D04, D09.
+**Packet status:** implemented. **Mapped outcomes:** D09, D04.
 
 Export a hash-bound manifest for a successful native numeric XGBoost training and its protected assessment. Reproduce exact development fits, model state, assessment scores and metrics in a separate runtime using approved inputs supplied independently.
 
