@@ -168,13 +168,13 @@ def apply_encoding(
         }
 
         if strategy == 'native_categorical':
-            fit_series = encoded.loc[fit_idx, feature] if fit_idx is not None else encoded[feature]
+            values = encoded[feature].astype('string')
+            fit_series = values.loc[fit_idx] if fit_idx is not None else values
             levels = pd.Index(fit_series.dropna().unique())
-            encoded[feature] = pd.Categorical(encoded[feature], categories=levels)
-            cats = list(encoded[feature].cat.categories.astype(str))
+            encoded[feature] = pd.Categorical(values.where(values.isin(levels)), categories=levels)
             feat_report['mapping'] = {
                 'type': 'native_categorical',
-                'categories': cats,
+                'categories': levels.tolist(),
                 'fit_on_train_only': fit_idx is not None,
             }
             feat_report['after_stats'] = _compute_stats(encoded[feature])

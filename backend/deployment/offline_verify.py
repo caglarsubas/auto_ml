@@ -16,11 +16,11 @@ import zipfile
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 from deployment.deploy_utils import score_bundle_directory
 from deployment.evidence import verify_bundle
-from deployment.scoring_receipts import byte_digest, csv_input, require_digest, scoring_runtime
+from deployment.scoring_csv import InvalidScoringCSV, read_scoring_csv, scoring_text_columns
+from deployment.scoring_receipts import csv_input, require_digest, scoring_runtime
 
 NATIVE_ALGORITHMS = {'xgboost', 'lightgbm', 'catboost', 'logistic_regression',
                      'scorecard', 'isolation_forest'}
@@ -67,8 +67,26 @@ def snapshot(source, target, expected):
         raise VerificationBlocked('Verification input differs from its independently supplied digest.')
 
 
+def _check_score_layout(bundle, recorded, frame, reference, size, *, atol, rtol):
+    batches = []
+    for start in range(0, len(frame), size):
+        batch = frame.iloc[start:start + size].copy()
+        result = score_bundle_directory(bundle, recorded['file_id'], batch, recorded['bundle_id'])
+        if any(result.get(key) != recorded.get(key) for key in SEMANTICS):
+            raise VerificationBlocked('Score semantics differ from the recorded receipt.')
+        scores = np.asarray(result['scores'], dtype=float)
+        if scores.shape != (len(batch), *reference.shape[1:]) or not np.isfinite(scores).all():
+            raise VerificationBlocked('Replayed batch scores do not preserve score shape or finite row alignment.')
+        batches.append(scores)
+    scores = np.concatenate(batches, axis=0)
+    return {'chunk_size': size, 'batches': len(batches),
+            'passed': bool(np.allclose(scores, reference, atol=atol, rtol=rtol)),
+            'max_absolute_difference': float(np.max(np.abs(scores - reference)))}
+
+
 def verify_package(package, csv, receipt, *, package_sha256, receipt_sha256,
-                   manifest_sha256, atol, rtol, chunk_sizes=(1, 64), trust_native_state=False):
+                   manifest_sha256, atol, rtol, chunk_sizes=(1, 64), trust_native_state=False,
+                   check_reordering=False):
     """Return evidence of score parity only; never refit, assess or approve."""
     require_digest(manifest_sha256)
     if not trust_native_state:
@@ -110,39 +128,45 @@ def verify_package(package, csv, receipt, *, package_sha256, receipt_sha256,
         if (execution.get('python_version') != runtime['python_version']
                 or execution.get('packages') != runtime['packages']):
             raise VerificationBlocked('Installed dependencies differ from the recorded model environment.')
-        from encoding.fitted import constrained_text_columns
-        text_columns = constrained_text_columns(manifest.get('encoding_report') or [])
-        if input_spec != csv_input((root / 'input.csv').read_bytes(), string_columns=text_columns):
+        text_columns = scoring_text_columns(manifest)
+        raw_csv = (root / 'input.csv').read_bytes()
+        if input_spec != csv_input(raw_csv, string_columns=text_columns):
             raise VerificationBlocked('CSV bytes or parser version differ from the scoring receipt.')
-        frame = pd.read_csv(root / 'input.csv', dtype={column: 'string' for column in text_columns} or None)
+        try:
+            frame = read_scoring_csv(raw_csv, string_columns=text_columns)
+        except InvalidScoringCSV as error:
+            raise VerificationBlocked(str(error)) from error
+        del raw_csv
         if frame.empty or recorded.get('n_scored') != len(frame):
             raise VerificationBlocked('Receipt row count must agree with a nonempty CSV.')
         reference = np.asarray(recorded.get('scores'), dtype=float)
         if (reference.ndim not in {1, 2} or len(reference) != len(frame)
                 or not np.isfinite(reference).all()):
             raise VerificationBlocked('Receipt must contain finite full scores with row alignment.')
-        checks = []
-        for size in (len(frame), *chunk_sizes):
-            batches = []
-            for start in range(0, len(frame), size):
-                result = score_bundle_directory(out, recorded['file_id'], frame.iloc[start:start + size].copy(), recorded['bundle_id'])
-                if any(result.get(key) != recorded.get(key) for key in SEMANTICS):
-                    raise VerificationBlocked('Score semantics differ from the recorded receipt.')
-                batches.append(np.asarray(result['scores'], dtype=float))
-            scores = np.concatenate(batches, axis=0)
-            if scores.shape != reference.shape or not np.isfinite(scores).all():
-                raise VerificationBlocked('Replayed scores do not preserve score shape or finite row alignment.')
-            delta = float(np.max(np.abs(scores - reference)))
-            passed = bool(np.allclose(scores, reference, atol=atol, rtol=rtol))
-            checks.append({'chunk_size': size, 'batches': len(batches), 'passed': passed,
-                           'max_absolute_difference': delta})
-        return {'schema_version': 1, 'status': 'passed' if all(c['passed'] for c in checks) else 'failed',
+        checks = [
+            _check_score_layout(out, recorded, frame, reference, size, atol=atol, rtol=rtol)
+            for size in (len(frame), *chunk_sizes)
+        ]
+        layout_checks = []
+        if check_reordering:
+            layouts = (
+                ('reversed_rows', frame.iloc[::-1].reset_index(drop=True), reference[::-1]),
+                ('reversed_columns', frame.iloc[:, ::-1], reference),
+            )
+            layout_checks = [
+                {'layout': layout, **_check_score_layout(
+                    out, recorded, changed, expected, len(frame), atol=atol, rtol=rtol,
+                )}
+                for layout, changed, expected in layouts
+            ]
+        return {'schema_version': 1, 'status': 'passed' if all(c['passed'] for c in checks + layout_checks) else 'failed',
                 'scope': 'native_csv_batch_score_parity', 'package_sha256': package_sha256,
                 'receipt_sha256': receipt_sha256, 'input_sha256': input_spec['sha256'],
                 'manifest_sha256': digest, 'bundle_id': recorded['bundle_id'],
                 'execution_id': recorded['execution_id'], 'assessment_id': recorded['assessment_id'],
                 'batch_id': recorded['batch_id'], 'rows': len(frame), 'score_shape': list(reference.shape),
                 'atol': atol, 'rtol': rtol, 'runtime': runtime, 'checks': checks,
+                **({'layout_checks': layout_checks} if check_reordering else {}),
                 'model_refit_reproduced': False, 'assessment_reproduced': False,
                 'review_approved': False, 'production_use_approved': False}
 
@@ -154,6 +178,8 @@ def main():
     parser.add_argument('--atol', type=float, required=True)
     parser.add_argument('--rtol', type=float, required=True)
     parser.add_argument('--chunk-sizes', nargs='+', type=int, default=[1, 64])
+    parser.add_argument('--check-reordering', action='store_true',
+                        help='Verify full-batch scores with reversed row and CSV column order.')
     parser.add_argument('--trust-native-state', action='store_true', help='Acknowledge trusted pickle/joblib state; this is not isolation.')
     args = vars(parser.parse_args())
     output = Path(args.pop('output'))

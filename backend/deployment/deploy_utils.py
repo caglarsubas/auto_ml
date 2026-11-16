@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import pickle
 import shutil
 import uuid
 import hashlib
@@ -18,7 +19,35 @@ from django.conf import settings
 
 from encoding.fitted import apply_fitted_encoding, scoring_encoding_reports
 from modeling.execution_artifacts import digest_file, execution_root, projection_lock, replace_projection
-from deployment.evidence import current_selection, resolve_handoff, verify_bundle
+from deployment.evidence import (
+    EXACT_SCORING_SCHEMA, current_selection, execution_artifact, resolve_handoff, verify_bundle,
+)
+
+
+def _frozen_input_types(data, features, reports, purifier):
+    """Capture raw parser types that affect fitted feature transformations."""
+    source = (data.get('validation_context') or {}).get('frame')
+    if source is None:
+        raise ValueError('Recorded development feature types are missing. Refit before packaging.')
+    input_features = set(purifier['retained_columns'] if purifier else features)
+    input_features.update(report['feature'] for report in reports)
+    text_columns = []
+    encoded_numeric = {}
+    # Numeric parser precision matters before encoder key stringification.
+    transformed_columns = {report['feature'] for report in reports}
+    transformed_columns.update((purifier or {}).get('category_replacements', {}))
+    for name in source.columns:
+        if name not in input_features:
+            continue
+        dtype = source[name].dtype
+        if pd.api.types.is_string_dtype(dtype) or pd.api.types.is_object_dtype(dtype):
+            text_columns.append(name)
+        elif name in transformed_columns:
+            if pd.api.types.is_integer_dtype(dtype):
+                encoded_numeric[name] = 'integer'
+            elif pd.api.types.is_float_dtype(dtype):
+                encoded_numeric[name] = 'float'
+    return sorted(text_columns), encoded_numeric
 
 
 class DeployNotReadyError(Exception):
@@ -79,11 +108,11 @@ def _build_score_bundle(file_id, context, out, destination, retryable, predecess
         raise FileNotFoundError(f'Model artifact missing: {model_rel}')
 
     train_pkl = os.path.join(settings.MEDIA_ROOT, model.get('train_data_path') or f'train_data/{file_id}_train_data.pkl')
+    td = {}
     feature_names: List[str] = []
     impute_means: Dict[str, float] = {}
     categorical_features: List[str] = list(model.get('categorical_features_used') or [])
     if os.path.exists(train_pkl):
-        import pickle
         with open(train_pkl, 'rb') as f:
             td = pickle.load(f)
         feature_names = list(td.get('feature_names') or (td.get('X_train').columns.tolist() if td.get('X_train') is not None else []))
@@ -107,46 +136,52 @@ def _build_score_bundle(file_id, context, out, destination, retryable, predecess
     bundled_model = os.path.join(out, model_basename)
     shutil.copy2(model_abs, bundled_model)
 
-    calibrator_rel = model.get('calibrator_path')
+    calibration = td.get('calibration') or model.get('calibration') or {}
+    calibrator_rel = td.get('calibrator_path') or model.get('calibrator_path')
     calibrator_file = None
-    if calibrator_rel:
-        cal_abs = (
-            os.path.join(settings.MEDIA_ROOT, calibrator_rel)
-            if not os.path.isabs(calibrator_rel) else calibrator_rel
-        )
-        if os.path.exists(cal_abs):
-            calibrator_file = os.path.basename(cal_abs)
-            shutil.copy2(cal_abs, os.path.join(out, calibrator_file))
-        else:
-            # Fall back to train_data pointer
-            if os.path.exists(train_pkl):
-                import pickle
-                with open(train_pkl, 'rb') as f:
-                    td = pickle.load(f)
-                calibrator_rel = td.get('calibrator_path') or calibrator_rel
-                if calibrator_rel:
-                    cal_abs = (
-                        os.path.join(settings.MEDIA_ROOT, calibrator_rel)
-                        if not os.path.isabs(calibrator_rel) else calibrator_rel
-                    )
-                    if os.path.exists(cal_abs):
-                        calibrator_file = os.path.basename(cal_abs)
-                        shutil.copy2(cal_abs, os.path.join(out, calibrator_file))
-
-    if (model.get('calibration') or {}).get('fitted') and not calibrator_file:
-        raise ValueError('Required calibrator is missing; package publication is blocked.')
+    if exact_assessment:
+        assessed = exact_assessment['evaluation']
+        applied = assessed.get('scores_calibrated')
+        if applied is not bool(calibration.get('fitted')) or (
+            applied and (assessed.get('calibration') or {}).get('calibrator_path') != calibrator_rel
+        ):
+            raise ValueError('Required calibration disagrees with the exact assessment; reassess before packaging.')
+    if calibration.get('fitted'):
+        if not calibrator_rel:
+            raise ValueError('Required calibrator is missing; package publication is blocked.')
+        cal_abs = (execution_artifact(context['execution_id'], context['execution_manifest'], calibrator_rel)
+                   if exact_assessment else Path(settings.MEDIA_ROOT) / calibrator_rel)
+        if not cal_abs.is_file():
+            raise ValueError('Required calibrator is missing; package publication is blocked.')
+        calibrator_file = cal_abs.name
+        shutil.copy2(cal_abs, os.path.join(out, calibrator_file))
 
     # Categorical level freeze from train raw if possible
-    cat_levels: Dict[str, List[str]] = {}
-    if os.path.exists(train_pkl):
-        import pickle
-        with open(train_pkl, 'rb') as f:
-            td = pickle.load(f)
-        Xtr = td.get('X_train')
-        if Xtr is not None:
-            for c in categorical_features:
-                if c in Xtr.columns and hasattr(Xtr[c], 'cat'):
-                    cat_levels[c] = [str(v) for v in Xtr[c].cat.categories.tolist()]
+    cat_levels = {}
+    Xtr = td.get('X_train')
+    if exact_assessment:
+        if Xtr is None or any(name not in Xtr for name in feature_names):
+            raise ValueError('Recorded training feature schema is missing. Refit before packaging.')
+        categorical_features = [name for name in feature_names if isinstance(Xtr[name].dtype, pd.CategoricalDtype)]
+        if algo == 'scorecard':
+            steps = ((model.get('fit_receipt') or {}).get('fitted_transforms') or {}).get('steps') or []
+            legacy_woe = any(
+                step.get('kind') == 'scorecard_woe_v1' and any(
+                    spec.get('kind') == 'categorical' and name in Xtr and pd.api.types.is_integer_dtype(Xtr[name].dtype)
+                    for name, spec in step['features'].items()
+                ) for step in steps
+            )
+            if legacy_woe:
+                raise ValueError('This older fitted scorecard WOE mapping can change with batch size. Refit before packaging.')
+    if Xtr is not None:
+        for name in categorical_features:
+            if name in Xtr and isinstance(Xtr[name].dtype, pd.CategoricalDtype):
+                inventory = Xtr[name].cat.categories
+                if (exact_assessment and algo in ('catboost', 'logistic_regression', 'scorecard', 'isolation_forest')
+                        and pd.api.types.is_integer_dtype(inventory.dtype)):
+                    raise ValueError('This older fitted integer category inventory can change with batch size. Refit before packaging.')
+                levels = inventory.tolist()
+                cat_levels[name] = levels if exact_assessment else [str(value) for value in levels]
 
     # Pull BU / success criteria / model card / monitoring plan from pipeline + evaluation
     bu = {}
@@ -207,17 +242,18 @@ def _build_score_bundle(file_id, context, out, destination, retryable, predecess
 
     freeze_stamp = datetime.now(timezone.utc).isoformat()
     lineage_hash = (lineage or {}).get('lineage_id') or model.get('lineage_id')
-    purifier = td.get('purifier_state') if os.path.exists(train_pkl) else None
+    purifier = td.get('purifier_state')
+    encoding_report = td.get('encoding_report') or []
     if model.get('purifier_path') and not purifier:
         raise ValueError('Required fitted purifier is missing; package publication is blocked.')
     if purifier:
         from preprocessing.replay import subset_purifier
-        purifier = subset_purifier(purifier, feature_names, td.get('encoding_report') or [])
+        purifier = subset_purifier(purifier, feature_names, encoding_report)
         with open(os.path.join(out, 'purifier.json'), 'x', encoding='utf-8') as stream:
             stream.write(json.dumps(purifier, separators=(',', ':'), allow_nan=False))
     manifest = {
         'schema_version': 4 if purifier else 3,
-        'scoring_schema_version': 4 if purifier else 3,
+        'scoring_schema_version': EXACT_SCORING_SCHEMA if exact_assessment else (4 if purifier else 3),
         'bundle_id': bundle_id,
         'handoff_schema_version': 1,
         'execution_id': context['execution_id'],
@@ -226,7 +262,7 @@ def _build_score_bundle(file_id, context, out, destination, retryable, predecess
         'prediction_contract': contract,
         'fit_receipt': model.get('fit_receipt'),
         'task': model.get('task') or 'classification',
-        'encoding_report': scoring_encoding_reports(td.get('encoding_report', [])) if os.path.exists(train_pkl) else [],
+        'encoding_report': scoring_encoding_reports(encoding_report, features=feature_names if exact_assessment else None),
         'input_stage': 'raw_unencoded' if purifier else ('processed_unencoded' if contract else 'legacy_model_features'),
         'purifier_file': 'purifier.json' if purifier else None,
         'purifier_provenance': 'partition_fitted' if purifier else 'legacy_unverified',
@@ -244,7 +280,7 @@ def _build_score_bundle(file_id, context, out, destination, retryable, predecess
         'scale_pos_weight': model.get('scale_pos_weight') or lineage.get('scale_pos_weight'),
         'enable_categorical': bool(model.get('enable_categorical')),
         'calibrator_file': calibrator_file,
-        'calibration': model.get('calibration') or {},
+        'calibration': calibration,
         'lineage_id': lineage_hash,
         'model_path_source': model_rel,
         'deploy_ready': True,
@@ -257,8 +293,9 @@ def _build_score_bundle(file_id, context, out, destination, retryable, predecess
         'monitoring_plan_path': 'monitoring_plan.json',
         'monitoring': monitoring_plan,
     }
-    with open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8') as f:
-        f.write(json.dumps(manifest, separators=(',', ':')))
+    if exact_assessment:
+        text_columns, numeric_kinds = _frozen_input_types(td, feature_names, manifest['encoding_report'], purifier)
+        manifest.update(input_text_columns=text_columns, input_numeric_kinds=numeric_kinds)
 
     if context['execution_id']:
         shutil.copyfile(Path(settings.MEDIA_ROOT) / model['lineage_path'], Path(out) / 'lineage.json')
@@ -268,17 +305,12 @@ def _build_score_bundle(file_id, context, out, destination, retryable, predecess
 
     # Small train reference for batch-score PSI monitoring (head sample)
     try:
-        if os.path.exists(train_pkl):
-            import pickle
-            with open(train_pkl, 'rb') as f:
-                td = pickle.load(f)
-            Xtr = td.get('X_train')
-            if Xtr is not None and feature_names:
-                cols = [c for c in feature_names if c in Xtr.columns]
-                if cols:
-                    Xtr[cols].head(500).to_csv(
-                        os.path.join(out, 'train_reference_head.csv'), index=False,
-                    )
+        if Xtr is not None and feature_names:
+            cols = [c for c in feature_names if c in Xtr.columns]
+            if cols:
+                Xtr[cols].head(500).to_csv(
+                    os.path.join(out, 'train_reference_head.csv'), index=False,
+                )
     except Exception:
         pass
 
@@ -412,6 +444,27 @@ def score_bundle_directory(out, file_id: int, df: pd.DataFrame, bundle_id=None, 
     if metadata_bytes:
         verification['metadata_bytes'] = metadata_bytes
     manifest, manifest_digest = verify_bundle(out, file_id, bundle_id, **verification)
+    exact_scoring = manifest.get('scoring_schema_version') == EXACT_SCORING_SCHEMA
+    if not df.columns.is_unique:
+        raise ValueError('Scoring feature names must be unique.')
+    row_index = df.index
+    if exact_scoring:
+        df = df.copy()
+        for name in manifest['input_text_columns']:
+            if name in df:
+                df[name] = df[name].astype('string').astype(object)
+        for name, kind in manifest['input_numeric_kinds'].items():
+            if name in df:
+                try:
+                    numeric = pd.to_numeric(df[name], errors='raise')
+                    if kind == 'integer':
+                        dtype = 'UInt64' if numeric.dropna().gt(np.iinfo(np.int64).max).any() else 'Int64'
+                        numeric = numeric.astype(dtype)
+                    else:
+                        numeric = numeric.astype(float)
+                    df[name] = numeric.astype(object).where(numeric.notna(), np.nan)
+                except (ValueError, TypeError, OverflowError) as error:
+                    raise ValueError(f'Scoring feature {name!r} does not match its frozen numeric input type.') from error
     if manifest.get('input_stage') == 'raw_unencoded':
         from preprocessing.replay import apply_purifier
         if manifest.get('purifier_file') != 'purifier.json' or 'purifier.json' not in (manifest.get('artifact_integrity') or {}):
@@ -419,7 +472,12 @@ def score_bundle_directory(out, file_id: int, df: pd.DataFrame, bundle_id=None, 
         with open(os.path.join(out, 'purifier.json'), encoding='utf-8') as stream:
             df = apply_purifier(df, json.load(stream))
     if manifest.get('input_stage') in ('processed_unencoded', 'raw_unencoded'):
-        df = apply_fitted_encoding(df, manifest.get('encoding_report') or [])
+        df = apply_fitted_encoding(
+            df, manifest.get('encoding_report') or [],
+            native_categories=manifest['categorical_levels'] if exact_scoring else None,
+        )
+    if not df.index.equals(row_index) or not df.columns.is_unique:
+        raise ValueError('Scoring transformations must preserve row alignment and unique feature names.')
     model_file = manifest.get('model_file') or 'model.json'
     model_path = os.path.join(out, model_file)
     if not os.path.exists(model_path):
@@ -438,16 +496,23 @@ def score_bundle_directory(out, file_id: int, df: pd.DataFrame, bundle_id=None, 
     X = df[feature_names].copy()
     impute_means = manifest.get('impute_means') or {}
     for c, m in impute_means.items():
-        if c in X.columns and pd.api.types.is_numeric_dtype(X[c]):
+        if c in X and exact_scoring:
+            try:
+                X[c] = pd.to_numeric(X[c], errors='raise').fillna(m)
+            except (ValueError, TypeError) as error:
+                raise ValueError(f'Scoring feature {c!r} does not match its fitted numeric imputation schema.') from error
+        elif c in X and pd.api.types.is_numeric_dtype(X[c]):
             X[c] = X[c].fillna(m)
 
-    cat_feats = set(manifest.get('categorical_features') or [])
+    cat_feats = list(manifest.get('categorical_features') or [])
     cat_levels = manifest.get('categorical_levels') or {}
     for c in cat_feats:
         if c not in X.columns:
             continue
         levels = cat_levels.get(c)
-        if levels:
+        if exact_scoring:
+            X[c] = pd.Categorical(X[c].where(X[c].isin(levels)), categories=levels)
+        elif levels:
             X[c] = pd.Categorical(X[c].astype(str), categories=levels)
         else:
             X[c] = X[c].astype('category')
@@ -456,10 +521,15 @@ def score_bundle_directory(out, file_id: int, df: pd.DataFrame, bundle_id=None, 
         model_path,
         algorithm=manifest.get('algorithm') or 'xgboost',
         feature_names=feature_names,
-        cat_features=list(cat_feats),
+        cat_features=cat_feats,
     )
     proba = np.asarray(adapter.predict(X) if manifest.get('task') == 'regression' else adapter.predict_proba(X), dtype=float)
     multiclass = proba.ndim == 2 and proba.shape[1] > 1
+    if exact_scoring:
+        count = len(manifest['prediction_contract']['class_mapping'])
+        expected = (len(df), count) if manifest['task'] == 'classification' and count > 2 else (len(df),)
+        if proba.shape != expected:
+            raise ValueError('Scoring output does not match the declared task and class order.')
     if not multiclass:
         proba = proba.ravel()
     if len(proba) != len(df) or not np.isfinite(proba).all():

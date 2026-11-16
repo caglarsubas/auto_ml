@@ -8,6 +8,7 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models.deletion import ProtectedError
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -56,7 +57,7 @@ def submit(world, source, role="developer", **overrides):
     return post(world[4][role], f"/api/jobs/datasets/{world[0]}/", data), data
 
 
-def test_real_native_job_parity_full_digest_receipt_and_offline_replay(world, source, tmp_path):
+def test_real_native_job_parity_full_digest_receipt_and_offline_replay(world, source, tmp_path, settings):
     response, body = submit(world, source)
     assert response.status_code == 202, response.content
     identifier = response.json()["id"]
@@ -79,6 +80,14 @@ def test_real_native_job_parity_full_digest_receipt_and_offline_replay(world, so
     download = world[4]["reviewer"].get(url)
     assert download.status_code == 200 and byte_digest(download.content) == job.result_sha256
     assert json.loads(download.content)["scores"] == job.result["scores"]
+    sync = world[4]["developer"].post("/api/deployment/score/", {
+        "file_id": world[0], "bundle_id": body["bundle_id"],
+        "file": SimpleUploadedFile("batch.csv", Path(source.get_file_path()).read_bytes()),
+    })
+    assert sync.status_code == 200, sync.content
+    sync_receipt = json.loads((Path(settings.MEDIA_ROOT) / sync.json()["scores_path"]).read_bytes())
+    assert sync_receipt["input"] == job.result["input"]
+    assert sync_receipt["scores"] == job.result["scores"]
     assert not job.result["review_approved"] and not job.result["production_use_approved"]
     assert world[4]["outsider"].get(url).status_code == 403
     assert world[4]["developer"].get(url.replace(job.result_sha256, "0" * 64)).status_code == 409
@@ -150,13 +159,20 @@ def test_bad_or_cross_project_source_never_admitted(world, source, case, setting
 
 
 @pytest.mark.parametrize(
-    "change", ["input", "path", "binding", "member", "runtime", "cancel", "expiry", "bad_csv", "rows", "columns"]
+    "change", ["input", "path", "binding", "member", "runtime", "cancel", "expiry", "bad_csv", "nul_csv", "rows", "columns"]
 )
 def test_changed_inputs_or_authority_and_invalid_csv_never_publish(world, source, change):
-    if change in {"bad_csv", "rows", "columns"}:
+    if change in {"bad_csv", "nul_csv", "rows", "columns"}:
         path = Path(source.get_file_path())
         if change == "bad_csv":
             path.write_bytes(b'x,other\n"unterminated')
+        elif change == "nul_csv":
+            raw = b"x,other\n1\x00invalid,2\n"
+            path.write_bytes(raw)
+            sync = world[4]["developer"].post("/api/deployment/score/", {
+                "file_id": world[0], "bundle_id": world[2]["bundle_id"], "file": SimpleUploadedFile("bad.csv", raw),
+            })
+            assert sync.status_code == 400 and "embedded NUL" in sync.json()["error"]
         elif change == "rows":
             path.write_text("x,other\n" + "1,2\n" * 10001)
         else:
@@ -186,6 +202,8 @@ def test_changed_inputs_or_authority_and_invalid_csv_never_publish(world, source
     assert len(queries) < 1000
     job.refresh_from_db()
     assert job.state in {"blocked", "failed", "cancelled"} and job.result is None
+    if change == "nul_csv":
+        assert job.state == "blocked" and job.reason_code == "job_csv_input_invalid"
 
 
 def test_revocation_or_cancellation_after_scoring_withholds_atomic_result(world, source):

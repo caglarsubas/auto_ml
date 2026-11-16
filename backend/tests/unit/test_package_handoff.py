@@ -10,12 +10,14 @@ import pandas as pd
 import pytest
 from rest_framework.test import APIRequestFactory
 
+from declaration.models import Declaration
 from deployment import deploy_utils
 from deployment.deploy_utils import assess_file_deploy_readiness, build_score_bundle, build_deployment_pack_zip, bundle_dir, score_frame
 from deployment.views import DeploymentBundleView, DeploymentPackView, DeploymentScoreView, DeploymentStatusView
 from evaluation.views import EvaluationPackView
-from modeling.execution_artifacts import execution_root
-from tests.unit.test_holdout_evidence import trained, assess  # noqa: F401
+from modeling.execution_artifacts import digest_file, execution_root
+from modeling.views import ModelingStartView
+from tests.unit.test_holdout_evidence import assess, declaration, trained  # noqa: F401
 
 pytestmark = pytest.mark.unit
 
@@ -162,7 +164,6 @@ def test_integrity_blocks_before_any_native_deserialization(packaged, monkeypatc
 
 
 def test_required_artifacts_cannot_be_omitted_even_with_matching_receipt(packaged):
-    from modeling.execution_artifacts import digest_file
     file_id, _, _, bundle = packaged
     out = Path(bundle_dir(file_id, bundle['bundle_id']))
     manifest = json.loads((out / 'manifest.json').read_text())
@@ -173,6 +174,93 @@ def test_required_artifacts_cannot_be_omitted_even_with_matching_receipt(package
     (out / 'publication.json').write_text(json.dumps(receipt))
     with pytest.raises(ValueError, match='Required scoring/evidence artifact'):
         score_frame(file_id, rows(), bundle['bundle_id'])
+
+
+@pytest.mark.parametrize('omission, message', [
+    ('calibration', 'Required fitted calibration'),
+    ('impute_means', 'Required fitted encoding or imputation'),
+    ('input_text_columns', 'Required scoring input types'),
+])
+def test_scoring_state_cannot_be_omitted_with_matching_receipt(packaged, monkeypatch, omission, message):
+    file_id, _, _, result = packaged
+    bundle_id = result['bundle_id']
+    out = Path(bundle_dir(file_id, bundle_id))
+    manifest_path, publication_path = out / 'manifest.json', out / 'publication.json'
+    manifest = json.loads(manifest_path.read_text())
+    if omission == 'calibration':
+        name = manifest.pop('calibrator_file')
+        assert name and manifest['calibration']['fitted']
+        del manifest['artifact_integrity'][name]
+        (out / name).unlink()
+    del manifest[omission]
+    manifest_path.write_text(json.dumps(manifest))
+    publication = json.loads(publication_path.read_text())
+    publication['manifest_sha256'] = digest_file(manifest_path)
+    publication_path.write_text(json.dumps(publication))
+    monkeypatch.setattr(pickle, 'load', lambda *args, **kwargs: pytest.fail('unexpected native load'))
+    with pytest.raises(ValueError, match=message):
+        score_frame(file_id, rows(), bundle_id)
+    with pytest.raises(ValueError, match=message):
+        build_deployment_pack_zip(file_id, bundle_id)
+
+
+def test_export_uses_calibration_from_training_when_model_metadata_omits_it(trained):
+    file_id, result = trained
+    execution_id = result['execution_id']
+    out = execution_root(execution_id)
+    status_path, manifest_path = out / 'modeling_status.json', out / 'manifest.json'
+    status = json.loads(status_path.read_text())
+    assert status['model'].pop('calibration')['fitted']
+    assert status['model'].pop('calibrator_path')
+    status_path.write_text(json.dumps(status))
+    manifest = json.loads(manifest_path.read_text())
+    manifest['files'][status_path.name] = {'sha256': digest_file(status_path), 'bytes': status_path.stat().st_size}
+    manifest_path.write_text(json.dumps(manifest))
+
+    response = assess(file_id, execution_id)
+    assert response.status_code == 200, response.data
+    evaluation = response.data['evaluation']
+    assert evaluation['scores_calibrated']
+    bundle = build_score_bundle(file_id, execution_id, evaluation['holdout_access_id'])
+    assert bundle['manifest']['calibrator_file'] == Path(evaluation['calibration']['calibrator_path']).name
+    assert score_frame(file_id, rows(), bundle['bundle_id'])['scores_calibrated']
+
+
+def test_frozen_numeric_imputation_is_independent_of_missing_chunk_dtype(packaged):
+    file_id, _, _, bundle = packaged
+    frame = pd.DataFrame({'x': [2.0, None, 3.0], 'other': [None, 4.0, 1.0]})
+    bundle_id = bundle['bundle_id']
+    full = score_frame(file_id, frame, bundle_id)['scores']
+    singles = [score_frame(file_id, pd.DataFrame([record], dtype=object)[['other', 'x']], bundle_id)['scores'][0]
+               for record in frame.to_dict('records')]
+    assert full == pytest.approx(singles, abs=1e-10)
+    with pytest.raises(ValueError, match='feature names must be unique'):
+        score_frame(file_id, frame[['x', 'other', 'x']], bundle_id)
+
+
+def test_frozen_numeric_category_inventory_survives_integer_and_missing_chunks(settings, _use_tmp_media, db):
+    frame = pd.DataFrame({'code': [7, 9] * 80, 'x': list(range(80)) * 2,
+                          'outcome': ['bad', 'good'] * 80})
+    relative = 'data_files/typed-category.csv'
+    frame.to_csv(Path(settings.MEDIA_ROOT) / relative, index=False)
+    dataset = Declaration.objects.create(name='typed category', original_name='typed-category.csv', file=relative)
+    request = APIRequestFactory().post('/modeling/start/', {'file_id': dataset.pk,
+        'processed_file': relative, 'algorithm': 'logistic_regression',
+        'encoding_plan': [{'feature': 'code', 'encoding_method': 'native'}],
+        'business_understanding': declaration()}, format='json')
+    model = ModelingStartView.as_view()(request)
+    assert model.status_code == 200, model.data
+    response = assess(dataset.pk, model.data['execution_id'])
+    assert response.status_code == 200, response.data
+    bundle = build_score_bundle(dataset.pk)
+    assert set(bundle['manifest']['categorical_levels']['code']) == {'7', '9'}
+    assert bundle['manifest']['input_numeric_kinds'] == {'code': 'integer'}
+    records = [{'code': code, 'x': 20} for code in [7, None, 9, 99]]
+    full = score_frame(dataset.pk, pd.DataFrame(records), bundle['bundle_id'])['scores']
+    singles = [score_frame(dataset.pk, pd.DataFrame([record]), bundle['bundle_id'])['scores'][0] for record in records]
+    assert abs(full[0] - full[2]) > 0.3
+    assert full[1] == pytest.approx(full[3], abs=1e-10)
+    assert full == pytest.approx(singles, abs=1e-10)
 
 
 def test_download_is_exact_unique_and_excludes_unrecorded_files(packaged):

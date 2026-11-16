@@ -6,10 +6,10 @@ import json
 import os
 import stat
 from pathlib import Path
-import pandas as pd
 from django.conf import settings
 from declaration.models import Declaration
 from access_control import projects
+from deployment.scoring_csv import InvalidScoringCSV, read_scoring_csv, scoring_text_columns
 from deployment.scoring_receipts import csv_input, scoring_runtime
 from modeling.holdout_evidence import prospective_payload
 
@@ -125,7 +125,6 @@ def score(job, manifest, out, hashed, check, metadata_bytes=None):
     from execution_jobs.service import JobConflict
     from deployment.offline_verify import NATIVE_ALGORITHMS
     from deployment.deploy_utils import score_bundle_directory
-    from encoding.fitted import constrained_text_columns
 
     if manifest.get("algorithm") not in NATIVE_ALGORITHMS:
         raise JobConflict("job_native_package_required")
@@ -153,9 +152,11 @@ def score(job, manifest, out, hashed, check, metadata_bytes=None):
     except (csv.Error, UnicodeError, StopIteration):
         raise JobConflict("job_csv_input_invalid") from None
     check()
-    text_columns = constrained_text_columns(manifest.get("encoding_report") or [])
-    frame = pd.read_csv(io.BytesIO(raw), nrows=BUDGET["max_rows"] + 1,
-                        dtype={column: "string" for column in text_columns} or None)
+    text_columns = scoring_text_columns(manifest)
+    try:
+        frame = read_scoring_csv(raw, string_columns=text_columns, nrows=BUDGET["max_rows"] + 1)
+    except InvalidScoringCSV:
+        raise JobConflict("job_csv_input_invalid") from None
     if frame.empty or len(frame) > BUDGET["max_rows"] or len(frame.columns) > BUDGET["max_columns"]:
         raise JobConflict("job_input_budget_exceeded")
     check()

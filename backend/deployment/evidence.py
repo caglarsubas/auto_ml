@@ -11,6 +11,9 @@ from modeling.execution_artifacts import digest_file, execution_root, load_asses
 from modeling.lineage import load_lineage
 
 
+EXACT_SCORING_SCHEMA = 5
+
+
 def read_json(path, default=None):
     path = Path(path)
     if not path.is_file():
@@ -105,6 +108,101 @@ def resolve_handoff(file_id, execution_id=None, assessment_id=None):
             'execution_id': execution_id, 'assessment_id': assessment_id}
 
 
+def _verify_exact_scoring(out, manifest, files, metadata_bytes):
+    """Check that frozen scoring state agrees with the copied execution and assessment."""
+    from encoding.fitted import scoring_encoding_reports
+    from preprocessing.replay import subset_purifier
+
+    def evidence(name):
+        path = out / name
+        recorded = files.get(name) or {}
+        raw = metadata_bytes(path) if metadata_bytes else path.read_bytes()
+        if len(raw) != recorded.get('bytes') or hashlib.sha256(raw).hexdigest() != recorded.get('sha256'):
+            raise ValueError(f'Scoring evidence changed during verification: {name}')
+        value = parse_metadata(raw)
+        if not isinstance(value, dict):
+            raise ValueError(f'Scoring evidence must be an object: {name}')
+        return value
+
+    execution_id = manifest.get('execution_id')
+    execution = evidence('execution_manifest.json')
+    lineage = evidence('lineage.json')
+    assessment = evidence('assessment_manifest.json')
+    evaluation = evidence('evaluation.json').get('evaluation') or {}
+    identity = (manifest['file_id'], execution_id)
+    if (not execution_id or (execution.get('file_id'), execution.get('execution_id')) != identity
+            or (assessment.get('file_id'), assessment.get('execution_id')) != identity
+            or (assessment.get('assessment_id'), evaluation.get('holdout_access_id'), evaluation.get('execution_id'))
+            != (manifest.get('assessment_id'), manifest.get('assessment_id'), execution_id)):
+        raise ValueError('Scoring identity disagrees with the copied execution or assessment.')
+    source_files = execution.get('files') or {}
+    for name in ('lineage.json', 'modeling_status.json'):
+        if files.get(name) != source_files.get(name):
+            raise ValueError(f'Scoring evidence differs from the exact execution: {name}')
+    for name in ('evaluation.json', 'model_card.json'):
+        if files.get(name) != (assessment.get('files') or {}).get(name):
+            raise ValueError(f'Scoring evidence differs from the exact assessment: {name}')
+
+    def native_file(name, source):
+        source_root = Path('execution_runs') / execution_id
+        if (not isinstance(source, str) or not Path(source).is_relative_to(source_root)
+                or files.get(name) != source_files.get(Path(source).relative_to(source_root).as_posix())):
+            raise ValueError('Scoring native asset differs from the exact execution.')
+
+    native_file(manifest.get('model_file'), lineage.get('model_path'))
+    contract = lineage.get('prediction_contract') or {}
+    fit = lineage.get('fit_receipt') or {}
+    features = manifest.get('feature_names')
+    if (not isinstance(features, list) or not features or any(not isinstance(name, str) for name in features)
+            or len(set(features)) != len(features) or features != (lineage.get('features') or {}).get('names')
+            or not contract or manifest.get('prediction_contract') != contract
+            or execution.get('prediction_contract_sha256') != contract.get('sha256')
+            or manifest.get('task') != contract.get('task') or not fit or manifest.get('fit_receipt') != fit
+            or features != (fit.get('train') or {}).get('features')):
+        raise ValueError('Scoring feature order, model or task disagrees with the fitted execution.')
+    if manifest.get('algorithm') != fit.get('algorithm'):
+        raise ValueError('Scoring algorithm disagrees with the registered native fit.')
+    reports = scoring_encoding_reports(lineage.get('encoding_report') or [], features=features)
+    impute = {key: mean for key, mean in (lineage.get('impute_means') or {}).items() if key in features}
+    if manifest.get('encoding_report') != reports or manifest.get('impute_means') != impute:
+        raise ValueError('Required fitted encoding or imputation differs from the recorded execution.')
+    cats = [name for name, dtype in zip(features, fit['train']['dtypes'], strict=True) if dtype == 'category']
+    levels = manifest.get('categorical_levels')
+    if manifest.get('categorical_features') != cats or not isinstance(levels, dict) or set(levels) != set(cats):
+        raise ValueError('Required native category inventories differ from the fitted feature schema.')
+    for report in reports:
+        spec = report.get('mapping') or {}
+        if (spec.get('type') or report.get('strategy')) == 'native_categorical':
+            name = report['feature']
+            if not isinstance(levels.get(name), list) or list(map(str, levels[name])) != spec.get('categories', report.get('categories')):
+                raise ValueError(f'Required native category inventory differs from the fitted encoder: {name}')
+
+    purifier = lineage.get('purifier')
+    if purifier:
+        expected = subset_purifier(purifier, features, reports)
+        if (manifest.get('input_stage') != 'raw_unencoded' or manifest.get('purifier_file') != 'purifier.json'
+                or manifest.get('input_features') != expected['retained_columns']
+                or evidence('purifier.json') != expected):
+            raise ValueError('Required fitted purifier differs from the recorded execution.')
+    elif manifest.get('input_stage') != 'processed_unencoded' or manifest.get('purifier_file'):
+        raise ValueError('Scoring input stage disagrees with the recorded execution.')
+    input_columns = set(manifest['input_features'] if purifier else features).union(report['feature'] for report in reports)
+    text_columns = manifest.get('input_text_columns')
+    numeric = manifest.get('input_numeric_kinds')
+    if (not isinstance(text_columns, list) or any(not isinstance(name, str) for name in text_columns)
+            or text_columns != sorted(set(text_columns)) or not set(text_columns).issubset(input_columns)
+            or not isinstance(numeric, dict) or not set(numeric).issubset(input_columns - set(text_columns))
+            or any(kind not in ('integer', 'float') for kind in numeric.values())):
+        raise ValueError('Required scoring input types are missing or invalid.')
+
+    applied = evaluation.get('scores_calibrated')
+    cal_file = manifest.get('calibrator_file')
+    if applied is not bool((manifest.get('calibration') or {}).get('fitted')) or applied is not bool(cal_file):
+        raise ValueError('Required fitted calibration differs from the exact assessment.')
+    if applied:
+        native_file(cal_file, (evaluation.get('calibration') or {}).get('calibrator_path'))
+
+
 def verify_bundle(out, file_id, bundle_id=None, *, artifact_digest=digest_file, metadata_bytes=None):
     out = Path(out)
     manifest_path = out / 'manifest.json'
@@ -162,4 +260,6 @@ def verify_bundle(out, file_id, bundle_id=None, *, artifact_digest=digest_file, 
         name = manifest.get(key)
         if name and (not isinstance(name, str) or Path(name).name != name or (out / name).is_symlink()):
             raise ValueError('Scoring manifest contains an invalid artifact path.')
+    if manifest.get('scoring_schema_version') == EXACT_SCORING_SCHEMA:
+        _verify_exact_scoring(out, manifest, files, metadata_bytes)
     return manifest, manifest_digest()

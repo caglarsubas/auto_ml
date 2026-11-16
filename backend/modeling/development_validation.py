@@ -164,11 +164,13 @@ def fit_category_levels(frame, train, *, encoded=(), categorical=()):
     reports = []
     for column in frame:
         if column not in encoded and (column in categorical or not pd.api.types.is_numeric_dtype(frame[column])):
-            values = frame[column]
+            # Convert before freezing categories. Numeric-to-string conversion
+            # after categorical slicing can otherwise change in batches with nulls.
+            values = frame[column].astype('string')
             levels = pd.Index(values.loc[train].dropna().unique())
             frame[column] = pd.Categorical(values.where(values.isin(levels)), categories=levels)
             reports.append({'feature': column, 'strategy': 'native_categorical',
-                            'categories': levels.astype(str).tolist(), 'nunique': len(levels),
+                            'categories': levels.tolist(), 'nunique': len(levels),
                             'fit_on_train_only': True})
     return reports
 

@@ -101,6 +101,8 @@ def numeric_input(raw, candidate):
     result = candidate["result"]
     features = result["features"]
     try:
+        if b"\x00" in raw:
+            raise ValueError
         records = csv.reader(io.StringIO(raw.decode("utf-8-sig")), strict=True)
         header = next(row for row in records if row)
         # Feature-only CSVs exclude labels, controls, identifiers and arbitrary

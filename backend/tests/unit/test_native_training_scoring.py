@@ -27,6 +27,14 @@ from tests.unit.test_governed_foundation import declaration
 pytestmark = [pytest.mark.unit, pytest.mark.auth_boundary, pytest.mark.django_db(transaction=True)]
 
 
+def write_scoring_input(w, raw):
+    w.scoring_path = w.root / 'data_files/candidate-input.csv'
+    w.scoring_path.write_bytes(raw)
+    dataset = Declaration.objects.create(name='Feature only', original_name='predict.csv', file='data_files/candidate-input.csv')
+    projects.bind_dataset(dataset, w.project.pk)
+    w.input_id = dataset.pk
+
+
 @pytest.fixture
 def candidate(world):  # noqa: F811
     body, _ = admission(world)
@@ -34,12 +42,8 @@ def candidate(world):  # noqa: F811
     service.execute(identifier)
     world.trained = NativeJob.objects.get(pk=identifier)
     assert world.trained.state == "succeeded"
-    world.scoring_path = world.root / 'data_files/candidate-input.csv'
     frame = pd.DataFrame({'z': [np.nan, 10.0, -2.0, np.nan], 'x': [-2.0, 0.0, 3.0, 1.0]})
-    frame.to_csv(world.scoring_path, index=False)
-    dataset = Declaration.objects.create(name='Feature only', original_name='predict.csv', file='data_files/candidate-input.csv')
-    projects.bind_dataset(dataset, world.project.pk)
-    world.input_id = dataset.pk
+    write_scoring_input(world, frame.to_csv(index=False).encode())
     return world
 
 
@@ -81,13 +85,14 @@ def test_export_scoring_and_offline_cli_match_refit_with_frozen_means(world, tas
     w.trained = NativeJob.objects.get(pk=identifier)
     raw, sha = exported(w)
     assert exported(w, 'reviewer') == (raw, sha) == exported(w, 'admin')
-    feature_raw = w.frame[['z', 'x']].to_csv(index=False).encode()
+    score_rows = w.frame.iloc[::-1]
+    feature_raw = score_rows[['z', 'x']].to_csv(index=False).encode()
     reference = portable.score(raw, sha, feature_raw, chunk_size=1)
     assert reference == portable.score(raw, sha, feature_raw, chunk_size=17) == portable.score(raw, sha, feature_raw, chunk_size=10000)
     import xgboost as xgb
     model = xgb.Booster(params={'nthread': 1})
     model.load_model(bytearray(w.trained.result['model_json'].encode()))
-    values = w.frame[['x', 'z']].fillna(w.trained.result['refit_preprocessing']['impute_means'])
+    values = score_rows[['x', 'z']].fillna(w.trained.result['refit_preprocessing']['impute_means'])
     assert reference['scores'] == pytest.approx(model.predict(xgb.DMatrix(values, nthread=1)).tolist(), abs=0)
     assert reference['prediction_contract']['positive_class'] == positive
     assert reference['score_semantics'] == ('target_prediction' if task == 'regression' else 'positive_class_probability')
@@ -100,6 +105,15 @@ def test_export_scoring_and_offline_cli_match_refit_with_frozen_means(world, tas
         assert subprocess.run(args, capture_output=True, timeout=30).returncode == 0
     assert json.loads(output_path.read_bytes()) == reference
     assert subprocess.run(args, capture_output=True, timeout=30).returncode == 2  # no overwrite
+    write_scoring_input(w, feature_raw)
+    scoring_id = submit(w, preview(w))
+    service.execute(scoring_id)
+    scored = NativeJob.objects.get(pk=scoring_id)
+    assert scored.state == 'succeeded'
+    assert scored.result == {
+        **reference, 'scope': training_scoring.KIND, 'job_id': scoring_id,
+        'runtime': scored.specification['runtime'], 'scoring_sha256': scored.specification['scoring_sha256'],
+    }
 
 
 def test_real_queued_scoring_is_pinned_replayable_and_does_not_adopt(candidate):
@@ -134,7 +148,7 @@ def test_only_current_developer_can_prepare_or_submit(candidate, role):
         assert w.clients[role].get(f'/api/jobs/{w.trained.pk}/candidate/?sha256={w.trained.result_sha256}').status_code == 403
 
 
-@pytest.mark.parametrize('csv', ['x\n1\n', 'x,z,extra\n1,2,3\n', 'x,x\n1,2\n', 'x,z\n1,2,3\n', 'x,z\n1\n', 'x,z\ninf,2\n', 'x,z\nword,2\n', 'x,z\n', 'x,z,outcome\n1,2,bad\n', 'x,z\n1,2\n' * 10001])
+@pytest.mark.parametrize('csv', ['x\n1\n', 'x,z,extra\n1,2,3\n', 'x,x\n1,2\n', 'x,z\n1,2,3\n', 'x,z\n1\n', 'x,z\ninf,2\n', 'x,z\nword,2\n', 'x,z\n1\x00invalid,2\n', 'x,z\n', 'x,z,outcome\n1,2,bad\n', 'x,z\n1,2\n' * 10001])
 def test_invalid_schema_categories_labels_nonfinite_or_bounds_rejected(candidate, csv):
     w = candidate
     w.scoring_path.write_text(csv)

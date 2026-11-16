@@ -12,8 +12,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIRequestFactory
 
 from deployment.deploy_utils import build_deployment_pack_zip
+from deployment.evidence import EXACT_SCORING_SCHEMA
 from deployment.offline_verify import verify_package, unpack
-from deployment.scoring_receipts import byte_digest
+from deployment.scoring_receipts import byte_digest, csv_input
 from deployment.views import DeploymentScoreView, DeploymentReceiptView
 from tests.unit.test_package_handoff import packaged, rows  # noqa: F401
 from tests.unit.test_holdout_evidence import trained  # noqa: F401
@@ -64,13 +65,16 @@ def test_clean_offline_process_without_database_settings_or_original_artifacts(v
     env = {key: value for key, value in os.environ.items() if not key.startswith(('DJANGO', 'DATABASE', 'POSTGRES', 'REDIS'))}
     env['PYTHONPATH'] = str(Path(__file__).resolve().parents[2])
     result = subprocess.run([sys.executable, '-m', 'deployment.offline_verify', *args,
-        '--trust-native-state', '--chunk-sizes', '1', '2', '--output', str(output)],
+        '--trust-native-state', '--chunk-sizes', '1', '2', '--check-reordering', '--output', str(output)],
         env=env, cwd=private, capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
     report = json.loads(output.read_text())
     assert report['status'] == 'passed' and report['rows'] == 3
     assert [check['chunk_size'] for check in report['checks']] == [3, 1, 2]
     assert all(check['passed'] for check in report['checks'])
+    assert {check['layout']: check['passed'] for check in report['layout_checks']} == {
+        'reversed_rows': True, 'reversed_columns': True,
+    }
     assert not any(report[key] for key in ('model_refit_reproduced', 'assessment_reproduced', 'review_approved', 'production_use_approved'))
     assert json.loads(spec['receipt'].read_text())['scores_calibrated'] is True
 
@@ -80,6 +84,22 @@ def test_changed_bytes_block_before_native_state(verification, monkeypatch, key)
     verification[key].write_bytes(verification[key].read_bytes() + b' ')
     monkeypatch.setattr('deployment.offline_verify.score_bundle_directory', lambda *a, **k: pytest.fail('native state loaded before validation'))
     with pytest.raises(ValueError, match='digest'):
+        verify_package(**verification)
+
+
+@pytest.mark.parametrize('original,replacement,message', [
+    pytest.param(b'2.0', b'2.0\x00truncated', 'NUL', id='embedded-nul'),
+    pytest.param(b'\n', b'\nextra,', 'more fields than the header', id='implicit-index'),
+])
+def test_malformed_csv_blocks_before_native_state(verification, monkeypatch, original, replacement, message):
+    contents = verification['csv'].read_bytes()
+    raw = contents.replace(original, replacement, 1)
+    assert raw != contents
+    verification['csv'].write_bytes(raw)
+    rewrite_receipt(verification, lambda data: data.update(input=csv_input(raw)))
+    monkeypatch.setattr('deployment.offline_verify.score_bundle_directory',
+                        lambda *a: pytest.fail('native state loaded before CSV validation'))
+    with pytest.raises(ValueError, match=message):
         verify_package(**verification)
 
 
@@ -107,6 +127,43 @@ def test_numerical_disagreement_records_failed_check_and_declared_tolerance(veri
     assert result['status'] == 'failed'
     assert all(not check['passed'] and check['max_absolute_difference'] > 0 for check in result['checks'])
     assert result['atol'] == result['rtol'] == 1e-12
+    assert 'layout_checks' not in result
+
+
+@pytest.mark.parametrize('layout', ['reversed_rows', 'reversed_columns'])
+def test_reordering_checks_block_layout_dependent_scores(verification, monkeypatch, layout):
+    rewrite_receipt(verification, lambda data: data.update(scores=[1., 2., 3.]))
+    recorded = json.loads(verification['receipt'].read_text())
+
+    def layout_sensitive_scorer(_bundle, _file_id, batch, _bundle_id):
+        scores = sorted(batch['x']) if layout == 'reversed_rows' else batch.iloc[:, 0].tolist()
+        return {**recorded, 'scores': scores}
+
+    monkeypatch.setattr('deployment.offline_verify.score_bundle_directory', layout_sensitive_scorer)
+    result = verify_package(**verification, check_reordering=True)
+
+    assert all(check['passed'] for check in result['checks'])
+    assert [check['layout'] for check in result['layout_checks'] if not check['passed']] == [layout]
+    assert result['status'] == 'failed'
+
+
+def test_every_replayed_batch_preserves_its_own_row_count(verification, monkeypatch):
+    recorded = json.loads(verification['receipt'].read_text())
+    scored_batch_sizes = []
+
+    def misaligned_scorer(_bundle, _file_id, batch, _bundle_id):
+        scored_batch_sizes.append(len(batch))
+        scores = recorded['scores']
+        if len(batch) == 2:
+            scores = scores[:1]
+        if len(batch) == 1:
+            scores = scores[1:]
+        return {**recorded, 'scores': scores}
+
+    monkeypatch.setattr('deployment.offline_verify.score_bundle_directory', misaligned_scorer)
+    with pytest.raises(ValueError, match='batch scores.*row alignment'):
+        verify_package(**{**verification, 'chunk_sizes': (2, 1)})
+    assert scored_batch_sizes == [3, 2]
 
 
 @pytest.mark.parametrize('override', [
@@ -164,20 +221,24 @@ def test_full_receipt_is_exact_beyond_inline_preview(packaged, settings):
     assert json.loads(exact.content)['input']['sha256'] == byte_digest(raw)
 
 
-def test_legacy_and_unknown_packages_do_not_gain_offline_qualification(verification):
+def test_legacy_and_unknown_packages_do_not_gain_offline_qualification(verification, monkeypatch):
     with zipfile.ZipFile(verification['package']) as original:
         content = {entry.filename: original.read(entry) for entry in original.infolist()}
     manifest = json.loads(content['manifest.json'])
-    manifest['algorithm'] = 'expert_python'
-    content['manifest.json'] = json.dumps(manifest).encode()
+    assert manifest['scoring_schema_version'] == EXACT_SCORING_SCHEMA
     publication = json.loads(content['publication.json'])
-    publication['manifest_sha256'] = byte_digest(content['manifest.json'])
-    content['publication.json'] = json.dumps(publication).encode()
-    with zipfile.ZipFile(verification['package'], 'w') as changed:
-        for name, raw in content.items():
-            changed.writestr(name, raw)
-    verification['package_sha256'] = byte_digest(verification['package'].read_bytes())
-    verification['manifest_sha256'] = publication['manifest_sha256']
-    rewrite_receipt(verification, lambda data: data.update(manifest_sha256=publication['manifest_sha256']))
-    with pytest.raises(ValueError, match='registered native'):
-        verify_package(**verification)
+    monkeypatch.setattr('deployment.offline_verify.score_bundle_directory',
+                        lambda *a: pytest.fail('unknown native state loaded'))
+    for schema, message in ((EXACT_SCORING_SCHEMA, 'registered native fit'), (4, 'registered native')):
+        manifest.update(scoring_schema_version=schema, algorithm='expert_python')
+        content['manifest.json'] = json.dumps(manifest).encode()
+        publication['manifest_sha256'] = byte_digest(content['manifest.json'])
+        content['publication.json'] = json.dumps(publication).encode()
+        with zipfile.ZipFile(verification['package'], 'w') as changed:
+            for name, raw in content.items():
+                changed.writestr(name, raw)
+        verification['package_sha256'] = byte_digest(verification['package'].read_bytes())
+        verification['manifest_sha256'] = publication['manifest_sha256']
+        rewrite_receipt(verification, lambda data: data.update(manifest_sha256=publication['manifest_sha256']))
+        with pytest.raises(ValueError, match=message):
+            verify_package(**verification)

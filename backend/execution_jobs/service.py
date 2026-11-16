@@ -201,7 +201,13 @@ def _artifact_bytes(path, bound, initial_reason, growth_reason=None):
 
 
 def _package_metadata(path):
-    bound = 1024**2 if Path(path).name == "manifest.json" else 65536
+    name = Path(path).name
+    if name == "manifest.json":
+        bound = 1024**2
+    elif name in {"lineage.json", "execution_manifest.json", "assessment_manifest.json", "evaluation.json", "purifier.json"}:
+        bound = 8 * 1024**2
+    else:
+        bound = 65536
     return _artifact_bytes(path, bound, "job_package_unavailable", "job_package_budget_exceeded")
 
 

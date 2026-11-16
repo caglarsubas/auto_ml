@@ -26,6 +26,7 @@ from rest_framework.views import APIView
 from evaluation.eval_utils import (
     build_model_card, evaluate_binary, evaluate_multiclass, evaluate_regression, feature_psi_report, select_development_threshold, threshold_table,
 )
+from deployment.evidence import execution_artifact
 from modeling.calibration_utils import apply_calibrator, load_calibrator
 from modeling.crisp_dm import (
     expected_cost_table,
@@ -178,7 +179,17 @@ class EvaluationRunView(APIView):
             except (ValueError, OSError, KeyError) as error:
                 return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
         model_info = modeling_status.get('model') or {}
-        train_data_path = os.path.join(settings.MEDIA_ROOT, model_info.get('train_data_path') or f'train_data/{file_id}_train_data.pkl')
+        model_rel = model_info.get('model_path')
+        if execution_id:
+            try:
+                train_data_path = execution_artifact(execution_id, execution_manifest, model_info.get('train_data_path'))
+                model_abs = execution_artifact(execution_id, execution_manifest, model_rel)
+            except ValueError as error:
+                return Response({'error': str(error)}, status=status.HTTP_409_CONFLICT)
+        else:
+            train_data_path = os.path.join(settings.MEDIA_ROOT, model_info.get('train_data_path') or f'train_data/{file_id}_train_data.pkl')
+            model_rel = model_rel or f'models/{file_id}_xgb_classifier.json'
+            model_abs = os.path.join(settings.MEDIA_ROOT, model_rel)
         if not os.path.exists(train_data_path):
             return Response({'error': 'Training data not found. Run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
         contract = model_info.get('prediction_contract') or {}
@@ -188,8 +199,6 @@ class EvaluationRunView(APIView):
                 'population': contract['population'], 'prediction_horizon': contract['prediction_horizon'],
                 'success_criteria': contract['objective'], 'forbidden_features': contract['forbidden_features'],
             })
-        model_rel = model_info.get('model_path') or f'models/{file_id}_xgb_classifier.json'
-        model_abs = os.path.join(settings.MEDIA_ROOT, model_rel) if not os.path.isabs(model_rel) else model_rel
         if not os.path.exists(model_abs):
             return Response({'error': f'Model artifact not found: {model_rel}'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -212,9 +221,12 @@ class EvaluationRunView(APIView):
                 train_data = pickle.load(f)
             final_data = train_data
             if train_data.get('holdout_path'):
-                if execution_id and os.path.realpath(os.path.join(settings.MEDIA_ROOT, train_data['holdout_path'])) != str((execution_root(execution_id) / 'final_holdout.pkl').resolve()):
-                    raise ValueError('Final-outcome input must belong to the verified execution.')
-                with open(os.path.join(settings.MEDIA_ROOT, train_data['holdout_path']), 'rb') as stream:
+                final_path = os.path.join(settings.MEDIA_ROOT, train_data['holdout_path'])
+                if execution_id:
+                    final_path = execution_artifact(execution_id, execution_manifest, train_data['holdout_path'])
+                    if final_path != (execution_root(execution_id) / 'final_holdout.pkl').resolve():
+                        raise ValueError('Final-outcome input must belong to the verified execution.')
+                with open(final_path, 'rb') as stream:
                     final_data = pickle.load(stream)
             X_test = final_data.get('X_test')
             y_test = final_data.get('y_test')
@@ -261,7 +273,7 @@ class EvaluationRunView(APIView):
                 or 'isolation' in str(algo).lower()
             )
             adapter = load_adapter_from_path(
-                model_abs,
+                str(model_abs),
                 algorithm=algo,
                 feature_names=list(map(str, X_test.columns)),
                 cat_features=list(model_info.get('categorical_features_used') or []),
@@ -313,7 +325,9 @@ class EvaluationRunView(APIView):
                 )
                 if calibrator_rel and calibration_meta.get('fitted'):
                     try:
-                        calibrator = load_calibrator(calibrator_rel, settings.MEDIA_ROOT)
+                        calibrator_path = (execution_artifact(execution_id, execution_manifest, calibrator_rel)
+                                           if execution_id else calibrator_rel)
+                        calibrator = load_calibrator(calibrator_path, settings.MEDIA_ROOT)
                         y_proba = apply_calibrator(calibrator, y_proba_raw)
                         evaluation_calibration = {
                             **calibration_meta,
