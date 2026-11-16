@@ -10,7 +10,6 @@ import json
 import uuid
 from datetime import datetime, timedelta
 
-import numpy as np
 import pandas as pd
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
@@ -24,14 +23,14 @@ from deployment.reviews import digest, lock_authority
 from deployment.scoring_receipts import require_digest
 from execution_jobs import csv_scoring, training_search, training_scoring
 from execution_jobs.models import NativeAdoption, NativeAdoptionEvent, NativeJob, NativeProtectedInput
-from modeling.declared_metric import metric_spec, metric_value
-from modeling.development_assessment import development_metrics
+from modeling.declared_metric import metric_spec
 from modeling.holdout_evidence import holdout_spec, reserve_holdout_access
 from modeling.models import HoldoutAccess
+from modeling.native_assessment_replay import CHUNK_SIZE, AssessmentReplayError, calculate_assessment
 
 KIND = "native_protected_assessment_v1"
 PLAN_SCHEMA = 2
-BUDGET = {**training_search.BUDGET, "chunk_size": 500}
+BUDGET = {**training_search.BUDGET, "chunk_size": CHUNK_SIZE}
 SCOPE = "development_candidate_for_protected_assessment_only"
 PROSPECTIVE = "prospective_temporal_v1"
 ASSESSMENT_POLICY = {
@@ -515,40 +514,6 @@ def recheck(job):
     verify_plan(job, prepared)
 
 
-def population(frame, development, validation, as_of):
-    strategy = validation["strategy"]
-    group = validation.get("group_column")
-    if group:
-        a, b = development[group], frame[group]
-        if (
-            a.isna().any()
-            or b.isna().any()
-            or pd.api.types.is_numeric_dtype(a) != pd.api.types.is_numeric_dtype(b)
-            or b.isin(a).any()
-        ):
-            conflict("native_assessment_entities_overlap_or_unverified")
-    if strategy == "oot":
-        date, end = validation["date_column"], validation.get("label_end_column", validation["date_column"])
-        train_end = pd.to_datetime(development[end], errors="coerce", utc=True)
-        held_date = pd.to_datetime(frame[date], errors="coerce", utc=True)
-        held_end = pd.to_datetime(frame[end], errors="coerce", utc=True)
-        if (
-            train_end.isna().any()
-            or held_date.isna().any()
-            or held_end.isna().any()
-            or train_end.max() >= held_date.min()
-            or (held_end < held_date).any()
-            or held_end.max() > pd.Timestamp(as_of)
-        ):
-            conflict("native_assessment_time_or_maturity_invalid")
-    return {
-        "strategy": strategy,
-        "entity_separation_checked": bool(group),
-        "outcome_window_checked": strategy == "oot",
-        "row_identity": "reviewer_declared; unknown upstream or modified imports are not linked automatically",
-    }
-
-
 def assess(job, check):
     from execution_jobs.assessment_intake import prior_development_use
     from execution_jobs.assessment_reuse import classify_reuse
@@ -616,36 +581,20 @@ def assess(job, check):
             actor.pk, job.dataset_id, check, training.specification["training"]["source"]
         )
         development = training_search.parsed_frame(development_raw)
-        separation = population(
-            frame, development, training.specification["training"]["options"]["validation"], spec["assessment_as_of"]
-        )
-        labels = frame[contract["target_column"]]
-        if labels.isna().any():
-            conflict("native_assessment_labels_missing")
-        if contract["task"] == "regression":
-            labels = pd.to_numeric(labels, errors="coerce").to_numpy(dtype=float)
-            if not np.isfinite(labels).all():
-                conflict("native_assessment_labels_invalid")
-        else:
-            mapping = {str(c["label"]): c["encoded"] for c in contract["class_mapping"]}
-            labels = labels.astype(str).map(mapping)
-            if labels.isna().any():
-                conflict("native_assessment_labels_invalid")
-            labels = labels.to_numpy(dtype=int)
-        feature_raw = frame[training.result["features"]].to_csv(index=False).encode()
-        scored = native_candidate.score(
-            raw_export, native_candidate.sha(raw_export), feature_raw, chunk_size=BUDGET["chunk_size"], check=check
-        )
-        check()
         metric = training.result["metric"]
+
+        def predict(feature_raw):
+            return native_candidate.score(
+                raw_export, prepared["candidate_export_sha256"], feature_raw, chunk_size=BUDGET["chunk_size"], check=check
+            )["scores"]
+
         try:
-            primary = metric_value(metric, labels, scored["scores"])
-        except ValueError:
-            conflict("native_assessment_primary_metric_unavailable")
-        metrics = development_metrics(
-            labels, scored["scores"], contract["task"], len(contract["class_mapping"]), metric["cost_matrix"]
-        )
-        check()
+            calculated = calculate_assessment(
+                frame, development, training.specification["training"]["options"]["validation"],
+                spec["assessment_as_of"], contract, metric, training.result["features"], predict, check=check,
+            )
+        except AssessmentReplayError as error:
+            conflict(error.code)
         access.attempt_state = "completed"
         access.save(update_fields=["attempt_state"])
         confirmed = bool(protocol and not reason)
@@ -659,13 +608,9 @@ def assess(job, check):
             "prior_related_accesses": history["total_related_accesses"],
             "reuse_adjudication": reuse,
             "confirmation_reason": reason or "first_prospective_assessment_completed",
-            "n_assessed": len(frame),
+            **calculated,
             "metric": metric,
-            "primary_value": primary,
-            "metrics": metrics,
             "prediction_contract": contract,
-            "population_checks": separation,
-            "scores_sha256": digest(scored["scores"]),
             "candidate_adopted_for_assessment": True,
             "final_holdout_accessed": True,
             "evidence_status": "confirmatory" if confirmed else "exploratory",

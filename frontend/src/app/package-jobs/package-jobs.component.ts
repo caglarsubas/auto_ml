@@ -37,6 +37,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   job: any = null;
   handoff: any = null;
   foldExportDigest = '';
+  reproductionExportDigest = '';
   showHistory = false;
   busy = false;
   error = '';
@@ -45,6 +46,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   pending: { url: string; body: any } | null = null;
   private generation = 0;
   private receiptRequest = 0;
+  private reproductionRequest = 0;
   private requests = new Subscription();
   constructor(
     private http: HttpClient,
@@ -61,7 +63,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.showHistory = false;
     this.inputFileId = this.fileId;
     this.busy = false;
-    this.error = this.foldExportDigest = '';
+    this.error = this.foldExportDigest = this.reproductionExportDigest = '';
     this.refresh();
   }
   private url(value: string) {
@@ -87,7 +89,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     // Withdraw stale evidence before either refresh response can replace its
     // controls; keyboard actions must target the newly verified receipt.
     this.job = this.handoff = null;
-    this.foldExportDigest = '';
+    this.foldExportDigest = this.reproductionExportDigest = '';
     this.requests.add(
       this.http
         .get<any>(this.url(`datasets/${this.fileId}`), {
@@ -111,7 +113,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     if (this.busy) return;
     this.busy = true;
     this.job = this.handoff = null;
-    this.foldExportDigest = '';
+    this.foldExportDigest = this.reproductionExportDigest = '';
     this.error = '';
     const generation = ++this.generation;
     this.requests.add(
@@ -272,6 +274,54 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
         }),
     );
   }
+  get canDownloadReproduction(): boolean {
+    return (
+      this.role === 'reviewer' &&
+      this.job?.state === 'succeeded' &&
+      this.job.specification.kind === 'native_protected_assessment_v1' &&
+      this.job.specification.runtime?.reproduction_platform?.system === 'Linux' &&
+      /^[a-f0-9]{64}$/.test(this.job.result_sha256) &&
+      !['invalidated', 'historical_unverified'].includes(this.job.assessment_applicability?.status)
+    );
+  }
+  downloadReproduction(): void {
+    if (this.busy || !this.canDownloadReproduction) return;
+    const generation = this.generation;
+    const request = ++this.reproductionRequest;
+    const { id, result_sha256 } = this.job;
+    const current = () =>
+      generation === this.generation &&
+      request === this.reproductionRequest &&
+      this.job?.id === id &&
+      this.job.result_sha256 === result_sha256 &&
+      this.canDownloadReproduction;
+    this.reproductionExportDigest = '';
+    this.error = '';
+    this.requests.add(
+      this.http
+        .get(this.url(`${id}/reproduction`), {
+          params: { ...this.params, sha256: result_sha256 },
+          responseType: 'blob',
+          observe: 'response',
+          transferCache: false,
+        })
+        .subscribe({
+          next: (response) => {
+            if (!current()) return;
+            const digest = response.headers.get('X-DeclarAI-Export-SHA256');
+            if (!response.body || !digest || !/^[a-f0-9]{64}$/.test(digest)) {
+              this.error = 'Reproduction manifest is missing its integrity digest.';
+              return;
+            }
+            this.reproductionExportDigest = digest;
+            this.save(response.body, `reproduction-${id}.json`);
+          },
+          error: (error) => {
+            if (current()) this.fail(generation, error, false);
+          },
+        }),
+    );
+  }
   private save(blob: Blob, filename: string): void {
     downloadBlob(blob, filename);
   }
@@ -313,7 +363,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     if (generation !== this.generation) return;
     this.busy = false;
     this.job = this.handoff = null;
-    this.foldExportDigest = '';
+    this.foldExportDigest = this.reproductionExportDigest = '';
     if (error.status === 403 || !mutation) {
       this.directory = null;
       this.source = null;
@@ -336,7 +386,13 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
       this.http.get<any>(this.url(id), { params: this.params, transferCache: false }).subscribe({
         next: (job) => {
           if (generation !== this.generation || request !== this.receiptRequest) return;
-          if (job.specification.kind === 'native_protected_assessment_v1') this.job = job;
+          if (job.specification.kind === 'native_protected_assessment_v1') {
+            const previousDigest = this.job?.result_sha256;
+            this.job = job;
+            if (!this.canDownloadReproduction || previousDigest !== job.result_sha256) {
+              this.reproductionExportDigest = '';
+            }
+          }
           this.save(
             new Blob([JSON.stringify(job, null, 2)], { type: 'application/json' }),
             `job-${id}.json`,

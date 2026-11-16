@@ -171,6 +171,26 @@ class JobFoldProvenanceView(NativeReadView):
             return failure(exc)
 
 
+class JobReproductionView(NativeReadView):
+    def get(self, request, job_id):
+        from deployment.native_candidate import sha
+        from execution_jobs import reproduction
+
+        try:
+            params = request.query_params
+            if set(params) - {"sha256", "project_id"} or len(params.getlist("sha256")) != 1:
+                raise ValueError("Supply the exact assessment result digest.")
+            with history._bounded_read():
+                raw = reproduction.export(request.user, job_id, params["sha256"])
+            response = HttpResponse(raw, content_type="application/json")
+            response["Content-Disposition"] = f'attachment; filename="reproduction-{job_id}.json"'
+            response["X-DeclarAI-Export-SHA256"] = sha(raw)
+            response["Access-Control-Expose-Headers"] = "X-DeclarAI-Export-SHA256"
+            return response
+        except ERRORS as exc:
+            return failure(exc)
+
+
 class JobCandidateInputView(NativeReadView):
     def post(self, request, job_id):
         try:

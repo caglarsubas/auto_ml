@@ -197,6 +197,7 @@ def test_training_admission_and_preview_require_current_developer(world, role):
         "labels",
         "wide",
         "rows",
+        "embedded_nul",
     ],
 )
 def test_unsupported_or_contradictory_training_profiles_never_queue(world, fault):
@@ -231,10 +232,16 @@ def test_unsupported_or_contradictory_training_profiles_never_queue(world, fault
         w.frame.to_csv(w.path, index=False)
     elif fault == "wide":
         options["features"] = ["x"] * 33
+    elif fault == "embedded_nul":
+        raw = w.path.read_bytes().replace(b"-3.0,", b"-3.0\x00ignored,", 1)
+        assert b"\x00" in raw
+        w.path.write_bytes(raw)
     else:
         w.frame.iloc[:20].to_csv(w.path, index=False)
     response = post(w.clients["developer"], f"/api/jobs/datasets/{w.file_id}/training-input/", options)
     assert response.status_code in {400, 409}, response.content
+    if fault == "embedded_nul":
+        assert response.json() == {"error_code": "job_training_csv_profile_invalid"}
     assert not NativeJob.objects.exists()
 
 

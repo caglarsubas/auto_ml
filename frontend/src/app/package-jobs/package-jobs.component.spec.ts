@@ -16,6 +16,19 @@ describe('Durable package job receipts', () => {
     specification: { bundle_id: 'bundle-1' },
     events: [],
   };
+  const assessment = {
+    ...job,
+    state: 'succeeded',
+    result_sha256: 'a'.repeat(64),
+    specification: {
+      kind: 'native_protected_assessment_v1',
+      runtime: { reproduction_platform: { system: 'Linux' } },
+    },
+    result: { n_assessed: 60, primary_value: 0.7, metric: { primary_metric: 'roc_auc' } },
+    assessment_applicability: { status: 'exploratory' },
+  };
+  const reproductionUrl =
+    '/api/jobs/job-1/reproduction/?project_id=project-a&sha256=' + 'a'.repeat(64);
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [PackageJobsComponent],
@@ -283,5 +296,56 @@ describe('Durable package job receipts', () => {
     request.flush(body, { headers: { 'X-DeclarAI-Export-SHA256': 'b'.repeat(64) } });
     expect(save).toHaveBeenCalledWith(body);
     expect(component.foldExportDigest).toBe('b'.repeat(64));
+  });
+  it('downloads a reviewer manifest pinned to the assessment and retains its separate digest', () => {
+    const save = spyOn(URL, 'createObjectURL').and.returnValue('blob:reproduction-test');
+    spyOn(HTMLAnchorElement.prototype, 'click');
+    component.job = assessment;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Download reproduction manifest');
+    component.downloadReproduction();
+    const request = http.expectOne(reproductionUrl);
+    expect(request.request.responseType).toBe('blob');
+    expect(request.request.transferCache).toBeFalse();
+    const body = new Blob(['{}']);
+    request.flush(body, { headers: { 'X-DeclarAI-Export-SHA256': 'b'.repeat(64) } });
+    fixture.detectChanges();
+    expect(save).toHaveBeenCalledOnceWith(body);
+    expect(component.reproductionExportDigest).toBe('b'.repeat(64));
+    expect(component.foldExportDigest).toBe('');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Retain this reproduction manifest SHA-256',
+    );
+  });
+  it('withholds manifests for other roles, unsupported receipts and invalidated assessments', () => {
+    component.job = assessment;
+    component.role = 'developer';
+    component.downloadReproduction();
+    expect(component.canDownloadReproduction).toBeFalse();
+    component.role = 'reviewer';
+    for (const job of [
+      { ...assessment, state: 'queued' },
+      { ...assessment, result_sha256: '' },
+      { ...assessment, specification: { kind: 'native_protected_assessment_v1' } },
+      { ...assessment, assessment_applicability: { status: 'invalidated' } },
+    ]) {
+      component.job = job;
+      component.downloadReproduction();
+      expect(component.canDownloadReproduction).toBeFalse();
+    }
+    http.expectNone(reproductionUrl);
+  });
+  it('discards a late reproduction export after opening another job', () => {
+    const save = spyOn(URL, 'createObjectURL');
+    component.job = assessment;
+    component.reproductionExportDigest = 'b'.repeat(64);
+    component.downloadReproduction();
+    const stale = http.expectOne(reproductionUrl);
+    component.open('job-2');
+    http.expectOne('/api/jobs/job-2/?project_id=project-a').flush({ ...job, id: 'job-2' });
+    stale.flush(new Blob(['{}']), { headers: { 'X-DeclarAI-Export-SHA256': 'b'.repeat(64) } });
+    expect(save).not.toHaveBeenCalled();
+    expect(component.reproductionExportDigest).toBe('');
+    expect(component.job.id).toBe('job-2');
   });
 });
