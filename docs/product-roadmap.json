@@ -217,9 +217,15 @@
         "[P180 immutable publication qualification](evidence/p180-immutable-publication-qualification.json)",
         "[Implementation PR #297](https://github.com/caglarsubas/auto_ml/pull/297)",
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43709119883)",
-        "[Exact scoring parity](SCORING_PARITY_IMPLEMENTATION.md)"
+        "[Exact scoring parity](SCORING_PARITY_IMPLEMENTATION.md)",
+        "[P181 scoring parity qualification](evidence/p181-scoring-parity-qualification.json)",
+        "[Implementation PR #299](https://github.com/caglarsubas/auto_ml/pull/299)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43809693257)",
+        "[Original PostgreSQL attempt 1 rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43786772131)",
+        "[Original PostgreSQL attempt 2 rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43786772131)",
+        "[Original PostgreSQL attempt 3 rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43786772131)"
       ],
-      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P13 prevents upload and encoded CSV collisions with UUID names/exclusive creation, blocks success when required encoding metadata fails, and removes arbitrary legacy fallback selection. Full immutable legacy stages and distributed publication/recovery remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P15 archives native training-only numeric diagnostic matrices and method/state metadata for each execution and selected candidate subset. Detail inspection and saved-run refresh use exact execution identity with integrity checks; latest projections cannot silently replace saved evidence. Historical inputs remain unverified. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open. P26 pins optional review references to exact successful native job results and specifications. Job retention, complete scoring receipts, digest/snapshot validation and exact request replay are tested; references do not certify independent reproduction or authenticity. P27 adds method-named support-weighted rank AUC for requested multiclass stopping, retaining independent sklearn full assessment, input validation and unavailable-objective blocking. Reference callback histories, selected models and replay match across all three native boosters; private/full workflow qualification passes with unchanged budgets. No full reproduction, capacity or release claim. P28 adds immutable grouped training-input subspace GVIF with nominal category-code invariance, exact one-hot provenance, dimensional adjustment and explicit rank/precision/budget states. Exact native replay uses no fitted state or final outcomes; current reviewers may inspect both numeric and grouped reports, with revocation checks and keyboard summaries. Lossy category encodings block the conditioning set. Independent reference, full metadata and browser checks pass; paired uncertainty, SQLite worker contention, expert isolation and release/customer gates remain open. P28 final hardening validates native NumPy format, bounded header, exact dtype/shape and payload length before allocating arrays; a retained failing-before/passing-after case confirms the boundary. The final complete matrices and browser/runtime image qualify this stronger source without changing prediction calculations or budgets. P180 qualifies concurrent immutable stages, exact lineage and retry-safe publication and adoption on the supported profile. P181 adds the supported scoring matrix, exact package score state and consistent CSV reading. Independent merged-main qualification is pending."
+      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P13 prevents upload and encoded CSV collisions with UUID names/exclusive creation, blocks success when required encoding metadata fails, and removes arbitrary legacy fallback selection. Full immutable legacy stages and distributed publication/recovery remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P15 archives native training-only numeric diagnostic matrices and method/state metadata for each execution and selected candidate subset. Detail inspection and saved-run refresh use exact execution identity with integrity checks; latest projections cannot silently replace saved evidence. Historical inputs remain unverified. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open. P26 pins optional review references to exact successful native job results and specifications. Job retention, complete scoring receipts, digest/snapshot validation and exact request replay are tested; references do not certify independent reproduction or authenticity. P27 adds method-named support-weighted rank AUC for requested multiclass stopping, retaining independent sklearn full assessment, input validation and unavailable-objective blocking. Reference callback histories, selected models and replay match across all three native boosters; private/full workflow qualification passes with unchanged budgets. No full reproduction, capacity or release claim. P28 adds immutable grouped training-input subspace GVIF with nominal category-code invariance, exact one-hot provenance, dimensional adjustment and explicit rank/precision/budget states. Exact native replay uses no fitted state or final outcomes; current reviewers may inspect both numeric and grouped reports, with revocation checks and keyboard summaries. Lossy category encodings block the conditioning set. Independent reference, full metadata and browser checks pass; paired uncertainty, SQLite worker contention, expert isolation and release/customer gates remain open. P28 final hardening validates native NumPy format, bounded header, exact dtype/shape and payload length before allocating arrays; a retained failing-before/passing-after case confirms the boundary. The final complete matrices and browser/runtime image qualify this stronger source without changing prediction calculations or budgets. P180 qualifies concurrent immutable stages, exact lineage and retry-safe publication and adoption on the supported profile. P181 qualifies assessed and exported score parity for the supported native models and fitted transforms. D04 retains its D01 outcome dependency."
     },
     {
       "id": "D05",
@@ -2231,6 +2237,10 @@
     {
       "date": "2026-11-16",
       "change": "Implement P181 for D04-T02. Verify assessed and exported score parity before taking backlog credit."
+    },
+    {
+      "date": "2026-11-16",
+      "change": "Qualify D04-T02 with implementation PR #299 and independent push-main CI 43809693257. Backlog moves from 19/40/7 to 20/39/7 done/open/blocked across 66 tasks."
     }
   ],
   "implementation_packets": [
@@ -5444,12 +5454,18 @@
         "D04"
       ],
       "owner": "Backend/ML",
-      "status": "implemented",
+      "status": "tested",
       "description": "Compare assessment and frozen bundle scores across the supported model matrix. Bind fitted state and parse scoring inputs consistently across entry points.",
       "evidence": [
-        "[Exact scoring parity](SCORING_PARITY_IMPLEMENTATION.md)"
+        "[Exact scoring parity](SCORING_PARITY_IMPLEMENTATION.md)",
+        "[P181 scoring parity qualification](evidence/p181-scoring-parity-qualification.json)",
+        "[Implementation PR #299](https://github.com/caglarsubas/auto_ml/pull/299)",
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43809693257)",
+        "[Original PostgreSQL attempt 1 rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43786772131)",
+        "[Original PostgreSQL attempt 2 rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43786772131)",
+        "[Original PostgreSQL attempt 3 rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43786772131)"
       ],
-      "remaining": "D04-T02 awaits pull-request and independent merged-main qualification."
+      "remaining": "Scoring parity is qualified for the supported native matrix. D09-T01 can proceed with independent refit and assessment reproduction."
     }
   ],
   "release_qualification": {
@@ -5865,13 +5881,13 @@
       {
         "id": "D04-T02",
         "title": "Qualify scoring parity across the supported model matrix",
-        "description": "Extend evaluated/exported score parity over remaining models, transforms and calibrators.",
+        "description": "Verify assessed and exported scores across all supported model families, including fitted preparation, calibration, and reordered and chunked input.",
         "items": [
           "D04"
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "in_progress",
+        "phase": "done",
         "dependencies": [
           "D04-T01"
         ],
@@ -5881,7 +5897,13 @@
         ],
         "blockers": [],
         "evidence": [
-          "[Exact scoring parity](SCORING_PARITY_IMPLEMENTATION.md)"
+          "[Exact scoring parity](SCORING_PARITY_IMPLEMENTATION.md)",
+          "[P181 scoring parity qualification](evidence/p181-scoring-parity-qualification.json)",
+          "[Implementation PR #299](https://github.com/caglarsubas/auto_ml/pull/299)",
+          "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43809693257)",
+          "[Original PostgreSQL attempt 1 rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43786772131)",
+          "[Original PostgreSQL attempt 2 rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43786772131)",
+          "[Original PostgreSQL attempt 3 rejection](https://github.com/caglarsubas/auto_ml/actions/runs/43786772131)"
         ],
         "packet_refs": [
           "P181"
