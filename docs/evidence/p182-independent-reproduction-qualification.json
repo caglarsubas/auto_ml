@@ -1,0 +1,328 @@
+{
+  "schema": "independent_reproduction_acceptance_v1",
+  "packet": "P182",
+  "task": "D09-T01",
+  "pr": 301,
+  "qualified_head": "59b0015f130599b298134f5c57bbb1a7e025d384",
+  "merge": "3b8061c671ff0116acc71ab1bb7f7e6c8569d9ae",
+  "ci_run": 43853511492,
+  "main_run": 43861877702,
+  "required_checks": [
+    "Backend lint (ruff)",
+    "Backend tests (pytest)",
+    "Frontend E2E (Playwright)",
+    "Frontend lint (ESLint + Prettier)",
+    "Frontend unit tests (Karma)",
+    "PostgreSQL runtime and metadata",
+    "Private expert worker (gVisor)"
+  ],
+  "main_qualified": true,
+  "merged_tree_matches_qualified_pr": true,
+  "source_hashes_match": true,
+  "original_case_skip_workload_limits_preserved": true,
+  "previous_backlog": {
+    "done": 20,
+    "open": 39,
+    "blocked": 7,
+    "total": 66
+  },
+  "qualified_backlog": {
+    "done": 21,
+    "open": 38,
+    "blocked": 7,
+    "total": 66
+  },
+  "done_percentage_point_change": 1.5,
+  "pr_qualification": {
+    "run": 43853511492,
+    "run_attempt": 1,
+    "head": "59b0015f130599b298134f5c57bbb1a7e025d384",
+    "event": "pull_request",
+    "required_checks": [
+      "Backend lint (ruff)",
+      "Backend tests (pytest)",
+      "Frontend E2E (Playwright)",
+      "Frontend lint (ESLint + Prettier)",
+      "Frontend unit tests (Karma)",
+      "PostgreSQL runtime and metadata",
+      "Private expert worker (gVisor)"
+    ],
+    "jobs": {
+      "Frontend lint (ESLint + Prettier)": 133251971325,
+      "PostgreSQL runtime and metadata": 133251971678,
+      "Private expert worker (gVisor)": 133251971702,
+      "Frontend unit tests (Karma)": 133251971776,
+      "Frontend E2E (Playwright)": 133251971839,
+      "Backend lint (ruff)": 133251971949,
+      "Backend tests (pytest)": 133251972105
+    },
+    "seven_jobs_passed": true,
+    "original_case_skip_workload_limits_preserved": true,
+    "source_hashes_match": true,
+    "application_source_sha256": "3a780bfe182674cc6f804ef60478be34c4a16144bf9dc8b82fc97943d3668ead",
+    "native": {
+      "tests": 7837,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 862.877,
+      "workers": 2,
+      "worker_restarts": 0,
+      "cap_seconds": 900,
+      "covered_lines": 17917,
+      "total_lines": 22715,
+      "covered_branches": 5360,
+      "total_branches": 7726,
+      "added_cases": [
+        "tests.unit.test_durable_training_search::test_unsupported_or_contradictory_training_profiles_never_queue[embedded_nul]",
+        "tests.unit.test_independent_reproduction::test_reproduce_regression_blocks_altered_evidence_or_authority",
+        "tests.unit.test_independent_reproduction::test_reproduce_temporal_first_use_in_separate_custody"
+      ]
+    },
+    "artifacts": {
+      "postgresql-runtime-reports": {
+        "id": 14224260603,
+        "sha256": "4b923c39e320511626d37b726109298bbd422ea913e80ef8176369a69e1d9735"
+      },
+      "backend-test-reports": {
+        "id": 14220948224,
+        "sha256": "b42f0b7d6b195ffb925dd915a07716ef626ecfcd69e9d3f887d3ca6df60b3a42"
+      },
+      "private-expert-worker-report": {
+        "id": 14219491986,
+        "sha256": "a606cab184484460b0dfcd2ff68616d80f3a320c6f3c006e704fd9329622bfbd"
+      },
+      "playwright-report": {
+        "id": 14219248301,
+        "sha256": "068d74d65646bbbfce09fc805625bef9c4704418d903f1c7422917f2f9c8cf62"
+      }
+    },
+    "offline_reproduction": {
+      "metadata_only": true,
+      "environment": {
+        "schema_version": 1,
+        "scope": "native_refit_assessment_reproduction_v1",
+        "synthetic_fixture": true,
+        "runtime_image": "sha256:a468461859bce29b8054c5d270b91908361ef0ea9f6995a007c9dce99e6bd9e7",
+        "network": "none",
+        "read_only_runtime": true,
+        "unprivileged": true,
+        "installation_media": "empty read-only tmpfs",
+        "checks": [
+          {
+            "task": "regression",
+            "exit_code": 0,
+            "qualified": true
+          },
+          {
+            "task": "classification",
+            "exit_code": 0,
+            "qualified": true
+          }
+        ]
+      },
+      "replays": {
+        "classification": {
+          "schema_version": 1,
+          "scope": "native_refit_assessment_reproduction_v1",
+          "status": "passed",
+          "task": "classification",
+          "manifest_sha256": "b8eed439a483eb4bd120e4feb8024bb8b078ebc90a09635d515ed4a212c3b4f6",
+          "training_result_sha256": "13b445f78a44c5591761026d9013d967fd8041cc56d420ccebe2c310ab4b551b",
+          "assessment_result_sha256": "12732e33e28b027af9a4002635aad4b952172caf93fe74189ffb00b0ef7f2acf",
+          "development_sha256": "65f81fbdd8433d7f1f0e5d3b00ddef06157f96060e707976e82f3a1346028a35",
+          "outcomes_sha256": "b90014e7cc63c5b38193394decff688c279b830ca26148748d642ebce28a9f95",
+          "candidate_export_sha256": "ffabfb8959b0d35033e39b7214bc4144f948134bfc9771b75a043101a45f3e8c",
+          "model_sha256": "7a12e963d69125d68c6d06e62f1a3aeef2ddf899e8bbfe14ea5efee4fc93d68b",
+          "scores_sha256": "80015156d7363fffb9006d3559f61b7662d6523adc35de31184bd91f867d0e92",
+          "outcome_access_id": "b41d5c28-859b-47a3-8987-25b23f532a57",
+          "n_assessed": 60,
+          "model_refit_reproduced": true,
+          "assessment_reproduced": true,
+          "comparison": "exact_canonical_result_and_scores_sha256",
+          "confirmation_granted": false,
+          "review_approved": false,
+          "production_use_approved": false
+        },
+        "regression": {
+          "schema_version": 1,
+          "scope": "native_refit_assessment_reproduction_v1",
+          "status": "passed",
+          "task": "regression",
+          "manifest_sha256": "2354509493241e263ff17167d7f520d84be3786d57577644432f686bd5940dd4",
+          "training_result_sha256": "520b626b856c3b554bf245eabba5a1a0ed02f7ff2c46270ef3cc2411f15249f7",
+          "assessment_result_sha256": "3fd3c6ed124b1d28fd4beaf74997d069fcc8f87c006cf8eab028d07c34236fb0",
+          "development_sha256": "edccab5ef2aa28e6083f24a9a8de12901deb3c43e3a7bb2132dd9dd46961c8d9",
+          "outcomes_sha256": "60914371ab6beba7466eb1a5f9344e87ff501aa74605e98c22ed1d3c2c853d5f",
+          "candidate_export_sha256": "abfe1d1c97fe593399683e5150c6833fba989d551f82e26d67fe4be828c6e5f8",
+          "model_sha256": "56772421146d978c3f5fbee3a762456ad0004ed7d4a75ef07c8e4cc9fea749b8",
+          "scores_sha256": "9571848c2832cdd153ec09e5de3d028c5e65c35f9102bd19d9f137134a7b3da9",
+          "outcome_access_id": "babcfa79-500f-4ac5-96ba-6e6850d3514b",
+          "n_assessed": 60,
+          "model_refit_reproduced": true,
+          "assessment_reproduced": true,
+          "comparison": "exact_canonical_result_and_scores_sha256",
+          "confirmation_granted": false,
+          "review_approved": false,
+          "production_use_approved": false
+        }
+      }
+    }
+  },
+  "main_qualification": {
+    "run": 43861877702,
+    "run_attempt": 2,
+    "head": "3b8061c671ff0116acc71ab1bb7f7e6c8569d9ae",
+    "event": "push",
+    "required_checks": [
+      "Backend lint (ruff)",
+      "Backend tests (pytest)",
+      "Frontend E2E (Playwright)",
+      "Frontend lint (ESLint + Prettier)",
+      "Frontend unit tests (Karma)",
+      "PostgreSQL runtime and metadata",
+      "Private expert worker (gVisor)"
+    ],
+    "jobs": {
+      "PostgreSQL runtime and metadata": 133310461967,
+      "Private expert worker (gVisor)": 133310464328,
+      "Backend lint (ruff)": 133310464686,
+      "Backend tests (pytest)": 133310511900,
+      "Frontend E2E (Playwright)": 133310526852,
+      "Frontend lint (ESLint + Prettier)": 133310530522,
+      "Frontend unit tests (Karma)": 133310548051
+    },
+    "seven_jobs_passed": true,
+    "original_case_skip_workload_limits_preserved": true,
+    "source_hashes_match": true,
+    "application_source_sha256": "3a780bfe182674cc6f804ef60478be34c4a16144bf9dc8b82fc97943d3668ead",
+    "native": {
+      "tests": 7837,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 893.66,
+      "workers": 2,
+      "worker_restarts": 0,
+      "cap_seconds": 900,
+      "covered_lines": 17917,
+      "total_lines": 22715,
+      "covered_branches": 5360,
+      "total_branches": 7726,
+      "added_cases": [
+        "tests.unit.test_durable_training_search::test_unsupported_or_contradictory_training_profiles_never_queue[embedded_nul]",
+        "tests.unit.test_independent_reproduction::test_reproduce_regression_blocks_altered_evidence_or_authority",
+        "tests.unit.test_independent_reproduction::test_reproduce_temporal_first_use_in_separate_custody"
+      ]
+    },
+    "artifacts": {
+      "postgresql-runtime-reports": {
+        "id": 14229874778,
+        "sha256": "2ccb83fd561949cccae012c355aebc27d3617ebc40b4cc02d17d2dd933e10890"
+      },
+      "backend-test-reports": {
+        "id": 14223744243,
+        "sha256": "0b9439dd0fe38af11e7b8d3cd954874970c0b9327427cd7e31cb743ada749c36"
+      },
+      "private-expert-worker-report": {
+        "id": 14223461809,
+        "sha256": "2827647dbc456bd5a23f9f79b7a08e0a133a9e49e21d808dc9384ad65841b921"
+      },
+      "playwright-report": {
+        "id": 14223547649,
+        "sha256": "f960caa243627e090d050d3aea7b782788e6057e36ee790a50330c0c08d20478"
+      }
+    },
+    "offline_reproduction": {
+      "metadata_only": true,
+      "environment": {
+        "schema_version": 1,
+        "scope": "native_refit_assessment_reproduction_v1",
+        "synthetic_fixture": true,
+        "runtime_image": "sha256:ef629a69d4eb0c6c00f1df5417b42d09aa5e92626b866086496b3f4fd5ec2bc4",
+        "network": "none",
+        "read_only_runtime": true,
+        "unprivileged": true,
+        "installation_media": "empty read-only tmpfs",
+        "checks": [
+          {
+            "task": "regression",
+            "exit_code": 0,
+            "qualified": true
+          },
+          {
+            "task": "classification",
+            "exit_code": 0,
+            "qualified": true
+          }
+        ]
+      },
+      "replays": {
+        "classification": {
+          "schema_version": 1,
+          "scope": "native_refit_assessment_reproduction_v1",
+          "status": "passed",
+          "task": "classification",
+          "manifest_sha256": "06be329e4458b10af736690e12c6c4c222d3be19c061f31780dc7f8fce723aaa",
+          "training_result_sha256": "dfaabf78f14f4ecdaf96635468a3108335aedb28c5e7d507aaacad36a5e89d8b",
+          "assessment_result_sha256": "0a71976cefa54cafab776ccaf44745e690c5db7dda95cdde0358a39b91dea3f5",
+          "development_sha256": "65f81fbdd8433d7f1f0e5d3b00ddef06157f96060e707976e82f3a1346028a35",
+          "outcomes_sha256": "b90014e7cc63c5b38193394decff688c279b830ca26148748d642ebce28a9f95",
+          "candidate_export_sha256": "472ca93d9dfeb899c8dc7d3ef0491fb2539905d7f416a5774a4fa69a91837005",
+          "model_sha256": "7a12e963d69125d68c6d06e62f1a3aeef2ddf899e8bbfe14ea5efee4fc93d68b",
+          "scores_sha256": "80015156d7363fffb9006d3559f61b7662d6523adc35de31184bd91f867d0e92",
+          "outcome_access_id": "ea9cd124-c669-4bb1-8394-4efea8b6790d",
+          "n_assessed": 60,
+          "model_refit_reproduced": true,
+          "assessment_reproduced": true,
+          "comparison": "exact_canonical_result_and_scores_sha256",
+          "confirmation_granted": false,
+          "review_approved": false,
+          "production_use_approved": false
+        },
+        "regression": {
+          "schema_version": 1,
+          "scope": "native_refit_assessment_reproduction_v1",
+          "status": "passed",
+          "task": "regression",
+          "manifest_sha256": "24d9b3c54d98d3fa47b6dffe64e8a66ad70d728a76c753f27c934a53fdfd3914",
+          "training_result_sha256": "423d013cee7b921ed838ede2e1a1c3272e91dec3b11639e598560d1d3a661142",
+          "assessment_result_sha256": "9274c16e17d85d75b9e389b9ec49d304eeab234f080e7fde89cea192ab5ea9c9",
+          "development_sha256": "edccab5ef2aa28e6083f24a9a8de12901deb3c43e3a7bb2132dd9dd46961c8d9",
+          "outcomes_sha256": "60914371ab6beba7466eb1a5f9344e87ff501aa74605e98c22ed1d3c2c853d5f",
+          "candidate_export_sha256": "fc6805204f78c6159ca481afb52ca682f9ecb2d67d6a1f6595719f9badb100b2",
+          "model_sha256": "56772421146d978c3f5fbee3a762456ad0004ed7d4a75ef07c8e4cc9fea749b8",
+          "scores_sha256": "9571848c2832cdd153ec09e5de3d028c5e65c35f9102bd19d9f137134a7b3da9",
+          "outcome_access_id": "8c83d227-e430-4f93-a442-76c8291cd30b",
+          "n_assessed": 60,
+          "model_refit_reproduced": true,
+          "assessment_reproduced": true,
+          "comparison": "exact_canonical_result_and_scores_sha256",
+          "confirmation_granted": false,
+          "review_approved": false,
+          "production_use_approved": false
+        }
+      }
+    },
+    "prior_rejected_attempts": [
+      {
+        "run": 43861877702,
+        "attempt": 1,
+        "job": 133280482115,
+        "head": "3b8061c671ff0116acc71ab1bb7f7e6c8569d9ae",
+        "artifact_id": 14227271205,
+        "artifact_sha256": "d1bd3547539d607b4d869feaf508c84f3c12407cd12048ca8b28c3590e2f2e9f",
+        "native_cap_seconds": 900,
+        "qualified": false,
+        "finished_cases": 7835,
+        "reason": "native_process_timeout"
+      }
+    ],
+    "retry_scope": "PostgreSQL runtime and metadata"
+  },
+  "supported_profile": "native numeric XGBoost binary classification and regression",
+  "clean_refit_and_assessment_reproduced": true,
+  "named_independent_reviewer_acceptance": false,
+  "release_qualified": false,
+  "rejected_implementation": []
+}
