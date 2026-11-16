@@ -7,6 +7,7 @@ from datetime import timedelta
 from io import StringIO
 
 import pytest
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.models import Session
 from django.core.management import call_command
@@ -34,9 +35,14 @@ def signin(client, username, password=PASSWORD, **headers):
     )
 
 
+@pytest.fixture(scope="module")
+def governance_actor_password_digest():
+    return make_password(PASSWORD)
+
+
 @pytest.fixture
-def actor(django_user_model):
-    return django_user_model.objects.create_user(username="governance-actor", password=PASSWORD)
+def actor(django_user_model, governance_actor_password_digest):
+    return django_user_model.objects.create(username="governance-actor", password=governance_actor_password_digest)
 
 
 def test_login_and_logout_have_bound_attributable_receipts_without_credentials(actor):

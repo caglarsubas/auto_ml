@@ -1,17 +1,24 @@
 """Exercise actual session middleware, permissions and CSRF on HTTP routes."""
 import pytest
+from django.contrib.auth.hashers import make_password
 from rest_framework.test import APIClient
 
 pytestmark = [pytest.mark.unit, pytest.mark.django_db, pytest.mark.auth_boundary]
+MUTATION_ACTOR_PASSWORD = 'synthetic-session-test-pass'
+
+
+@pytest.fixture(scope='module')
+def mutation_actor_password_digest():
+    return make_password(MUTATION_ACTOR_PASSWORD)
 
 
 @pytest.fixture
-def csrf_session_client(django_user_model):
-    django_user_model.objects.create_user(username='mutation-test', password='synthetic-session-test-pass')
+def csrf_session_client(django_user_model, mutation_actor_password_digest):
+    django_user_model.objects.create(username='mutation-test', password=mutation_actor_password_digest)
     client = APIClient(enforce_csrf_checks=True)
     csrf = client.get('/api/auth/session/').json()['csrf_token']
     login = client.post('/api/auth/login/', {
-        'username': 'mutation-test', 'password': 'synthetic-session-test-pass',
+        'username': 'mutation-test', 'password': MUTATION_ACTOR_PASSWORD,
     }, format='json', HTTP_X_CSRFTOKEN=csrf)
     assert login.status_code == 200
     client.credentials(HTTP_X_CSRFTOKEN=login.json()['csrf_token'])

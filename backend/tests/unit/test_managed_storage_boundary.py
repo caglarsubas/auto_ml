@@ -5,19 +5,26 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from django.contrib.auth.hashers import make_password
 from rest_framework.test import APIClient
 
 from declaration.models import Declaration
 
 pytestmark = [pytest.mark.unit, pytest.mark.auth_boundary, pytest.mark.django_db]
+STORAGE_ACTOR_PASSWORD = 'synthetic-storage-test-pass'
+
+
+@pytest.fixture(scope='module')
+def storage_actor_password_digest():
+    return make_password(STORAGE_ACTOR_PASSWORD)
 
 
 @pytest.fixture
-def actor_client(django_user_model):
-    django_user_model.objects.create_user(username='storage-actor', password='synthetic-storage-test-pass')
+def actor_client(django_user_model, storage_actor_password_digest):
+    django_user_model.objects.create(username='storage-actor', password=storage_actor_password_digest)
     client = APIClient(enforce_csrf_checks=True)
     token = client.get('/api/auth/session/').json()['csrf_token']
-    login = client.post('/api/auth/login/', {'username': 'storage-actor', 'password': 'synthetic-storage-test-pass'},
+    login = client.post('/api/auth/login/', {'username': 'storage-actor', 'password': STORAGE_ACTOR_PASSWORD},
         format='json', HTTP_X_CSRFTOKEN=token)
     assert login.status_code == 200
     client.credentials(HTTP_X_CSRFTOKEN=login.json()['csrf_token'])

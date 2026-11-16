@@ -593,7 +593,6 @@ def main():
                     f"--junitxml=../{relative}/postgresql.xml",
                     "--cov",
                     f"--cov-report=xml:../{relative}/postgresql-coverage.xml",
-                    "--cov-report=term-missing",
                     "--cov-fail-under=50",
                 ],
                 test_env,
