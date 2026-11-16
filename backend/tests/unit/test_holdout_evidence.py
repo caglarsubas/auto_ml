@@ -314,3 +314,44 @@ def test_history_requires_real_authentication_without_exposing_final_inputs(sett
     request = APIRequestFactory().get('/', {'file_id': 42})
     force_authenticate(request, user=user)
     assert HoldoutHistoryView.as_view()(request, execution_id=execution).status_code == 200
+
+
+def test_exact_assessment_cannot_load_scorers_outside_the_manifest(trained, settings, monkeypatch):
+    file_id, published = trained
+    execution_id = published['execution_id']
+    root = execution_root(execution_id)
+    manifest_path = root / 'manifest.json'
+    status_path = root / 'modeling_status.json'
+    original_status = status_path.read_bytes()
+    manifest = json.loads(manifest_path.read_text())
+    media = Path(settings.MEDIA_ROOT)
+
+    def record(path, raw):
+        path.write_bytes(raw)
+        manifest['files'][path.relative_to(root).as_posix()] = {
+            'bytes': len(raw), 'sha256': digest_file(path),
+        }
+        manifest_path.write_text(json.dumps(manifest))
+
+    outside = media / 'foreign-model.joblib'
+    outside.write_bytes((media / published['model']['model_path']).read_bytes())
+    altered = json.loads(original_status)
+    altered['model']['model_path'] = outside.name
+    record(status_path, json.dumps(altered).encode())
+    rejected = assess(file_id, execution_id)
+    assert rejected.status_code == 409 and 'outside the verified execution' in rejected.data['error']
+    assert not HoldoutAccess.objects.exists()
+
+    record(status_path, original_status)
+    train_path = media / published['model']['train_data_path']
+    development = pickle.loads(train_path.read_bytes())
+    assert development['calibration']['fitted']
+    outside.write_bytes((media / development['calibrator_path']).read_bytes())
+    development['calibrator_path'] = outside.name
+    record(train_path, pickle.dumps(development))
+    loaded = []
+    monkeypatch.setattr('evaluation.views.load_calibrator', lambda *args: loaded.append(args))
+    rejected = assess(file_id, execution_id)
+    assert rejected.status_code == 500 and 'uncalibrated evaluation is blocked' in rejected.data['error']
+    assert not loaded
+    assert HoldoutAccess.objects.get().attempt_state == 'failed'

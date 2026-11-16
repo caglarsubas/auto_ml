@@ -9,7 +9,8 @@ from pathlib import Path
 PACKAGES = ('Django', 'djangorestframework', 'pandas', 'numpy', 'scikit-learn',
             'xgboost', 'lightgbm', 'catboost', 'joblib')
 RUNTIME_FILES = ('deployment/deploy_utils.py', 'deployment/evidence.py',
-                 'deployment/scoring_receipts.py', 'deployment/offline_verify.py', 'encoding/fitted.py', 'encoding/constrained.py',
+                 'deployment/scoring_csv.py', 'deployment/scoring_receipts.py', 'deployment/offline_verify.py',
+                 'encoding/fitted.py', 'encoding/constrained.py',
                  'preprocessing/replay.py', 'modeling/alt_pipelines.py',
                  'modeling/booster_adapters.py', 'modeling/calibration_utils.py',
                  'modeling/execution_artifacts.py', 'evaluation/eval_utils.py', 'deployment/runtime_metadata.py')

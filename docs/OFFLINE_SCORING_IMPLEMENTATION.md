@@ -23,10 +23,10 @@ python -m deployment.offline_verify \
   --package-sha256 "$PACKAGE_SHA256" --receipt-sha256 "$RECEIPT_SHA256" \
   --manifest-sha256 "$MANIFEST_SHA256" \
   --trust-native-state --atol 1e-12 --rtol 1e-12 \
-  --chunk-sizes 1 17 64 --output /evidence/verification.json
+  --chunk-sizes 1 17 64 --check-reordering --output /evidence/verification.json
 ```
 
-The tolerance values above belong to the qualified synthetic profile, not a universal statistical gate. A reviewer must select and record tolerances for the declared model/hardware. At least two distinct positive chunk sizes are required. The CSV is parsed once with the recorded pandas defaults, then partitioned without changing row order or inferred types. This checks scorer batch invariance rather than independent CSV chunk-parser inference. Monitoring summaries naturally differ with batch size and are excluded from prediction parity.
+The synthetic profile uses the tolerances above. A reviewer must select and record tolerances for the declared model and hardware. At least two distinct positive chunk sizes are required. The verifier parses the CSV once using the recorded parser and frozen text columns, then partitions the parsed rows. Each replayed chunk must return a finite score of the expected shape for every input row. The optional `--check-reordering` flag adds two full-batch comparisons, one with reversed row order and expected scores in that same order, and one with reversed column order and expected scores in the original order. The synthetic qualification script requires both comparisons to pass. Monitoring summaries vary with batch size and are excluded from prediction parity.
 
 Before native state loading, the verifier copies approved inputs into a private temporary directory, checks independent ZIP/receipt/manifest hashes and exact CSV bytes/parser metadata, rejects traversal, links, duplicate/encrypted or unrecorded ZIP members, verifies package publication/artifact integrity and exact version identities, and compares runtime Python/dependency versions and recorded core scoring-source hashes. The original model environment must also match. Dependency/source drift blocks qualification instead of issuing a qualified-looking pass. These source hashes cover the listed scoring modules, not a cryptographic attestation of the whole runtime image or every transitive dependency.
 
@@ -34,7 +34,7 @@ Only versioned registered native XGBoost, LightGBM, CatBoost, logistic, scorecar
 
 ## Results and limits
 
-The immutable-by-creation JSON output records exact evidence identities/digests, environment, row/score shape, declared tolerances, whole-batch and chunk checks, maximum absolute differences and pass/fail status. Numerical disagreement produces `failed`; missing/changed/unsupported input or runtime produces `blocked`. Both return a nonzero process exit. Existing output paths are never overwritten. A blocked check defined by this runner includes an actionable explanation; unexpected runtime errors retain a generic error without source data or deserializer details.
+The immutable-by-creation JSON output records exact evidence identities and digests, the environment, row and score shapes, declared tolerances, whole-batch and chunk checks, maximum absolute differences, and pass/fail status. When requested, `layout_checks` records the two reordered comparisons and affects the overall status. Numerical disagreement produces `failed`. Missing, changed, or unsupported input or runtime produces `blocked`. Both return a nonzero process exit. Existing output paths are never overwritten. A blocked check defined by this runner includes an actionable explanation. Unexpected runtime errors retain a generic error without source data or deserializer details.
 
 Full refit and assessment reproduction need additional versioned, approved datasets, execution recipes and environment packaging. P21 exports no additional training/holdout rows and makes no new data-egress policy claim. Organizational approval/exception protocols, comprehensive accessibility, D07 offline installation/durable jobs/recovery, D08 expert isolation, the agentic pilot and release/value/customer gates remain open.
 

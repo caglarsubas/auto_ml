@@ -174,7 +174,8 @@ def fit_woe_maps(
             }
             woe_cols[col] = cats.astype('Int64').astype('string').map(mapping).fillna(0.0)
         else:
-            cats = s.astype(str).fillna('__NULL__')
+            numeric_levels = pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s)
+            cats = _numeric_woe_level_keys(s) if numeric_levels else s.astype(str).fillna('__NULL__')
             tab = pd.crosstab(cats, y)
             if tab.shape[1] < 2:
                 continue
@@ -195,7 +196,7 @@ def fit_woe_maps(
                 for k in tab.index
             ]
             maps[col] = {
-                'kind': 'categorical',
+                'kind': 'numeric_levels_v1' if numeric_levels else 'categorical',
                 'iv': iv if np.isfinite(iv) else None,
                 'mapping': mapping,
                 'bins': bins_meta,
@@ -212,6 +213,17 @@ def _numeric_woe_bins(series, edges):
     return pd.Series(bins, index=series.index).where(np.isfinite(values))
 
 
+def _numeric_woe_level_keys(series):
+    """Normalize each numeric value independently of the current dataframe dtype."""
+    def key(value):
+        if pd.isna(value) or not np.isfinite(value):
+            return '__NULL__'
+        integer = int(value)
+        return str(integer if value == integer else value)
+
+    return pd.to_numeric(series, errors='coerce').map(key)
+
+
 def transform_woe(X: pd.DataFrame, maps: Dict[str, Any]) -> pd.DataFrame:
     out = {}
     for col, meta in maps.items():
@@ -222,6 +234,8 @@ def transform_woe(X: pd.DataFrame, maps: Dict[str, Any]) -> pd.DataFrame:
         if meta.get('kind') == 'numeric_quantile_v2':
             cats = _numeric_woe_bins(s, meta['edges'])
             out[col] = cats.astype('Int64').astype('string').map(mapping).fillna(0.0)
+        elif meta.get('kind') == 'numeric_levels_v1':
+            out[col] = _numeric_woe_level_keys(s).map(mapping).astype(float).fillna(0.0)
         elif meta.get('kind') == 'numeric_qcut' and meta.get('edges'):
             # Historical artifacts retain the prediction behavior they recorded.
             try:

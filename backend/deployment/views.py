@@ -155,16 +155,17 @@ class DeploymentScoreView(APIView):
                     ):
                         return Response({'error_code': 'prospective_outcomes_protected'}, status=409)
                     from deployment.evidence import verify_bundle
-                    from encoding.fitted import constrained_text_columns
+                    from deployment.scoring_csv import read_scoring_csv, scoring_text_columns
                     requested_bundle = request.data.get('bundle_id')
                     manifest, _ = verify_bundle(bundle_dir(file_id, requested_bundle), file_id, requested_bundle)
                     resolved_bundle = manifest.get('bundle_id') or requested_bundle
-                    text_columns = {column: 'string' for column in constrained_text_columns(manifest.get('encoding_report') or [])}
+                    text_columns = scoring_text_columns(manifest)
                     if tmp_path.endswith('.csv'):
-                        df = pd.read_csv(tmp_path, dtype=text_columns or None)
-                        input_receipt = csv_input(Path(tmp_path).read_bytes(), string_columns=text_columns)
+                        raw = Path(tmp_path).read_bytes()
+                        df = read_scoring_csv(raw, string_columns=text_columns)
+                        input_receipt = csv_input(raw, string_columns=text_columns)
                     else:
-                        df = pd.read_excel(tmp_path, dtype=text_columns or None)
+                        df = pd.read_excel(tmp_path, dtype={column: 'string' for column in text_columns} or None)
                         input_receipt = {'format': 'excel', 'offline_verification_supported': False}
                 finally:
                     try:

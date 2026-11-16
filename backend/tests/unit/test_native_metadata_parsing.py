@@ -170,9 +170,22 @@ def test_decoder_supported_depth_gets_a_complete_scope_check(world, shape, forei
     # This is supported by the actual decoder. The old Python scope walk fails.
     json.loads(raw)
     out = Path(bundle_dir(world[0], world[2]["bundle_id"]))
-    (out / "evaluation.json").write_bytes(raw)
+    evaluation_path, assessment_path = out / "evaluation.json", out / "assessment_manifest.json"
+    # Preserve a valid exact assessment while injecting the decoder-supported
+    # extension. Its copies must still bind to the same assessment files.
+    evaluation = evaluation_path.read_bytes().rstrip()
+    evaluation_raw = evaluation[:-1] + b',"nested_evidence":' + raw + b"}"
+    evaluation_path.write_bytes(evaluation_raw)
+    entry = {"bytes": len(evaluation_raw), "sha256": hashlib.sha256(evaluation_raw).hexdigest()}
+    assessment = json.loads(assessment_path.read_bytes())
+    assessment["files"]["evaluation.json"] = entry
+    assessment_raw = json.dumps(assessment).encode()
+    assessment_path.write_bytes(assessment_raw)
     manifest = json.loads((out / "manifest.json").read_bytes())
-    manifest["artifact_integrity"]["evaluation.json"].update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+    manifest["artifact_integrity"]["evaluation.json"] = entry
+    manifest["artifact_integrity"]["assessment_manifest.json"] = {
+        "bytes": len(assessment_raw), "sha256": hashlib.sha256(assessment_raw).hexdigest(),
+    }
     manifest_raw = json.dumps(manifest).encode()
     sha = hashlib.sha256(manifest_raw).hexdigest()
     (out / "manifest.json").write_bytes(manifest_raw)

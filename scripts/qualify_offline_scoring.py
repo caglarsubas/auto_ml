@@ -54,7 +54,8 @@ def main():
                        '--receipt-sha256', context['receipt_sha256'],
                        '--manifest-sha256', context['manifest_sha256'],
                        '--trust-native-state', '--atol', '1e-12', '--rtol', '1e-12',
-                       '--chunk-sizes', '1', '17', '64', '--output', '/evidence/verification.json']
+                       '--chunk-sizes', '1', '17', '64', '--check-reordering',
+                       '--output', '/evidence/verification.json']
             try:
                 result = subprocess.run(command, capture_output=True, text=True, timeout=180)
             finally:
@@ -67,9 +68,15 @@ def main():
             (args.reports / f'{task}.log').write_text(result.stdout + result.stderr)
             report = json.loads((output / 'verification.json').read_text()) if (output / 'verification.json').is_file() else {'status': 'blocked'}
             (args.reports / f'{task}.json').write_text(json.dumps(report, indent=2))
-            evidence.append({'task': task, 'exit_code': result.returncode, 'status': report['status'],
+            layouts = report.get('layout_checks', [])
+            layout_passes = {layout['layout'] for layout in layouts if layout['passed'] is True}
+            status = report['status']
+            if status == 'passed' and layout_passes != {'reversed_rows', 'reversed_columns'}:
+                status = 'blocked'
+            evidence.append({'task': task, 'exit_code': result.returncode, 'status': status,
                              'network': 'none', 'read_only_runtime': True, 'unprivileged': True,
-                             'installation_media': 'empty read-only tmpfs', 'rows': report.get('rows')})
+                             'installation_media': 'empty read-only tmpfs', 'rows': report.get('rows'),
+                             'layout_checks': layouts})
     summary = {'schema_version': 1, 'runtime_image': args.runtime_image, 'checks': evidence,
                'scope': 'synthetic_native_csv_batch_score_parity',
                'production_recovery_qualified': False, 'expert_isolation_qualified': False}

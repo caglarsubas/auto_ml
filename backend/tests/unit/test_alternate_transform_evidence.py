@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from modeling.alt_pipelines import get_alt_adapter
+from modeling.alt_pipelines import fit_woe_maps, get_alt_adapter, transform_woe
 from modeling.development_validation import prepare_fold
 from modeling.fit_receipts import receipt_digest
 from tests.unit.test_fold_local_preparation import temporal_context  # noqa: F401
@@ -81,6 +81,17 @@ def test_nonwinning_search_candidates_retain_their_folds(temporal_context, monke
         assert set(tr.entity).isdisjoint(va.entity)
         assert fold['native_fit']['train']['features'] == [nonwinner]
 
+
+
+def test_woe_numeric_level_keys_survive_fractional_imputation_in_same_batch():
+    train = pd.DataFrame({'code': [7, 7, 7, 7, 9, 9, 9, 9]})
+    outcomes = pd.Series([0, 0, 0, 1, 0, 1, 1, 1])
+    maps, _ = fit_woe_maps(train, outcomes)
+    assert maps['code']['kind'] == 'numeric_levels_v1'
+    single_dtype = transform_woe(pd.DataFrame({'code': [7, 9]}), maps)['code'].tolist()
+    mixed_dtype = transform_woe(pd.DataFrame({'code': [7.0, 8.25, 9.0]}), maps)['code'].tolist()
+    assert single_dtype[0] != single_dtype[1]
+    assert mixed_dtype == pytest.approx([single_dtype[0], 0.0, single_dtype[1]])
 
 
 def test_encoding_export_replays_nested_training_fits_and_excludes_diagnostics():
