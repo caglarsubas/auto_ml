@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
         ('access_control', '0004_project_projectpolicy_projectartifact_and_more'),
         ('declaration', '0002_add_has_header'),
         ('deployment', '0002_packagereviewevent_evidence_and_more'),
-        ('execution_jobs', '0004_project_history_index'),
+        ('execution_jobs', '0003_nativeadoption_nativeprotectedinput_and_more'),
     ]
 
     operations = [
