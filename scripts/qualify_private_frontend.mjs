@@ -15,10 +15,36 @@ const browser = await chromium.launch({ args: [
   `--host-resolver-rules=MAP api.private.test:8443 127.0.0.1:${value.port}`,
   `--ignore-certificate-errors-spki-list=${value.pin}`,
 ] });
+const external = [], errors = [], violations = [];
+const scripts = new Map();
+const bootstrapCodes = new Set();
+let stage = 'create_context';
+let loginStatus = null;
+let page;
+function scriptPath(request) {
+  const url = new URL(request.url());
+  return request.resourceType() === 'script' && url.origin === origin &&
+    /^\/[a-zA-Z0-9._/-]{1,120}\.js$/.test(url.pathname) ? url.pathname : null;
+}
 try {
   const context = await browser.newContext();
-  const page = await context.newPage();
-  const external = [], errors = [], violations = [];
+  page = await context.newPage();
+  page.on('response', response => {
+    const path = scriptPath(response.request());
+    if (!path || scripts.size >= 16) return;
+    const mediaType = response.headers()['content-type']?.split(';')[0];
+    scripts.set(path, { status: response.status(), javascript: /^(application|text)\/javascript$/.test(mediaType ?? '') });
+  });
+  page.on('requestfailed', request => {
+    const path = scriptPath(request);
+    if (path && scripts.size < 16) scripts.set(path, { failed: true });
+  });
+  page.on('console', message => {
+    if (message.type() !== 'error' || bootstrapCodes.size >= 16) return;
+    // Capture standard codes only. Console output can contain response values.
+    const code = message.text().match(/\bNG\d{4,5}\b|\b(?:Reference|Type|Syntax|Range)Error\b/)?.[0];
+    if (code) bootstrapCodes.add(code);
+  });
   page.on('pageerror', error => errors.push(error.message));
   await page.exposeFunction('policyViolation', directive => violations.push(directive));
   await page.addInitScript(() => {
@@ -31,13 +57,17 @@ try {
     external.push(url.origin);
     return route.abort();
   });
+  stage = 'load_login';
   const login = await page.goto(origin + '/login');
+  loginStatus = login.status();
   assert.equal(login.status(), 200);
   assert.match(login.headers()['content-type'], /text\/html/);
   assert.equal(login.headers()['cache-control'], 'no-store');
   assert.match(login.headers()['content-security-policy'], /connect-src 'self'/);
+  stage = 'render_login';
   await page.getByLabel('Username', { exact: true }).fill(value.username);
   await page.getByLabel('Password', { exact: true }).fill(value.password);
+  stage = 'sign_in';
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await page.waitForURL(origin + '/home');
   await page.reload();
@@ -48,6 +78,7 @@ try {
   const cookies = await context.cookies();
   assert.ok(cookies.find(c => c.name === 'sessionid' && c.secure && c.httpOnly));
   assert.ok(cookies.find(c => c.name === 'csrftoken' && c.secure));
+  stage = 'verify_private_workflow';
   await page.goto(origin + '/model-development/declaration');
   await page.getByRole('heading', { name: 'Model Development', exact: true }).waitFor();
   const fonts = await page.evaluate(async () => {
@@ -119,6 +150,19 @@ try {
     missing_assets_metadata_admin_api_fallback: 'blocked', media_as_application_script: 'blocked_by_csp',
     protected_media_document: 'attachment_and_sandbox', external_requests: 0, runtime_errors: 0,
     unexpected_csp_violations: 0, deliberate_script_violation: 1 }));
+} catch (error) {
+  const loginDom = await page?.evaluate(() => ({
+    app_root: !!document.querySelector('app-root'),
+    login_component: !!document.querySelector('app-login'),
+    username_input: !!document.querySelector('#username'),
+  })).catch(() => null);
+  console.error(JSON.stringify({
+    private_browser_failure: stage, login_status: loginStatus, login_dom: loginDom ?? null,
+    script_responses: Object.fromEntries(scripts), bootstrap_codes: [...bootstrapCodes],
+    page_errors: errors.length, external_requests: external.length,
+    csp_directives: violations.filter(value => /^[a-z-]{1,40}$/.test(value)).slice(0, 16),
+  }));
+  throw error;
 } finally {
   await browser.close();
 }
