@@ -17,6 +17,181 @@ function seededDevelopmentCsv(task: string) {
   return Buffer.from(['x,z,outcome', ...rows, ''].join('\n'));
 }
 
+async function exerciseNativeReview(
+  page: Page,
+  datasetName: string,
+  fileId: number,
+  manifest: Buffer,
+  manifestSha: string,
+) {
+  const recorded = JSON.parse(manifest.toString('utf8'));
+  const { training, assessment, protected_input } = recorded;
+  const result = assessment.result;
+  const identity = {
+    assessment_job_id: assessment.job_id,
+    assessment_result_sha256: assessment.result_sha256,
+    manifest_sha256: manifestSha,
+  };
+  // This exercises the reviewer action contract. CI runs the independent
+  // calculation separately and joins its report digest to the approval event.
+  const report = {
+    schema_version: 1,
+    scope: 'native_refit_assessment_reproduction_v1',
+    status: 'passed',
+    task: 'classification',
+    manifest_sha256: manifestSha,
+    training_result_sha256: training.result_sha256,
+    assessment_result_sha256: assessment.result_sha256,
+    development_sha256: training.specification.training.source.sha256,
+    outcomes_sha256: protected_input.specification.input_sha256,
+    candidate_export_sha256: result.candidate_export_sha256,
+    model_sha256: training.fit.model_sha256,
+    scores_sha256: result.scores_sha256,
+    outcome_access_id: result.outcome_access_id,
+    n_assessed: result.n_assessed,
+    model_refit_reproduced: true,
+    assessment_reproduced: true,
+    comparison: 'exact_canonical_result_and_scores_sha256',
+    confirmation_granted: false,
+    review_approved: false,
+    production_use_approved: false,
+  };
+  await page
+    .getByRole('button', { name: 'Review package for ' + datasetName, exact: true })
+    .click();
+  const panel = page.locator('app-package-review');
+  const reviewButton = panel.getByRole('button', {
+    name: 'Open native assessment review',
+    exact: true,
+  });
+  await panel.getByRole('button', { name: 'Open job ' + assessment.job_id, exact: true }).click();
+  await expect(reviewButton).toHaveCount(0);
+  const downloaded = page.waitForEvent('download');
+  await panel.getByRole('button', { name: 'Download reproduction manifest', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  expect(sha256(await readFile((await (await downloaded).path())!))).toBe(manifestSha);
+
+  const pendingOpen = page.waitForResponse((response) => {
+    return (
+      new URL(response.url()).pathname === `/api/reviews/datasets/${fileId}/` &&
+      response.request().method() === 'POST'
+    );
+  });
+  await reviewButton.focus();
+  await page.keyboard.press('Enter');
+  const opened = await pendingOpen;
+  expect(opened.status()).toBe(200);
+  expect(opened.request().postDataJSON()).toMatchObject(identity);
+  const review = await opened.json();
+  expect(review).toMatchObject({ ...identity, bundle_id: null, production_use_approved: false });
+  await expect(panel.getByLabel('Technical review decision')).toContainText(
+    'Technical review: pending',
+  );
+
+  async function record(
+    action: string,
+    text: string,
+    findingId?: string,
+    details?: { expiry?: string; report?: typeof report },
+  ) {
+    await panel.getByLabel('Review action', { exact: true }).selectOption(action);
+    if (findingId) await panel.getByLabel('Finding', { exact: true }).selectOption(findingId);
+    if (details?.expiry) {
+      await panel.getByLabel('Exception expiry (include timezone)').fill(details.expiry);
+    }
+    if (details?.report) {
+      await panel.getByLabel('Reproduction report JSON').fill(JSON.stringify(details.report));
+    }
+    await panel.getByLabel('Finding, response or disposition').fill(text);
+    const posted = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/api/reviews/${review.id}/` &&
+        response.request().method() === 'POST',
+    );
+    await panel.getByRole('button', { name: 'Record review action', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    const response = await posted;
+    expect(response.status()).toBe(200);
+    const latest = await response.json();
+    expect(latest.production_use_approved).toBe(false);
+    return latest;
+  }
+
+  const finding = await record('finding', 'Synthetic finding requires a documented disposition.');
+  const findingId = finding.findings[0].id;
+  const exception = await record(
+    'exception',
+    'A bounded exception defers this synthetic finding.',
+    findingId,
+    {
+      expiry: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    },
+  );
+  expect(exception.findings[0].state).toBe('excepted');
+  expect(exception.findings[0].exception.status).toBe('active');
+  await expect(panel.getByLabel('Review findings')).toContainText('Exception active');
+
+  const approval = await record('approve', 'Review the exact reproduced assessment.', undefined, {
+    report,
+  });
+  expect(approval.review_approved).toBe(true);
+  expect(approval.decision.status).toBe('approved');
+  const approvalEvent = approval.events.find(
+    (event: any) => event.id === approval.decision.event_id,
+  );
+  expect(approvalEvent.details.report_sha256).toMatch(/^[a-f0-9]{64}$/);
+  await expect(panel.getByLabel('Technical review decision')).toContainText(
+    'Technical review: approved',
+  );
+
+  const invalidated = await record('reopen', 'A new observation reopens the finding.', findingId);
+  expect(invalidated.review_approved).toBe(false);
+  expect(invalidated.decision).toMatchObject({
+    status: 'invalidated',
+    reason_code: 'review_discussion_changed',
+    event_id: approval.decision.event_id,
+  });
+  await expect(panel.getByLabel('Technical review decision')).toContainText(
+    'Technical review: invalidated',
+  );
+  const resolved = await record('resolve', 'The new observation is addressed.', findingId);
+  expect(resolved.review_approved).toBe(false);
+  await record('approve', 'Record a new independent decision after resolution.', undefined, {
+    report,
+  });
+  const revoked = await record('revoke', 'Revoke the renewed technical decision.');
+  expect(revoked.review_approved).toBe(false);
+  expect(revoked.decision.status).toBe('revoked');
+  expect(revoked.events.map((event: any) => event.event_type)).toEqual([
+    'opened',
+    'finding',
+    'exception',
+    'approve',
+    'reopen',
+    'resolve',
+    'approve',
+    'revoke',
+  ]);
+  await expect(panel.getByLabel('Technical review decision')).toContainText(
+    'Technical review: revoked',
+  );
+  await expect(panel.getByLabel('Technical review decision')).toContainText(
+    'Production-use approval: false',
+  );
+  return {
+    schema_version: 1,
+    scope: 'synthetic_native_assessment_review',
+    ...identity,
+    review_id: review.id,
+    exception_event_id: exception.findings[0].exception.event_id,
+    approval_event_id: approval.decision.event_id,
+    reproduction_report_sha256: approvalEvent.details.report_sha256,
+    invalidation_reason_code: invalidated.decision.reason_code,
+    revocation_event_id: revoked.decision.event_id,
+    production_use_approved: false,
+  };
+}
+
 async function signIn(page: Page, role: string) {
   const credentials = requireTestCredentials();
   await page.goto('/login');
@@ -265,6 +440,21 @@ for (const task of ['classification', 'regression']) {
       writeFile(testInfo.outputPath('reproduction-development.csv'), development),
       writeFile(testInfo.outputPath('reproduction-outcomes.csv'), outcomes),
     ]);
+    if (task === 'classification') {
+      const qualification = await exerciseNativeReview(
+        page,
+        name,
+        dataset.id,
+        manifest,
+        manifestSha,
+      );
+      const body = Buffer.from(JSON.stringify(qualification));
+      await writeFile(testInfo.outputPath('native-review-qualification.json'), body);
+      await testInfo.attach('native-review-qualification.json', {
+        body,
+        contentType: 'application/json',
+      });
+    }
     await writeFile(
       testInfo.outputPath('native-reproduction-context.json'),
       JSON.stringify({

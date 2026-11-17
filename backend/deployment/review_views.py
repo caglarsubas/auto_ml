@@ -1,7 +1,6 @@
 """Authenticated, project-scoped review discussion endpoints."""
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import DatabaseError
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.http import HttpResponse
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -27,7 +26,14 @@ def failure(exc):
 ERRORS = (ValueError, TypeError, ObjectDoesNotExist, OSError, DatabaseError, projects.ProjectDenied)
 
 
-class PackageReviewListView(APIView):
+class ReviewView(APIView):
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response['Cache-Control'] = 'no-store'
+        return response
+
+
+class PackageReviewListView(ReviewView):
     def get(self, request, file_id):
         try:
             scope = reviews.actor_scope(request.user, file_id)
@@ -37,8 +43,15 @@ class PackageReviewListView(APIView):
             cases = PackageReview.objects.filter(dataset_id=file_id, project_id=scope['project_id']).order_by('-created_at', '-pk')
             total = cases.count()
             selected = list(cases[offset:offset + 50])
-            rows = [{'id': str(c.pk), 'bundle_id': str(c.bundle_id), 'revision': c.revision,
-                     'freshness': reviews.freshness(c), 'created_at': c.created_at.isoformat()} for c in selected]
+            rows = []
+            for case in selected:
+                if case.native_assessment_id is not None:
+                    with reviews.review_transaction(file_id, native=True):
+                        freshness = reviews.freshness(case)
+                else:
+                    freshness = reviews.freshness(case)
+                rows.append({'id': str(case.pk), **reviews.subject_identity(case), 'revision': case.revision,
+                             'freshness': freshness, 'created_at': case.created_at.isoformat()})
             projects.recheck(scope)
             return Response({'file_id': file_id, 'current_package': reviews.current_identity(file_id),
                              'reviews': rows, 'total': total, 'next_offset': offset + 50 if offset + 50 < total else None})
@@ -52,14 +65,14 @@ class PackageReviewListView(APIView):
             return failure(exc)
 
 
-class PackageReviewDetailView(APIView):
+class PackageReviewDetailView(ReviewView):
     def get(self, request, review_id):
         try:
             case = PackageReview.objects.get(pk=review_id)
             scope = reviews.actor_scope(request.user, case.dataset_id)
             if str(case.project_id) != scope['project_id']:
                 raise projects.ProjectDenied('review_project_mismatch')
-            with projection_lock(case.dataset_id), transaction.atomic():
+            with reviews.review_transaction(case.dataset_id, native=case.native_assessment_id is not None):
                 case = PackageReview.objects.select_for_update().get(pk=review_id)
                 result = reviews.serialize(case, request.user)
                 projects.recheck(scope)
@@ -74,7 +87,7 @@ class PackageReviewDetailView(APIView):
             return failure(exc)
 
 
-class PackageReviewReceiptView(APIView):
+class PackageReviewReceiptView(ReviewView):
     def get(self, request, review_id, event_id):
         from deployment.review_evidence import receipt
         from execution_jobs.csv_scoring import canonical_bytes
@@ -89,7 +102,6 @@ class PackageReviewReceiptView(APIView):
                 projects.recheck(scope)
                 response = HttpResponse(raw, content_type='application/json')
                 response['Content-Disposition'] = f'attachment; filename="review-{review_id}-event-{event_id}.json"'
-                response['Cache-Control'] = 'no-store'
                 return response
         except ERRORS as exc:
             return failure(exc)

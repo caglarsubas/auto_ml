@@ -17,6 +17,12 @@ import { NativeCandidateComponent } from '../native-candidate/native-candidate.c
 import { AuthService } from '../services/auth.service';
 import { NativeJobHistoryComponent } from '../native-job-history/native-job-history.component';
 
+export interface NativeAssessmentReviewIdentity {
+  assessment_job_id: string;
+  assessment_result_sha256: string;
+  manifest_sha256: string;
+}
+
 @Component({
   selector: 'app-package-jobs',
   standalone: true,
@@ -33,6 +39,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   @Input() packageInfo: any = null;
   @Input() evidenceEnabled = false;
   @Output() receiptSelected = new EventEmitter<any>();
+  @Output() reproductionSelected = new EventEmitter<NativeAssessmentReviewIdentity | null>();
   directory: any = null;
   job: any = null;
   handoff: any = null;
@@ -63,7 +70,8 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.showHistory = false;
     this.inputFileId = this.fileId;
     this.busy = false;
-    this.error = this.foldExportDigest = this.reproductionExportDigest = '';
+    this.error = this.foldExportDigest = '';
+    this.clearReproduction();
     this.refresh();
   }
   private url(value: string) {
@@ -89,7 +97,8 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     // Withdraw stale evidence before either refresh response can replace its
     // controls; keyboard actions must target the newly verified receipt.
     this.job = this.handoff = null;
-    this.foldExportDigest = this.reproductionExportDigest = '';
+    this.foldExportDigest = '';
+    this.clearReproduction();
     this.requests.add(
       this.http
         .get<any>(this.url(`datasets/${this.fileId}`), {
@@ -113,7 +122,8 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     if (this.busy) return;
     this.busy = true;
     this.job = this.handoff = null;
-    this.foldExportDigest = this.reproductionExportDigest = '';
+    this.foldExportDigest = '';
+    this.clearReproduction();
     this.error = '';
     const generation = ++this.generation;
     this.requests.add(
@@ -295,7 +305,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
       this.job?.id === id &&
       this.job.result_sha256 === result_sha256 &&
       this.canDownloadReproduction;
-    this.reproductionExportDigest = '';
+    this.clearReproduction();
     this.error = '';
     this.requests.add(
       this.http
@@ -315,12 +325,22 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
             }
             this.reproductionExportDigest = digest;
             this.save(response.body, `reproduction-${id}.json`);
+            this.reproductionSelected.emit({
+              assessment_job_id: id,
+              assessment_result_sha256: result_sha256,
+              manifest_sha256: digest,
+            });
           },
           error: (error) => {
             if (current()) this.fail(generation, error, false);
           },
         }),
     );
+  }
+  private clearReproduction(): void {
+    if (!this.reproductionExportDigest) return;
+    this.reproductionExportDigest = '';
+    this.reproductionSelected.emit(null);
   }
   private save(blob: Blob, filename: string): void {
     downloadBlob(blob, filename);
@@ -363,7 +383,8 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     if (generation !== this.generation) return;
     this.busy = false;
     this.job = this.handoff = null;
-    this.foldExportDigest = this.reproductionExportDigest = '';
+    this.foldExportDigest = '';
+    this.clearReproduction();
     if (error.status === 403 || !mutation) {
       this.directory = null;
       this.source = null;
@@ -390,7 +411,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
             const previousDigest = this.job?.result_sha256;
             this.job = job;
             if (!this.canDownloadReproduction || previousDigest !== job.result_sha256) {
-              this.reproductionExportDigest = '';
+              this.clearReproduction();
             }
           }
           this.save(

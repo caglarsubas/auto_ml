@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-11-16",
+  "updated": "2026-11-17",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -926,9 +926,10 @@
         "[Independent native refit and assessment reproduction](INDEPENDENT_REPRODUCTION_IMPLEMENTATION.md)",
         "[P182 independent reproduction qualification](evidence/p182-independent-reproduction-qualification.json)",
         "[Implementation PR #301](https://github.com/caglarsubas/auto_ml/pull/301)",
-        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43861877702)"
+        "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43861877702)",
+        "[Independent review approvals and exceptions](INDEPENDENT_REVIEW_IMPLEMENTATION.md)"
       ],
-      "progress": "Environment manifests and independently hashed assessment/model-card artifacts provide evidence foundations. P01-P11 left reviewer findings/responses/approvals and clean-environment reproduction open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P20 adds exact-package review discussion with attributable reviewer findings/dispositions and developer responses. Active project roles, exact retry receipts, optimistic revisions, concurrent publication, context/integrity freshness and retained historical events are qualified on both metadata engines. Browser keyboard handoff and exact package/discussion downloads pass. Finding closure never confers model or production approval; full independence rules, exceptions/approvals, clean-environment reproduction, full retention and comprehensive accessibility remain open. P21 adds input/runtime-bound full CSV scoring receipts, current-role exact downloads and installed offline native score-parity verification. Clean fixed runtimes without network or installation data reproduce 300-row XGBoost classification/regression exports across whole batches and chunk sizes 1/17/64; calibrated logistic replay and tamper/runtime/authority boundaries pass. Core modules and declared tolerances are recorded. Native serialized state requires explicit trust; full refit/assessment reproduction, independent approval and release qualification remain open. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open. P26 connects findings, responses and dispositions to successful native integrity/scoring receipts from the exact package, with separate review and execution actors and full result downloads. Independent refit/assessment reproduction and organizational approval remain open. P182 qualifies clean refit and protected assessment reproduction for native numeric XGBoost binary classification and regression. D09-T03 still requires a named independent reviewer and an approved exercise."
+      "progress": "Environment manifests and independently hashed assessment/model-card artifacts provide evidence foundations. P01-P11 left reviewer findings/responses/approvals and clean-environment reproduction open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P20 adds exact-package review discussion with attributable reviewer findings/dispositions and developer responses. Active project roles, exact retry receipts, optimistic revisions, concurrent publication, context/integrity freshness and retained historical events are qualified on both metadata engines. Browser keyboard handoff and exact package/discussion downloads pass. Finding closure never confers model or production approval; full independence rules, exceptions/approvals, clean-environment reproduction, full retention and comprehensive accessibility remain open. P21 adds input/runtime-bound full CSV scoring receipts, current-role exact downloads and installed offline native score-parity verification. Clean fixed runtimes without network or installation data reproduce 300-row XGBoost classification/regression exports across whole batches and chunk sizes 1/17/64; calibrated logistic replay and tamper/runtime/authority boundaries pass. Core modules and declared tolerances are recorded. Native serialized state requires explicit trust; full refit/assessment reproduction, independent approval and release qualification remain open. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open. P26 connects findings, responses and dispositions to successful native integrity/scoring receipts from the exact package, with separate review and execution actors and full result downloads. Independent refit/assessment reproduction and organizational approval remain open. P182 qualifies clean refit and protected assessment reproduction for native numeric XGBoost binary classification and regression. D09-T03 still requires a named independent reviewer and an approved exercise. P183 adds attributable independent approvals and exceptions tied to exact native protected assessment evidence. Independent merged-main qualification is pending."
     },
     {
       "id": "D10",
@@ -2257,6 +2258,10 @@
     {
       "date": "2026-11-16",
       "change": "Qualify D09-T01 with implementation PR #301 and independent push-main CI 43861877702. Backlog moves from 20/39/7 to 21/38/7 done/open/blocked across 66 tasks."
+    },
+    {
+      "date": "2026-11-17",
+      "change": "Implement P183 for D09-T02. Verify independent approval, exception handling and invalidation before taking backlog credit."
     }
   ],
   "implementation_packets": [
@@ -5501,6 +5506,21 @@
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43861877702)"
       ],
       "remaining": "D09-T02 independent approvals and invalidation can proceed. D09-T03 still requires a named independent reviewer and an approved exercise."
+    },
+    {
+      "id": "P183",
+      "kind": "product_implementation",
+      "title": "Independent approvals, exceptions and invalidation",
+      "items": [
+        "D09"
+      ],
+      "owner": "Backend/Review UX",
+      "status": "implemented",
+      "description": "Record attributable independent decisions and bounded exceptions for a completed native protected assessment. Bind approval to exact evidence, decisions and reviewer authority so upstream changes invalidate it.",
+      "evidence": [
+        "[Independent review approvals and exceptions](INDEPENDENT_REVIEW_IMPLEMENTATION.md)"
+      ],
+      "remaining": "D09-T02 awaits pull-request and independent merged-main qualification. D09-T03 still requires a named independent reviewer and an approved exercise."
     }
   ],
   "release_qualification": {
@@ -5662,8 +5682,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P181",
-    "source_commit": "402e828b4efb5cc4f7342165a897601014ec49de",
+    "packet": "P182",
+    "source_commit": "f70b8ad851dfb96f3222dae7f28bccca8348c313",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5673,9 +5693,9 @@
       }
     },
     "packets": {
-      "total": 181,
+      "total": 182,
       "counts": {
-        "done": 180,
+        "done": 181,
         "open": 0,
         "blocked": 1
       }
@@ -6496,7 +6516,7 @@
         ],
         "priority": "P0",
         "owner": "Backend/Review UX",
-        "phase": "queued",
+        "phase": "in_progress",
         "dependencies": [
           "D09-T01",
           "D06-T01"
@@ -6506,8 +6526,12 @@
           "Closing findings or packaging never grants production approval."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Independent review approvals and exceptions](INDEPENDENT_REVIEW_IMPLEMENTATION.md)"
+        ],
+        "packet_refs": [
+          "P183"
+        ],
         "order": 28,
         "basis": "Remaining acceptance scope from D09; existing tested foundation is reused, not rebuilt."
       },
@@ -7513,16 +7537,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P182 independent reproduction",
-      "recorded_on": "2026-11-16",
-      "inventory_source_commit": "402e828b4efb5cc4f7342165a897601014ec49de",
+      "label": "Before P183 independent review decisions",
+      "recorded_on": "2026-11-17",
+      "inventory_source_commit": "f70b8ad851dfb96f3222dae7f28bccca8348c313",
       "total": 66,
       "counts": {
-        "ready": 3,
+        "ready": 4,
         "in_progress": 0,
-        "waiting": 36,
+        "waiting": 34,
         "blocked": 7,
-        "done": 20
+        "done": 21
       }
     },
     "baseline_history": [
@@ -7790,6 +7814,20 @@
           "waiting": 37,
           "blocked": 7,
           "done": 19
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P182 independent reproduction",
+        "recorded_on": "2026-11-16",
+        "inventory_source_commit": "402e828b4efb5cc4f7342165a897601014ec49de",
+        "total": 66,
+        "counts": {
+          "ready": 3,
+          "in_progress": 0,
+          "waiting": 36,
+          "blocked": 7,
+          "done": 20
         }
       }
     ]

@@ -101,8 +101,10 @@ def test_applied_child_without_parent_is_invalid_history(private_history, comman
 
 @pytest.mark.parametrize("command", [False, True])
 def test_consistent_pending_leaf_keeps_pending_diagnostic(private_history, command):
-    missing = ("deployment", "0002_packagereviewevent_evidence_and_more")
+    graph = MigrationExecutor(connection).loader.graph
+    missing, = [key for key in graph.leaf_nodes("deployment") if not graph.node_map[key].children]
     recorder = MigrationRecorder(connection)
+    assert missing in recorder.applied_migrations()
     recorder.record_unapplied(*missing)
     try:
         expected = CommandError if command else preflight.RuntimeUnavailable

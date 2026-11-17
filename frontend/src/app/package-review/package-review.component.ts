@@ -3,8 +3,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
-import { PackageJobsComponent } from '../package-jobs/package-jobs.component';
+import {
+  NativeAssessmentReviewIdentity,
+  PackageJobsComponent,
+} from '../package-jobs/package-jobs.component';
 import { AuthService } from '../services/auth.service';
+import { downloadBlob } from '../utils/download-blob';
 
 @Component({
   selector: 'app-package-review',
@@ -26,7 +30,10 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
   severity = 'major';
   eventType = 'finding';
   findingId = '';
+  expiresAt = '';
+  reportText = '';
   evidence: any = null;
+  nativeCandidate: NativeAssessmentReviewIdentity | null = null;
   private generation = 0;
   private requests = new Subscription();
   pending: { url: string; body: any } | null = null;
@@ -40,9 +47,6 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
     this.requests.unsubscribe();
     this.requests = new Subscription();
     this.directory = this.review = this.pending = null;
-    this.evidence = null;
-    this.text = this.findingId = '';
-    this.eventType = this.role === 'developer' ? 'response' : 'finding';
     this.refresh();
   }
   get params() {
@@ -52,6 +56,48 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
     return !!this.directory?.reviews.some(
       (review: any) => review.bundle_id === this.directory.current_package?.bundle_id,
     );
+  }
+  get needsFinding(): boolean {
+    return ['response', 'resolve', 'reopen', 'exception'].includes(this.eventType);
+  }
+  get availableFindings(): any[] {
+    return (this.review?.findings ?? []).filter((finding: any) =>
+      this.eventType === 'reopen'
+        ? ['resolved', 'excepted'].includes(finding.state)
+        : finding.state === 'open',
+    );
+  }
+  get canSubmit(): boolean {
+    const actions =
+      this.role === 'developer'
+        ? ['response']
+        : [
+            'finding',
+            'resolve',
+            'reopen',
+            ...(this.review?.assessment_job_id ? ['exception', 'approve', 'revoke'] : []),
+          ];
+    return (
+      (this.role === 'developer' || this.role === 'reviewer') &&
+      this.review?.freshness === 'current' &&
+      !this.pending &&
+      !this.busy &&
+      !!this.text.trim() &&
+      actions.includes(this.eventType) &&
+      (!this.needsFinding ||
+        this.availableFindings.some((finding) => finding.id === this.findingId)) &&
+      (this.eventType !== 'exception' || !!this.expiresAt.trim()) &&
+      (this.eventType !== 'approve' || !!this.reportText.trim())
+    );
+  }
+  clearActionFields(): void {
+    this.findingId = this.expiresAt = this.reportText = '';
+  }
+  private clearDraft(resetAction = true): void {
+    this.text = '';
+    this.evidence = null;
+    if (resetAction) this.eventType = this.role === 'developer' ? 'response' : 'finding';
+    this.clearActionFields();
   }
   older(): void {
     if (this.busy || this.directory?.next_offset == null) return;
@@ -66,6 +112,7 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
         .subscribe({
           next: (page) => {
             if (generation !== this.generation) return;
+            this.nativeCandidate = null;
             this.directory = { ...page, reviews: [...this.directory.reviews, ...page.reviews] };
             this.busy = false;
           },
@@ -84,7 +131,8 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
   refresh(): void {
     const selected = this.review?.id;
     this.review = this.directory = null;
-    this.evidence = null;
+    this.nativeCandidate = null;
+    this.clearDraft();
     this.busy = true;
     this.error = '';
     const generation = ++this.generation;
@@ -112,7 +160,8 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
   }
   open(id: string): void {
     this.review = null;
-    this.evidence = null;
+    this.nativeCandidate = null;
+    this.clearDraft();
     this.busy = true;
     this.error = '';
     const generation = ++this.generation;
@@ -121,7 +170,6 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
         next: (review) => {
           if (generation !== this.generation) return;
           this.review = review;
-          this.findingId = '';
           this.busy = false;
         },
         error: () => {
@@ -133,27 +181,46 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
     );
   }
   start(): void {
-    if (!this.directory?.current_package || this.pending || this.busy) return;
+    if (this.role !== 'reviewer' || !this.directory?.current_package || this.pending || this.busy)
+      return;
     const packageInfo = this.directory.current_package;
+    this.startReview({
+      bundle_id: packageInfo.bundle_id,
+      manifest_sha256: packageInfo.manifest_sha256,
+    });
+  }
+  selectNativeReview(identity: NativeAssessmentReviewIdentity | null): void {
+    this.nativeCandidate =
+      this.role === 'reviewer' && !this.busy && !this.pending ? identity : null;
+  }
+  startNative(): void {
+    const identity = this.nativeCandidate;
+    if (this.role !== 'reviewer' || !identity || !this.directory || this.pending || this.busy)
+      return;
+    const existing = this.directory.reviews.find(
+      (review: any) =>
+        review.assessment_job_id === identity.assessment_job_id &&
+        review.assessment_result_sha256 === identity.assessment_result_sha256 &&
+        review.manifest_sha256 === identity.manifest_sha256,
+    );
+    if (existing) {
+      this.open(existing.id);
+      return;
+    }
+    this.startReview(identity);
+  }
+  private startReview(
+    identity: NativeAssessmentReviewIdentity | { bundle_id: string; manifest_sha256: string },
+  ): void {
+    this.nativeCandidate = null;
     this.pending = {
       url: this.url(`datasets/${this.fileId}`),
-      body: {
-        request_id: crypto.randomUUID(),
-        bundle_id: packageInfo.bundle_id,
-        manifest_sha256: packageInfo.manifest_sha256,
-      },
+      body: { request_id: crypto.randomUUID(), ...identity },
     };
     this.retry();
   }
   submit(): void {
-    if (
-      !this.review ||
-      this.review.freshness !== 'current' ||
-      !this.text.trim() ||
-      this.pending ||
-      this.busy
-    )
-      return;
+    if (!this.canSubmit) return;
     const body: any = {
       request_id: crypto.randomUUID(),
       expected_revision: this.review.revision,
@@ -161,8 +228,27 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
       text: this.text,
     };
     if (this.eventType === 'finding') body.severity = this.severity;
-    else body.finding_id = this.findingId;
-    if (this.evidence)
+    if (this.needsFinding) body.finding_id = this.findingId;
+    if (this.eventType === 'exception') {
+      const expiresAt = this.expiresAt.trim();
+      if (!/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(expiresAt) || !Number.isFinite(Date.parse(expiresAt))) {
+        this.error = 'Enter an expiry with a timezone, such as 2026-12-31T17:00:00Z.';
+        return;
+      }
+      body.expires_at = expiresAt;
+    }
+    if (this.eventType === 'approve') {
+      try {
+        if (new TextEncoder().encode(this.reportText).length > 262144) throw new Error();
+        const report = JSON.parse(this.reportText);
+        if (!report || typeof report !== 'object' || Array.isArray(report)) throw new Error();
+        body.report = report;
+      } catch {
+        this.error = 'Paste the complete JSON reproduction report, up to 256 KiB.';
+        return;
+      }
+    }
+    if (this.evidence && !this.review.assessment_job_id)
       body.evidence = { job_id: this.evidence.id, result_sha256: this.evidence.result_sha256 };
     this.pending = { url: this.url(this.review.id), body };
     this.retry();
@@ -187,11 +273,13 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
               id: review.id,
               bundle_id: review.bundle_id,
               freshness: review.freshness,
+              assessment_job_id: review.assessment_job_id,
+              assessment_result_sha256: review.assessment_result_sha256,
+              manifest_sha256: review.manifest_sha256,
             });
             this.directory.total++;
           }
-          this.text = this.findingId = '';
-          this.evidence = null;
+          this.clearDraft(!!review.assessment_job_id);
           this.busy = false;
         },
         error: (error) => {
@@ -202,12 +290,13 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
           if ([400, 404, 409].includes(error.status)) {
             this.pending = null;
             this.review = null;
-            this.evidence = null;
+            this.clearDraft();
             this.error = `Action was blocked (${error.error?.error_code || 'invalid request'}). Refresh the review before making another change.`;
           } else {
             if (error.status === 403) {
               this.review = this.directory = null;
-              this.evidence = null;
+              this.nativeCandidate = null;
+              this.clearDraft();
             }
             this.error =
               'The outcome could not be confirmed. Retry the pending action with the same receipt.';
@@ -217,7 +306,8 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
     );
   }
   selectEvidence(job: any): void {
-    if (!this.review || this.review.freshness !== 'current' || this.pending || this.busy) return;
+    if (!this.review?.bundle_id || this.review.freshness !== 'current' || this.pending || this.busy)
+      return;
     if (
       job.state !== 'succeeded' ||
       job.file_id !== this.fileId ||
@@ -247,16 +337,14 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
         .subscribe({
           next: (blob) => {
             if (generation !== this.generation) return;
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `review-${reviewId}-event-${eventId}.json`;
-            link.click();
-            URL.revokeObjectURL(url);
+            downloadBlob(blob, `review-${reviewId}-event-${eventId}.json`);
           },
           error: (error) => {
             if (generation !== this.generation) return;
-            if (error.status === 403) this.review = this.directory = this.evidence = null;
+            if (error.status === 403) {
+              this.review = this.directory = this.nativeCandidate = null;
+              this.clearDraft();
+            }
             this.error =
               'Linked receipt access or integrity could not be checked. Refresh and retry.';
           },
@@ -264,17 +352,12 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
     );
   }
   download(kind: 'discussion' | 'package'): void {
-    if (!this.review || this.busy) return;
+    if (!this.review || this.busy || (kind === 'package' && !this.review.bundle_id)) return;
     const selected = this.review;
     const generation = this.generation;
     const save = (blob: Blob, filename: string) => {
       if (generation !== this.generation) return;
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, filename);
     };
     const fail = () => {
       if (generation === this.generation)

@@ -1,10 +1,12 @@
-"""Exact-package findings and responses. No review or production approval."""
+"""Review of exact evidence with attributable findings and decisions."""
 import hashlib
 import json
 import uuid
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 
 from access_control import projects
@@ -66,57 +68,108 @@ def current_identity(file_id):
         return None
 
 
-def freshness(review):
+def subject_identity(review):
+    identity = {'manifest_sha256': review.manifest_sha256}
+    for key in ('bundle_id', 'execution_id', 'assessment_id'):
+        value = getattr(review, key)
+        identity[key] = str(value) if value is not None else None
+    if review.native_assessment_id is not None:
+        identity.update(assessment_job_id=str(review.native_assessment_id),
+                        assessment_result_sha256=review.assessment_result_sha256)
+    return identity
+
+
+def native_subject(file_id, project_id, identifier, expected):
+    from deployment.native_candidate import sha
+    from execution_jobs import reproduction, service
+    from execution_jobs.models import NativeJob
+
+    job = NativeJob.objects.get(pk=identifier, dataset_id=file_id, project_id=project_id)
+    try:
+        manifest, raw = reproduction.verified_manifest(job, expected)
+    except service.JobConflict as error:
+        raise ReviewConflict(error.code) from None
+    return manifest, sha(raw)
+
+
+def subject_state(review):
+    if review.native_assessment_id is not None:
+        try:
+            manifest, sha = native_subject(review.dataset_id, review.project_id, review.native_assessment_id,
+                                           review.assessment_result_sha256)
+            if (sha != review.manifest_sha256
+                    or manifest['assessment']['specification']['assessment_sha256'] != review.context_sha256):
+                return 'integrity_unavailable', None
+            return 'current', manifest
+        except (ReviewConflict, projects.ProjectDenied):
+            return 'historical', None
+        except (ObjectDoesNotExist, OSError, ValueError, KeyError, TypeError):
+            return 'integrity_unavailable', None
     try:
         exact = package_identity(review.dataset_id, review.bundle_id)
-        expected = {k: str(getattr(review, k)) for k in ('bundle_id', 'execution_id', 'assessment_id', 'manifest_sha256')}
+        expected = subject_identity(review)
         if exact != expected:
-            return 'integrity_unavailable'
+            return 'integrity_unavailable', None
         selected = current_selection(review.dataset_id)
         if selected != (str(review.execution_id), str(review.execution_id), str(review.assessment_id)):
-            return 'historical'
+            return 'historical', None
         current = current_identity(review.dataset_id)
         if current != expected or context_digest(review.dataset_id) != review.context_sha256:
-            return 'historical'
-        return 'current'
+            return 'historical', None
+        return 'current', None
     except (OSError, ValueError, KeyError, TypeError, projects.ProjectDenied):
-        return 'integrity_unavailable'
+        return 'integrity_unavailable', None
+
+
+def freshness(review):
+    return subject_state(review)[0]
 
 
 def require_current(review):
-    if freshness(review) != 'current':
+    status, manifest = subject_state(review)
+    if status != 'current':
         raise ReviewConflict('package_review_stale')
+    return manifest
 
 
-def findings(events):
-    result = {}
-    for event in events:
-        if event.event_type == 'finding':
-            result[str(event.pk)] = {'id': str(event.pk), 'severity': event.severity, 'text': event.text,
-                                     'state': 'open', 'responses': 0, 'evidence': event.evidence}
-        elif event.finding_id:
-            item = result[str(event.finding_id)]
-            if event.event_type == 'response':
-                item['responses'] += 1
-            elif event.event_type in {'resolve', 'reopen'}:
-                item['state'] = 'resolved' if event.event_type == 'resolve' else 'open'
-    return list(result.values())
+def require_independent_reviewer(actor, manifest, events):
+    from execution_jobs.reproduction import development_actors
+
+    if (actor.pk in development_actors(manifest)
+            or any(e.event_type == 'response' and e.actor_snapshot.get('id') == actor.pk for e in events)):
+        raise projects.ProjectDenied('review_requires_independent_reviewer')
 
 
-def serialize(review, actor, *, replayed=False):
+def serialize(review, actor, *, replayed=False, manifest=None):
+    from deployment import review_decisions
     from deployment.review_evidence import validate_events
+
     events = list(review.events.all())
     validate_events(actor, review, events)
+    status, manifest = ('current', manifest) if manifest is not None else subject_state(review)
+    decision = review_decisions.state(review, events, status, manifest)
     return {'id': str(review.pk), 'file_id': review.dataset_id, 'project_id': str(review.project_id),
-            **{k: str(getattr(review, k)) for k in ('bundle_id', 'execution_id', 'assessment_id', 'manifest_sha256', 'context_sha256')},
+            **subject_identity(review), 'context_sha256': review.context_sha256,
             'revision': review.revision, 'created_at': review.created_at.isoformat(),
-            'freshness': freshness(review), 'production_use_approved': False, 'review_approved': False,
-            'findings': findings(events), 'replayed': replayed,
+            'freshness': status, 'production_use_approved': False, 'review_approved': decision['status'] == 'approved',
+            'decision': decision,
+            'findings': review_decisions.findings(events), 'replayed': replayed,
             'events': [{'id': str(e.pk), 'revision': e.revision, 'event_type': e.event_type,
                         'finding_id': str(e.finding_id) if e.finding_id else None,
                         'severity': e.severity, 'text': e.text, 'actor': e.actor_snapshot,
                         'authority': e.authority_snapshot, 'created_at': e.created_at.isoformat(),
-                        'evidence': e.evidence} for e in events]}
+                        'evidence': e.evidence, **({'details': e.details} if e.details is not None else {})}
+                       for e in events]}
+
+
+@contextmanager
+def review_transaction(file_id, *, native, write=False):
+    from execution_jobs import service
+
+    # Native assessment uses the queue lock before project or dataset locks.
+    queue = service.locked(write=write) if native else nullcontext()
+    with queue, projection_lock(file_id), transaction.atomic():
+        yield
 
 
 def actor_scope(actor, file_id, role=None):
@@ -153,48 +206,74 @@ def replay(identifier, request_sha):
     return None
 
 
-def append_record(review, actor, scope, identifier, sha, kind, text='', finding_id=None, severity='', evidence_job=None, evidence=None):
+def append_record(review, actor, scope, identifier, sha, kind, text='', finding_id=None, severity='',
+                  evidence_job=None, evidence=None, details=None):
     review.revision += 1
     PackageReviewEvent.objects.create(id=identifier, review=review, actor=actor, actor_snapshot=actor_snapshot(actor),
                                      authority_snapshot=scope, request_sha256=sha, revision=review.revision,
                                      event_type=kind, text=text, finding_id=finding_id, severity=severity,
-                                     evidence_job=evidence_job, evidence=evidence)
+                                     evidence_job=evidence_job, evidence=evidence, details=details)
     review.save(update_fields=['revision'])
 
 
 def start(actor, file_id, data):
-    identifier = checked_request(data, {'request_id', 'bundle_id', 'manifest_sha256'})
-    bundle_id = uuid.UUID(str(data['bundle_id']))
-    scope = actor_scope(actor, file_id, 'reviewer')
+    from deployment.scoring_receipts import require_digest
+
+    native = isinstance(data, dict) and 'assessment_job_id' in data
+    subject_fields = {'assessment_job_id', 'assessment_result_sha256'} if native else {'bundle_id'}
+    identifier = checked_request(data, {'request_id', 'manifest_sha256'} | subject_fields)
+    subject_id = uuid.UUID(str(data['assessment_job_id' if native else 'bundle_id']))
+    manifest_sha256 = require_digest(data['manifest_sha256']) if native else data['manifest_sha256']
+    result_sha256 = require_digest(data['assessment_result_sha256']) if native else None
+    actor_scope(actor, file_id, 'reviewer')
     sha = digest({'actor_id': actor.pk, 'file_id': file_id, 'create': data})
-    with projection_lock(file_id), transaction.atomic():
+    with review_transaction(file_id, native=native, write=True):
         scope = lock_authority(actor, file_id, 'reviewer')
         previous = replay(identifier, sha)
         if previous:
+            if str(previous.project_id) != scope['project_id']:
+                raise projects.ProjectDenied('review_project_mismatch')
             return serialize(previous, actor, replayed=True)
-        exact = package_identity(file_id, bundle_id)
-        if data['manifest_sha256'] != exact['manifest_sha256']:
-            raise ReviewConflict('review_manifest_changed')
-        if PackageReview.objects.filter(dataset_id=file_id, bundle_id=bundle_id).exists():
-            raise ReviewConflict('package_review_already_exists')
-        review = PackageReview.objects.create(project_id=scope['project_id'], dataset_id=file_id,
-                                             context_sha256=context_digest(file_id), **exact)
-        require_current(review)
+        if native:
+            manifest, current_sha = native_subject(file_id, scope['project_id'], subject_id, result_sha256)
+            if manifest_sha256 != current_sha:
+                raise ReviewConflict('review_manifest_changed')
+            require_independent_reviewer(actor, manifest, ())
+            if PackageReview.objects.filter(native_assessment_id=subject_id).exists():
+                raise ReviewConflict('package_review_already_exists')
+            subject = {'native_assessment_id': subject_id, 'assessment_result_sha256': result_sha256,
+                       'manifest_sha256': current_sha,
+                       'context_sha256': manifest['assessment']['specification']['assessment_sha256']}
+        else:
+            subject = package_identity(file_id, subject_id)
+            if manifest_sha256 != subject['manifest_sha256']:
+                raise ReviewConflict('review_manifest_changed')
+            if PackageReview.objects.filter(dataset_id=file_id, bundle_id=subject_id).exists():
+                raise ReviewConflict('package_review_already_exists')
+            subject['context_sha256'] = context_digest(file_id)
+        review = PackageReview.objects.create(project_id=scope['project_id'], dataset_id=file_id, **subject)
+        if not native:
+            require_current(review)
         append_record(review, actor, scope, identifier, sha, 'opened')
         projects.recheck(scope)
-        require_current(review)
-        return serialize(review, actor)
+        return serialize(review, actor, manifest=require_current(review))
 
 
 def append(actor, review_id, data):
+    from deployment import review_decisions
+
     kind = data.get('event_type') if isinstance(data, dict) else None
     fields = {'request_id', 'expected_revision', 'event_type', 'text'}
     if kind == 'finding':
         fields.add('severity')
     elif kind in {'response', 'resolve', 'reopen'}:
         fields.add('finding_id')
-    else:
-        raise ValueError('Select finding, response, resolve or reopen.')
+    elif kind == 'exception':
+        fields.update({'finding_id', 'expires_at'})
+    elif kind == 'approve':
+        fields.add('report')
+    elif kind != 'revoke':
+        raise ValueError('Select a supported review action.')
     if isinstance(data, dict) and 'evidence' in data:
         fields.add('evidence')
         from deployment.review_evidence import checked_reference
@@ -208,7 +287,11 @@ def append(actor, review_id, data):
     review = PackageReview.objects.get(pk=review_id)
     actor_scope(actor, review.dataset_id, role)
     sha = digest({'actor_id': actor.pk, 'review_id': str(review.pk), 'action': data})
-    with projection_lock(review.dataset_id), transaction.atomic():
+    native = review.native_assessment_id is not None
+    decision_action = kind in {'exception', 'approve', 'revoke'}
+    if (decision_action and not native) or (native and 'evidence' in data):
+        raise ReviewConflict('review_action_unsupported_for_subject')
+    with review_transaction(review.dataset_id, native=native, write=True):
         scope = lock_authority(actor, review.dataset_id, role)
         review = PackageReview.objects.select_for_update().get(pk=review_id)
         if str(review.project_id) != scope['project_id']:
@@ -216,18 +299,22 @@ def append(actor, review_id, data):
         previous = replay(identifier, sha)
         if previous:
             return serialize(previous, actor, replayed=True)
-        require_current(review)
+        manifest = require_current(review)
         if data['expected_revision'] != review.revision:
             raise ReviewConflict('review_revision_changed')
+        events = list(review.events.all())
+        if native and role == 'reviewer':
+            require_independent_reviewer(actor, manifest, events)
         finding_id, severity = None, ''
         if kind == 'finding':
             severity = data['severity']
             if severity not in {'critical', 'major', 'minor', 'observation'}:
                 raise ValueError('Select critical, major, minor or observation.')
-        else:
+        elif kind in {'response', 'resolve', 'reopen', 'exception'}:
             finding_id = uuid.UUID(str(data['finding_id']))
-            selected = next((f for f in findings(review.events.all()) if f['id'] == str(finding_id)), None)
-            if not selected or (kind == 'reopen') != (selected['state'] == 'resolved'):
+            selected = next((f for f in review_decisions.findings(events) if f['id'] == str(finding_id)), None)
+            allowed_state = {'resolved', 'excepted'} if kind == 'reopen' else {'open'}
+            if not selected or selected['state'] not in allowed_state:
                 raise ReviewConflict('finding_state_changed')
             if kind == 'resolve' and review.events.filter(finding_id=finding_id, event_type='response',
                                                          actor_snapshot__id=actor.pk).exists():
@@ -236,7 +323,8 @@ def append(actor, review_id, data):
         if 'evidence' in data:
             from deployment.review_evidence import capture
             evidence_job, evidence = capture(actor, review, data['evidence'])
-        append_record(review, actor, scope, identifier, sha, kind, data['text'], finding_id, severity, evidence_job, evidence)
+        details = review_decisions.prepare(review, kind, data, events, manifest) if decision_action else None
+        append_record(review, actor, scope, identifier, sha, kind, data['text'], finding_id, severity,
+                      evidence_job, evidence, details)
         projects.recheck(scope)
-        require_current(review)
-        return serialize(review, actor)
+        return serialize(review, actor, manifest=require_current(review))

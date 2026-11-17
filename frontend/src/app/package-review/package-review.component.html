@@ -1,9 +1,8 @@
 <section class="review" aria-labelledby="review-title">
   <h3 id="review-title">Package review · Dataset {{ fileId }}</h3>
   <p>
-    Record findings, developer responses and reviewer dispositions for an exact package. Closing
-    findings does not approve the model or its use. Reproduction and organizational approval require
-    separate evidence.
+    Review an exact package or completed native assessment. Production use requires separate
+    approval.
   </p>
   <button type="button" (click)="refresh()" [disabled]="busy">Refresh review</button>
   @if (busy) {
@@ -22,13 +21,23 @@
       [role]="role"
       [packageInfo]="directory.current_package"
       [evidenceEnabled]="
+        !!review?.bundle_id &&
         review?.freshness === 'current' &&
         !busy &&
         !pending &&
         (role === 'developer' || role === 'reviewer')
       "
       (receiptSelected)="selectEvidence($event)"
+      (reproductionSelected)="selectNativeReview($event)"
     />
+    @if (nativeCandidate; as candidate) {
+      <p role="status">
+        Selected assessment <code>{{ candidate.assessment_job_id }}</code>
+      </p>
+      <button type="button" (click)="startNative()" [disabled]="busy || !!pending">
+        Open native assessment review
+      </button>
+    }
     @if (directory.current_package; as packageInfo) {
       <p>
         Current frozen package: <code>{{ packageInfo.bundle_id }}</code>
@@ -40,8 +49,8 @@
       }
     } @else {
       <p>
-        No verified package is available. A developer must freeze an execution with its assessment
-        before review can begin.
+        No verified package is available. Freeze an execution with its assessment for package
+        review, or select a completed native assessment above.
       </p>
     }
     <ul aria-label="Package reviews">
@@ -50,7 +59,7 @@
           <button type="button" (click)="open(case.id)" [disabled]="busy || !!pending">
             Open review {{ case.id }}
           </button>
-          · {{ case.freshness }}
+          · {{ case.assessment_job_id ? 'Native assessment' : 'Package' }} · {{ case.freshness }}
         </li>
       }
     </ul>
@@ -64,28 +73,65 @@
   @if (review; as case) {
     <h4>Discussion revision {{ case.revision }}</h4>
     <dl>
-      <dt>Package</dt>
-      <dd>
-        <code>{{ case.bundle_id }}</code>
-      </dd>
-      <dt>Manifest SHA-256</dt>
+      @if (case.assessment_job_id) {
+        <dt>Protected assessment job</dt>
+        <dd>
+          <code>{{ case.assessment_job_id }}</code>
+        </dd>
+        <dt>Assessment result SHA-256</dt>
+        <dd>
+          <code>{{ case.assessment_result_sha256 }}</code>
+        </dd>
+        <dt>Reproduction manifest SHA-256</dt>
+      } @else {
+        <dt>Package</dt>
+        <dd>
+          <code>{{ case.bundle_id }}</code>
+        </dd>
+        <dt>Manifest SHA-256</dt>
+      }
       <dd>
         <code>{{ case.manifest_sha256 }}</code>
       </dd>
       <dt>Evidence status</dt>
       <dd>{{ case.freshness }}</dd>
     </dl>
-    <button type="button" (click)="download('package')" [disabled]="busy">
-      Download exact package
-    </button>
+    @if (case.bundle_id) {
+      <button type="button" (click)="download('package')" [disabled]="busy">
+        Download exact package
+      </button>
+    }
     <button type="button" (click)="download('discussion')" [disabled]="busy">
       Download discussion evidence
     </button>
     @if (case.freshness !== 'current') {
       <p role="status">
         This review is historical or its integrity cannot be verified. Its history is retained;
-        further edits require a review of a current verified package.
+        further edits require current verified evidence.
       </p>
+    }
+    @if (case.assessment_job_id) {
+      <section aria-label="Technical review decision">
+        <p role="status">
+          Technical review:
+          {{ case.decision?.status === 'none' ? 'pending' : (case.decision?.status ?? 'pending') }}
+        </p>
+        <p>Production-use approval: {{ case.production_use_approved === true }}</p>
+        @if (case.decision?.reason_code; as reason) {
+          <p>
+            Decision reason <code>{{ reason }}</code>
+          </p>
+        }
+        @if (case.decision?.event_id) {
+          <p>
+            Recorded by {{ case.decision.actor?.username }} · Event
+            <code>{{ case.decision.event_id }}</code>
+          </p>
+          <p>
+            Decision SHA-256 <code>{{ case.decision.decision_sha256 }}</code>
+          </p>
+        }
+      </section>
     }
     <ul aria-label="Review findings">
       @for (finding of case.findings; track finding.id) {
@@ -94,6 +140,12 @@
           <p>{{ finding.text }}</p>
           @if (finding.evidence) {
             <p>Linked {{ finding.evidence.kind }} receipt · {{ finding.evidence.job_id }}</p>
+          }
+          @if (finding.exception; as exception) {
+            <p>
+              Exception {{ exception.status }} · Expires {{ exception.expires_at }} ·
+              {{ exception.actor?.username }}
+            </p>
           }
           <small>{{ finding.responses }} developer responses · {{ finding.id }}</small>
         </li>
@@ -112,6 +164,9 @@
             >
             · {{ event.created_at }}
             <p>{{ event.text }}</p>
+            @if (event.details?.expires_at) {
+              <p>Exception expiry {{ event.details.expires_at }}</p>
+            }
             @if (event.evidence; as evidence) {
               <p>
                 Linked {{ evidence.kind }} · Job <code>{{ evidence.job_id }}</code> · Result SHA-256
@@ -132,30 +187,42 @@
     </details>
     @if (case.freshness === 'current' && (role === 'developer' || role === 'reviewer')) {
       <form (ngSubmit)="submit()">
-        <p>
-          Optionally open a successful job above and choose “Use receipt for review action”. The
-          receipt must belong to this exact package.
-        </p>
-        @if (evidence) {
-          <p role="status">
-            Selected {{ evidence.specification.kind }} receipt · {{ evidence.id }} · Result SHA-256
-            {{ evidence.result_sha256 }}
+        @if (case.bundle_id) {
+          <p>
+            Optionally open a successful job above and choose “Use receipt for review action”. The
+            receipt must belong to this exact package.
           </p>
-          <button type="button" (click)="evidence = null" [disabled]="busy || !!pending">
-            Remove selected receipt
-          </button>
+          @if (evidence) {
+            <p role="status">
+              Selected {{ evidence.specification.kind }} receipt · {{ evidence.id }} · Result
+              SHA-256
+              {{ evidence.result_sha256 }}
+            </p>
+            <button type="button" (click)="evidence = null" [disabled]="busy || !!pending">
+              Remove selected receipt
+            </button>
+          }
         }
         <label for="review-action">Review action</label>
         <select
           id="review-action"
           name="eventType"
           [(ngModel)]="eventType"
+          (ngModelChange)="clearActionFields()"
           [disabled]="busy || !!pending"
         >
           @if (role === 'reviewer') {
             <option value="finding">Add finding</option>
             <option value="resolve">Resolve finding</option>
             <option value="reopen">Reopen finding</option>
+            @if (case.assessment_job_id) {
+              <option value="exception">Record time-bound exception</option>
+              @if (case.decision?.status === 'approved') {
+                <option value="revoke">Revoke technical approval</option>
+              } @else {
+                <option value="approve">Approve technical review</option>
+              }
+            }
           }
           @if (role === 'developer') {
             <option value="response">Respond to finding</option>
@@ -174,7 +241,8 @@
             <option value="minor">Minor</option>
             <option value="observation">Observation</option>
           </select>
-        } @else {
+        }
+        @if (needsFinding) {
           <label for="review-finding">Finding</label
           ><select
             id="review-finding"
@@ -184,12 +252,33 @@
             required
           >
             <option value="">Select a finding</option>
-            @for (finding of case.findings; track finding.id) {
-              @if ((eventType === 'reopen') === (finding.state === 'resolved')) {
-                <option [value]="finding.id">{{ finding.severity }} · {{ finding.text }}</option>
-              }
+            @for (finding of availableFindings; track finding.id) {
+              <option [value]="finding.id">{{ finding.severity }} · {{ finding.text }}</option>
             }
           </select>
+        }
+        @if (eventType === 'exception') {
+          <label for="review-expiry">Exception expiry (include timezone)</label>
+          <input
+            id="review-expiry"
+            name="expiresAt"
+            [(ngModel)]="expiresAt"
+            placeholder="2026-12-31T17:00:00Z"
+            maxlength="40"
+            required
+            [disabled]="busy || !!pending"
+          />
+        }
+        @if (eventType === 'approve') {
+          <label for="reproduction-report">Reproduction report JSON</label>
+          <textarea
+            id="reproduction-report"
+            name="reproductionReport"
+            [(ngModel)]="reportText"
+            maxlength="262144"
+            required
+            [disabled]="busy || !!pending"
+          ></textarea>
         }
         <label for="review-text">Finding, response or disposition</label
         ><textarea
@@ -200,12 +289,7 @@
           required
           [disabled]="busy || !!pending"
         ></textarea>
-        <button
-          type="submit"
-          [disabled]="busy || !!pending || !text.trim() || (eventType !== 'finding' && !findingId)"
-        >
-          Record review action
-        </button>
+        <button type="submit" [disabled]="!canSubmit">Record review action</button>
       </form>
     }
   }

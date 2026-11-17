@@ -299,6 +299,7 @@ describe('Durable package job receipts', () => {
   });
   it('downloads a reviewer manifest pinned to the assessment and retains its separate digest', () => {
     const save = spyOn(URL, 'createObjectURL').and.returnValue('blob:reproduction-test');
+    const selected = spyOn(component.reproductionSelected, 'emit');
     spyOn(HTMLAnchorElement.prototype, 'click');
     component.job = assessment;
     fixture.detectChanges();
@@ -312,6 +313,11 @@ describe('Durable package job receipts', () => {
     fixture.detectChanges();
     expect(save).toHaveBeenCalledOnceWith(body);
     expect(component.reproductionExportDigest).toBe('b'.repeat(64));
+    expect(selected).toHaveBeenCalledOnceWith({
+      assessment_job_id: 'job-1',
+      assessment_result_sha256: 'a'.repeat(64),
+      manifest_sha256: 'b'.repeat(64),
+    });
     expect(component.foldExportDigest).toBe('');
     expect(fixture.nativeElement.textContent).toContain(
       'Retain this reproduction manifest SHA-256',
@@ -337,6 +343,7 @@ describe('Durable package job receipts', () => {
   });
   it('discards a late reproduction export after opening another job', () => {
     const save = spyOn(URL, 'createObjectURL');
+    const selected = spyOn(component.reproductionSelected, 'emit');
     component.job = assessment;
     component.reproductionExportDigest = 'b'.repeat(64);
     component.downloadReproduction();
@@ -345,6 +352,7 @@ describe('Durable package job receipts', () => {
     http.expectOne('/api/jobs/job-2/?project_id=project-a').flush({ ...job, id: 'job-2' });
     stale.flush(new Blob(['{}']), { headers: { 'X-DeclarAI-Export-SHA256': 'b'.repeat(64) } });
     expect(save).not.toHaveBeenCalled();
+    expect(selected).toHaveBeenCalledOnceWith(null);
     expect(component.reproductionExportDigest).toBe('');
     expect(component.job.id).toBe('job-2');
   });
