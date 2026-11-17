@@ -64,6 +64,11 @@ def main():
                     WHERE ci.relname='native_job_project_history_idx' AND i.indrelid='public.execution_jobs_nativejob'::regclass))
         """))
 
+    def independent_review_proof():
+        from private_upgrade_schema_profile import REVIEW_FK_PROOF_SQL
+
+        return {**project_history_proof(), "review_fk": json.loads(admin(REVIEW_FK_PROOF_SQL))}
+
     def receive():
         selector = selectors.DefaultSelector()
         try:
@@ -135,7 +140,11 @@ def main():
             assert ready["ready"] is True
             baseline = ready["snapshot"]
             receipt["baseline"] = ready
-            if baseline["migrations"] == 33:
+            if baseline["migrations"] == 34:
+                from private_upgrade_schema_profile import qualify_independent_review_schema
+                review_proof = independent_review_proof()
+                receipt["schema_profile"] = qualify_independent_review_schema(baseline, review_proof)
+            elif baseline["migrations"] == 33:
                 from private_upgrade_schema_profile import qualify_project_history_schema
                 history_proof = project_history_proof()
                 receipt["schema_profile"] = qualify_project_history_schema(baseline, history_proof)
@@ -1191,7 +1200,9 @@ def main():
             assert receipt["collation_restored"] == collation_baseline
             assert application("collation_end") == baseline
             check_all("column_collation/restored", False)
-            if baseline["migrations"] == 33:
+            if baseline["migrations"] == 34:
+                assert independent_review_proof() == review_proof
+            elif baseline["migrations"] == 33:
                 assert project_history_proof() == history_proof
             process.stdin.close()
             assert process.wait(timeout=30) == 0

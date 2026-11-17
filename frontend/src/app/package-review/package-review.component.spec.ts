@@ -24,6 +24,12 @@ describe('Package review receipts and context', () => {
     result_sha256: 'b'.repeat(64),
     specification: { bundle_id: 'bundle', kind: 'package_integrity_v1' },
   };
+  const nativeIdentity = {
+    assessment_job_id: 'assessment-job',
+    assessment_result_sha256: 'a'.repeat(64),
+    manifest_sha256: 'b'.repeat(64),
+  };
+  const nativeReview = { ...review, ...nativeIdentity, bundle_id: null };
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [PackageReviewComponent],
@@ -63,6 +69,86 @@ describe('Package review receipts and context', () => {
     request.flush(review);
     expect(component.review).toEqual(review);
     expect(component.pending).toBeNull();
+  });
+  it('pins the exact native manifest and reopens an existing review without a second write', () => {
+    component.selectNativeReview(nativeIdentity);
+    component.startNative();
+    const request = http.expectOne('/api/reviews/datasets/1/?project_id=project-a');
+    expect(request.request.body).toEqual({ request_id: jasmine.any(String), ...nativeIdentity });
+    request.flush(nativeReview);
+    expect(component.nativeCandidate).toBeNull();
+    component.selectNativeReview(nativeIdentity);
+    component.startNative();
+    http.expectOne('/api/reviews/case/?project_id=project-a').flush(nativeReview);
+    expect(component.review).toEqual(nativeReview);
+    http.expectNone('/api/reviews/datasets/1/?project_id=project-a');
+  });
+  it('clears native opening evidence and draft fields on refresh', () => {
+    component.selectNativeReview(nativeIdentity);
+    component.reportText = '{"previousReport":true}';
+    component.text = 'Previous review';
+    component.refresh();
+    http.expectOne('/api/reviews/datasets/1/?project_id=project-a').flush({ reviews: [] });
+    component.startNative();
+    http.expectNone('/api/reviews/datasets/1/?project_id=project-a');
+    expect(component.nativeCandidate).toBeNull();
+    expect(component.reportText).toBe('');
+    expect(component.text).toBe('');
+  });
+  it('pins valid report JSON to the approval receipt across an uncertain retry', () => {
+    component.review = nativeReview;
+    component.eventType = 'approve';
+    component.text = 'Reproduced check';
+    component.reportText = '[]';
+    component.submit();
+    http.expectNone('/api/reviews/case/?project_id=project-a');
+    expect(component.error).toContain('JSON reproduction report');
+    component.reportText = '{"manifest_sha256":"pinned"}';
+    component.submit();
+    const first = http.expectOne('/api/reviews/case/?project_id=project-a');
+    expect(first.request.body).toEqual({
+      request_id: jasmine.any(String),
+      expected_revision: 3,
+      event_type: 'approve',
+      text: 'Reproduced check',
+      report: { manifest_sha256: 'pinned' },
+    });
+    first.error(new ProgressEvent('network'));
+    component.reportText = '{}';
+    component.retry();
+    const retry = http.expectOne('/api/reviews/case/?project_id=project-a');
+    expect(retry.request.body).toEqual(first.request.body);
+    retry.flush({ ...nativeReview, revision: 4 });
+    expect(component.reportText).toBe('');
+  });
+  it('requires an exception timezone and allows reopening the excepted finding', () => {
+    const finding = { id: 'f', state: 'open' };
+    component.review = { ...nativeReview, findings: [finding] };
+    component.eventType = 'exception';
+    component.findingId = finding.id;
+    component.text = 'Bounded exception';
+    component.expiresAt = '2026-12-31T17:00:00';
+    component.submit();
+    http.expectNone('/api/reviews/case/?project_id=project-a');
+    expect(component.error).toContain('timezone');
+    component.expiresAt += 'Z';
+    component.submit();
+    const create = http.expectOne('/api/reviews/case/?project_id=project-a');
+    expect(create.request.body).toEqual(
+      jasmine.objectContaining({
+        event_type: 'exception',
+        finding_id: 'f',
+        expires_at: '2026-12-31T17:00:00Z',
+      }),
+    );
+    create.flush({ ...nativeReview, revision: 4, findings: [{ ...finding, state: 'excepted' }] });
+    component.eventType = 'reopen';
+    component.findingId = 'f';
+    component.text = 'Revisit finding';
+    component.submit();
+    const reopen = http.expectOne('/api/reviews/case/?project_id=project-a');
+    expect(reopen.request.body.event_type).toBe('reopen');
+    reopen.flush({ ...nativeReview, revision: 5, findings: [finding] });
   });
   it('retries an ambiguous write using identical code-free payload and receipt', () => {
     component.review = review;
