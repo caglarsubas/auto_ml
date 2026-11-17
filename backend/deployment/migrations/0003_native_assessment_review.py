@@ -46,7 +46,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='packagereview',
-            constraint=models.UniqueConstraint(condition=models.Q(('native_assessment__isnull', False)), fields=('native_assessment',), name='review_native_assessment_unique'),
+            constraint=models.UniqueConstraint(fields=('native_assessment',), name='review_native_assessment_unique'),
         ),
         migrations.AddConstraint(
             model_name='packagereview',

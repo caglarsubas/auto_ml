@@ -22,8 +22,7 @@ class PackageReview(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['dataset', 'bundle_id'], name='review_dataset_bundle_unique'),
-            models.UniqueConstraint(fields=['native_assessment'], condition=models.Q(native_assessment__isnull=False),
-                                    name='review_native_assessment_unique'),
+            models.UniqueConstraint(fields=['native_assessment'], name='review_native_assessment_unique'),
             models.CheckConstraint(condition=(
                 models.Q(native_assessment__isnull=True, bundle_id__isnull=False, execution_id__isnull=False,
                          assessment_id__isnull=False, assessment_result_sha256='')
