@@ -6,6 +6,7 @@ checkout and are removed on exit. No existing installation is read or changed.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -19,6 +20,9 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+POSTGRES_DATA_DIRECTORY = "/var/lib/postgresql/data"  # Pinned PostgreSQL 17 image.
+TEST_DATABASE_TMPFS = POSTGRES_DATA_DIRECTORY + ":rw,nosuid,nodev,noexec,size=1g"
+TEST_DATABASE_TMPFS_BYTES = 1024 ** 3
 
 
 def command(args, *, data=None, env=None, cwd=None, timeout=120):
@@ -35,6 +39,30 @@ def command(args, *, data=None, env=None, cwd=None, timeout=120):
         # Commands may include SQL or fixtures containing credentials.
         raise RuntimeError("Disposable fixture command failed: " + Path(args[0]).name)
     return result.stdout
+
+
+def database_settings(name):
+    sql = (
+        "SELECT name || '=' || setting FROM pg_catalog.pg_settings WHERE name IN "
+        "('fsync', 'full_page_writes', 'ssl', 'synchronous_commit') ORDER BY name"
+    )
+    rows = command(["docker", "exec", name, "psql", "-At", "-v", "ON_ERROR_STOP=1",
+                    "-U", "declarai_fixture_admin", "-d", "postgres", "-c", sql])
+    return dict(row.split("=", 1) for row in rows.decode().splitlines())
+
+
+def verify_test_storage(name, expected_image):
+    actual_image = command(["docker", "inspect", "-f", "{{.Image}}", name]).decode().strip()
+    mount_info = command(["docker", "exec", name, "cat", "/proc/self/mountinfo"]).decode()
+    storage = []
+    for line in mount_info.splitlines():
+        mount, filesystem = line.split(" - ", 1)
+        if mount.split()[4] == POSTGRES_DATA_DIRECTORY:
+            storage.append(filesystem.split()[0])
+    disk_usage = command(["docker", "exec", name, "df", "-kP", POSTGRES_DATA_DIRECTORY]).decode()
+    capacity = int(disk_usage.splitlines()[-1].split()[1]) * 1024
+    if actual_image != expected_image or storage != ["tmpfs"] or capacity != TEST_DATABASE_TMPFS_BYTES:
+        raise RuntimeError("Native pytest PostgreSQL image or scratch storage differs from its fixture contract.")
 
 
 def main():
@@ -63,10 +91,12 @@ def main():
     if not reports.is_relative_to(ROOT / "test-reports"):
         parser.error("Reports must be inside the ignored test-reports directory.")
     reports.mkdir(parents=True, exist_ok=True)
+    suite_database_report = reports / "postgresql-suite-database.json"
+    suite_database_report.unlink(missing_ok=True)
     token = uuid.uuid4().hex[:12]
-    network, db, redis, runner, job_broker = (
+    network, db, redis, runner, job_broker, test_db = (
         f"declarai-fixture-{token}-{suffix}"
-        for suffix in ("net", "db", "redis", "runner", "job-broker")
+        for suffix in ("net", "db", "redis", "runner", "job-broker", "test-db")
     )
     with tempfile.TemporaryDirectory(prefix="declarai-pg-fixture-") as directory:
         fixture = Path(directory)
@@ -128,14 +158,20 @@ def main():
             (fixture / "job-broker-url").chmod(0o600)
             return port
 
-        try:
-            command(["docker", "network", "create", network])
+        sql = (
+            f"CREATE ROLE declarai_fixture_app LOGIN PASSWORD '{app_password}';\n"
+            "CREATE DATABASE declarai_fixture OWNER declarai_fixture_app;\n"
+            f"CREATE ROLE declarai_fixture_tests LOGIN CREATEDB PASSWORD '{test_password}';\n"
+            "CREATE DATABASE declarai_fixture_tests OWNER declarai_fixture_tests;\n"
+        )
+
+        def start_database(name, image, source, *, tmpfs=False):
             command(
                 [
                     "docker",
                     "create",
                     "--name",
-                    db,
+                    name,
                     "--network",
                     network,
                     "--network-alias",
@@ -146,7 +182,8 @@ def main():
                     "POSTGRES_PASSWORD_FILE=/fixture/admin-password",
                     "-e",
                     "POSTGRES_USER=declarai_fixture_admin",
-                    *image_args(args.postgres_image, "postgres:17-alpine"),
+                    *(["--tmpfs", TEST_DATABASE_TMPFS] if tmpfs else []),
+                    *image_args(image, "postgres:17-alpine"),
                     "sh",
                     "-c",
                     (
@@ -155,8 +192,59 @@ def main():
                     ),
                 ]
             )
-            command(["docker", "cp", str(fixture), db + ":/fixture"])
-            command(["docker", "start", db])
+            command(["docker", "cp", str(source), name + ":/fixture"])
+            command(["docker", "start", name])
+
+        def initialize_database(name):
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline:
+                result = subprocess.run(
+                    [
+                        "docker",
+                        "exec",
+                        name,
+                        "pg_isready",
+                        "-h",
+                        "127.0.0.1",
+                        "-U",
+                        "declarai_fixture_admin",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    break
+                time.sleep(1)
+            else:
+                raise RuntimeError("Disposable PostgreSQL did not become ready.")
+            command(
+                [
+                    "docker",
+                    "exec",
+                    "-i",
+                    name,
+                    "psql",
+                    "-v",
+                    "ON_ERROR_STOP=1",
+                    "-U",
+                    "declarai_fixture_admin",
+                    "-d",
+                    "postgres",
+                ],
+                data=sql.encode(),
+            )
+            return (
+                command(["docker", "port", name, "5432/tcp"])
+                .decode()
+                .strip()
+                .rsplit(":", 1)[1]
+            )
+
+        try:
+            command(["docker", "network", "create", network])
+            start_database(db, args.postgres_image, fixture)
             command(
                 [
                     "docker",
@@ -172,57 +260,7 @@ def main():
                 ]
             )
             job_broker_port = start_job_broker()
-            ready = False
-            for _ in range(60):
-                result = subprocess.run(
-                    [
-                        "docker",
-                        "exec",
-                        db,
-                        "pg_isready",
-                        "-h",
-                        "127.0.0.1",
-                        "-U",
-                        "declarai_fixture_admin",
-                    ],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=False,
-                )
-                if result.returncode == 0:
-                    ready = True
-                    break
-                time.sleep(1)
-            if not ready:
-                raise RuntimeError("Disposable PostgreSQL did not become ready.")
-            sql = (
-                f"CREATE ROLE declarai_fixture_app LOGIN PASSWORD '{app_password}';\n"
-                "CREATE DATABASE declarai_fixture OWNER declarai_fixture_app;\n"
-                f"CREATE ROLE declarai_fixture_tests LOGIN CREATEDB PASSWORD '{test_password}';\n"
-                "CREATE DATABASE declarai_fixture_tests OWNER declarai_fixture_tests;\n"
-            )
-            command(
-                [
-                    "docker",
-                    "exec",
-                    "-i",
-                    db,
-                    "psql",
-                    "-v",
-                    "ON_ERROR_STOP=1",
-                    "-U",
-                    "declarai_fixture_admin",
-                    "-d",
-                    "postgres",
-                ],
-                data=sql.encode(),
-            )
-            db_port = (
-                command(["docker", "port", db, "5432/tcp"])
-                .decode()
-                .strip()
-                .rsplit(":", 1)[1]
-            )
+            db_port = initialize_database(db)
             redis_port = (
                 command(["docker", "port", redis, "6379/tcp"])
                 .decode()
@@ -573,7 +611,45 @@ def main():
                 {**test_env, 'DECLARAI_JOB_BROKER_URL': env['REDIS_URL'].rsplit('/', 1)[0] + '/1'},
                 report='native-jobs.log',
             )
+            version = command(["docker", "exec", db, "postgres", "--version"]).decode().strip()
+            postgres_image = command(["docker", "inspect", "-f", "{{.Image}}", db]).decode().strip()
+            suite_storage = "disposable_volume"
+            if args.private_api_image and not args.runner_image:
+                # The persistent fixture has already qualified restart, broker
+                # loss and restore. Only the isolated native test suite switches
+                # to bounded tmpfs. Preserve the base test database's state and
+                # the role and TLS settings from the disk-backed qualification.
+                server_settings = database_settings(db)
+                test_dump = command(["docker", "exec", db, "pg_dump", "-U", "declarai_fixture_admin",
+                                     "-Fc", "declarai_fixture_tests"])
+                command(["docker", "stop", "--time", "10", db], timeout=20)
+                test_tls = fixture / "test-postgres-tls"
+                test_tls.mkdir(mode=0o700)
+                for name in ("admin-password", "server.crt", "server.key"):
+                    shutil.copy2(fixture / name, test_tls / name)
+                start_database(test_db, postgres_image, test_tls, tmpfs=True)
+                test_env["DECLARAI_DB_PORT"] = initialize_database(test_db)
+                verify_test_storage(test_db, postgres_image)
+                if database_settings(test_db) != server_settings or server_settings.get("ssl") != "on":
+                    raise RuntimeError("Native pytest PostgreSQL server settings differ from the disk fixture.")
+                command(["docker", "exec", "-i", test_db, "pg_restore", "--exit-on-error",
+                         "-U", "declarai_fixture_admin", "-d", "declarai_fixture_tests"], data=test_dump)
+                run_python(query, test_env, report="postgresql-suite-tls.log")
+                suite_database_report.write_text(json.dumps({
+                    "schema": "private_native_postgresql_fixture_v1",
+                    "postgresql_image_id": postgres_image,
+                    "storage": "tmpfs",
+                    "pgdata": POSTGRES_DATA_DIRECTORY,
+                    "tmpfs_limit_bytes": TEST_DATABASE_TMPFS_BYTES,
+                    "sslmode": env["DECLARAI_DB_SSLMODE"],
+                    "server_settings": server_settings,
+                    "disk_fixture_stopped": True,
+                    "restored_test_database": True,
+                    "restored_dump_sha256": hashlib.sha256(test_dump).hexdigest(),
+                }, indent=2) + "\n")
+                suite_storage = "disposable_tmpfs_1gib"
             relative = reports.relative_to(ROOT).as_posix()
+            scratch_test_database = suite_storage == "disposable_tmpfs_1gib"
             run_python(
                 [
                     "-m",
@@ -585,6 +661,9 @@ def main():
                     "-n", "2",
                     "--dist=loadfile",
                     "--max-worker-restart=0",
+                    # Still create and migrate fresh worker databases. Dispose
+                    # of both databases with their verified scratch container.
+                    *(["--reuse-db", "--create-db"] if scratch_test_database else []),
                     f"--postgresql-isolation-report=../{relative}/postgresql-isolation.json",
                     "-m",
                     "unit or functional or regression or integration or uat",
@@ -598,16 +677,11 @@ def main():
                 test_env,
                 report="postgresql.log",
             )
-            version = (
-                command(["docker", "exec", db, "postgres", "--version"])
-                .decode()
-                .strip()
-            )
+            if scratch_test_database:
+                command(["docker", "rm", "-f", "-v", test_db], timeout=30)
             summary = {
                 "postgresql": version,
-                "image_id": command(["docker", "inspect", "-f", "{{.Image}}", db])
-                .decode()
-                .strip(),
+                "image_id": postgres_image,
                 "redis_image_id": command(["docker", "inspect", "-f", "{{.Image}}", job_broker]).decode().strip(),
                 "dependency_selection": "exact_local_no_pull" if args.postgres_image and args.redis_image else "legacy_fixture_defaults",
                 "private_tls_session_api": "passed",
@@ -616,6 +690,8 @@ def main():
                 "restart_persistence": "passed",
                 "quiescent_database_artifact_restore": "passed",
                 "full_postgresql_suite": "passed",
+                "postgresql_suite_storage": suite_storage,
+                "postgresql_suite_scratch_removed": scratch_test_database,
                 "private_job_broker_tls_authentication": "passed",
                 "job_wrong_ca_hostname_credentials": "blocked",
                 "actual_job_broker_loss": "passed",
@@ -633,7 +709,7 @@ def main():
             print(json.dumps(summary))
         finally:
             # Only exact random names created by this invocation are eligible for cleanup.
-            for name in [runner, db, redis, job_broker]:
+            for name in [runner, test_db, db, redis, job_broker]:
                 subprocess.run(
                     ["docker", "rm", "-f", "-v", name],
                     stdout=subprocess.DEVNULL,
