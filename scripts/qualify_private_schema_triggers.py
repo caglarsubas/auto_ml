@@ -1225,7 +1225,8 @@ def main():
                 ET.SubElement(case_xml, "failure", message="unexpected startup evidence").text = json.dumps(result)
         ET.ElementTree(suite).write(reports / "qualification.xml", encoding="unicode")
     if receipt.get("schema_profile"):
-        if receipt["failed"] or len(cases) != 809:
+        expected = 813 if receipt["schema_profile"]["schema"] == "independent_review_schema_profile_v1" else 809
+        if receipt["failed"] or len(cases) != expected:
             raise SystemExit("Expanded RI-trigger qualification failed; retain original reports.")
     else:
         if receipt["failed"] or len(cases) != 797:
