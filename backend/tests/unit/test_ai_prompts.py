@@ -812,11 +812,13 @@ class TestBusinessUnderstandingContext:
         'assumptions': 'No policy change during the performance window',
         'regulatory_notes': 'Adverse-action reasons required',
         'forbidden_features': ['post_disbursement_balance', 'internal_score'],
+        'feature_availability': {'default': 'available_at_prediction', 'overrides': {'balance': 'excluded'}},
         'target_contract': {
             'target_column': 'Good_Bad_Flag',
             'positive_class': 0,
             'event_definition': 'Bad = 90+ DPD within 12 months',
             'good_bad_window': 'observation 2022, performance 12 months',
+            'label_maturity': 'Complete 12-month observation',
         },
         'success_criteria': {
             'primary_metric': 'roc_auc',
@@ -844,6 +846,8 @@ class TestBusinessUnderstandingContext:
             'Declared positive label (for two-class outcomes): 0',
             'Bad = 90+ DPD within 12 months',
             'observation 2022, performance 12 months',
+            'Label maturity: Complete 12-month observation',
+            'Feature availability overrides: balance=excluded',
             'roc_auc (maximize), business floor 0.72',
             'FN=5, FP=1',
             'post_disbursement_balance, internal_score',

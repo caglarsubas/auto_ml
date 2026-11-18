@@ -278,7 +278,9 @@ def controls(job):
     )
 
 
-def sealed_header(raw, job, time_columns=()):
+def sealed_header(raw, job, time_columns=(), *, as_of=None):
+    from modeling.prediction_contract import fixed_outcome_window, outcome_window_bounds, PredictionContractError
+
     required = [*job.result["features"], job.result["prediction_contract"]["target_column"], *controls(job)]
     try:
         rows = csv.reader(io.StringIO(raw.decode("utf-8-sig")), strict=True)
@@ -304,6 +306,13 @@ def sealed_header(raw, job, time_columns=()):
     schema = {"header": header, "rows": count}
     if not times:
         return schema, None
+    scope = fixed_outcome_window(job.result['prediction_contract'])
+    if scope:
+        try:
+            outcome_window_bounds(pd.DataFrame(dict(zip(time_columns, times, strict=True))),
+                                  job.specification['training']['options']['validation'], scope, as_of)
+        except PredictionContractError:
+            conflict('native_assessment_time_or_maturity_invalid')
     dates, ends = (pd.to_datetime(values, format="ISO8601", errors="coerce", utc=True) for values in times)
     if dates.isna().any() or ends.isna().any() or (ends <= dates).any():
         conflict("native_confirmation_invalid_outcome_window")
@@ -324,6 +333,7 @@ def prospective_window(window, approval, as_of):
 
 def seal(actor, adoption_id, data, upload):
     from execution_jobs import service
+    from modeling.prediction_contract import fixed_outcome_window
 
     base_fields = {"request_id", "proposal_sha256", "rationale", "assessment_as_of",
                    "population_and_maturity_attested"}
@@ -359,12 +369,15 @@ def seal(actor, adoption_id, data, upload):
         if data["proposal_sha256"] != adoption.proposal_sha256 or authority != approval.payload["authority"]:
             conflict("native_adoption_review_changed")
         validation = job.specification["training"]["options"]["validation"]
+        scope = fixed_outcome_window(job.result['prediction_contract'])
         columns = ()
-        if prospective:
+        if prospective or scope:
             if validation["strategy"] != "oot" or not validation.get("label_end_column"):
                 conflict("native_confirmation_requires_explicit_temporal_windows")
             columns = (validation["date_column"], validation["label_end_column"])
-        schema, window = sealed_header(raw, job, columns)
+        if scope and as_of > timezone.now():
+            conflict('native_assessment_time_or_maturity_invalid')
+        schema, window = sealed_header(raw, job, columns, as_of=as_of)
         spec = {
             "schema_version": 1,
             "scope": "sealed_native_outcomes_v1",

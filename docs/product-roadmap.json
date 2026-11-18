@@ -66,7 +66,7 @@
         "GPT P01/FIX-01",
         "Gemini C1"
       ],
-      "status": "in_progress",
+      "status": "tested",
       "evidence": [
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
         "[Local qualification record](evidence/foundation-2026-10-07.json)",
@@ -77,9 +77,10 @@
         "[P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md)",
         "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)",
         "[P27 source qualification](evidence/p27-qualification-2026-10-10.json)",
-        "[Supported prediction contract qualification](PREDICTION_CONTRACT_QUALIFICATION.md)"
+        "[Supported prediction contract qualification](PREDICTION_CONTRACT_QUALIFICATION.md)",
+        "[Prediction scope and executable outcome windows](PREDICTION_SCOPE_QUALIFICATION.md)"
       ],
-      "progress": "Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Full contract/channel validation remains open. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 aligns native tuning selection with accepted metric/direction/cost semantics, rejects contradictions and records exact winner/refit evidence; fitter criteria were outside P07 scope. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P27 adds method-named support-weighted rank AUC for requested multiclass stopping, retaining independent sklearn full assessment, input validation and unavailable-objective blocking. Reference callback histories, selected models and replay match across all three native boosters; private/full workflow qualification passes with unchanged budgets. No full reproduction, capacity or release claim. P184 qualifies task, target and positive-label semantics across the documented entrypoints, with typed declaration errors and consistent task dispatch. D01-T02 remains open."
+      "progress": "Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 aligns native tuning selection with accepted metric/direction/cost semantics, rejects contradictions and records exact winner/refit evidence; fitter criteria were outside P07 scope. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P27 adds method-named support-weighted rank AUC for requested multiclass stopping, retaining independent sklearn full assessment, input validation and unavailable-objective blocking. Reference callback histories, selected models and replay match across all three native boosters; private/full workflow qualification passes with unchanged budgets. No full reproduction, capacity or release claim. P184 qualifies task, target and positive-label semantics across the documented entrypoints, with typed declaration errors and consistent task dispatch. P185 binds population, exclusions, availability, horizon and maturity in version 2 contracts. Native numeric temporal admission, training folds, assessment and replay enforce optional fixed outcome windows. Both D01 backlog tasks are tested on the documented profiles."
     },
     {
       "id": "D02",
@@ -2275,6 +2276,10 @@
     {
       "date": "2026-11-18",
       "change": "Qualify D01-T01 on the documented supported paths. Backlog moves from 22/37/7 to 23/36/7 done/open/blocked across 66 tasks."
+    },
+    {
+      "date": "2026-11-18",
+      "change": "Qualify D01-T02 on the documented profiles. Backlog moves from 23/36/7 to 24/35/7 done/open/blocked across 66 tasks."
     }
   ],
   "implementation_packets": [
@@ -5553,6 +5558,21 @@
         "[Supported prediction contract qualification](PREDICTION_CONTRACT_QUALIFICATION.md)"
       ],
       "remaining": "D01-T02 covers population, availability, prediction horizon and label maturity qualification."
+    },
+    {
+      "id": "P185",
+      "kind": "product_implementation",
+      "title": "Qualify versioned prediction scope and outcome windows",
+      "items": [
+        "D01"
+      ],
+      "owner": "Backend/ML",
+      "status": "tested",
+      "description": "Bind population, feature availability, horizon and maturity across supported prediction paths. Verify optional fixed outcome windows at native admission, fold fitting, protected assessment and offline replay.",
+      "evidence": [
+        "[Prediction scope and executable outcome windows](PREDICTION_SCOPE_QUALIFICATION.md)"
+      ],
+      "remaining": "Upstream population and timing attestations require review. Credit-specific vintage, delayed-outcome and population analysis remain in D13."
     }
   ],
   "release_qualification": {
@@ -5714,8 +5734,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P183",
-    "source_commit": "3955c591ec17bea0f67073f550340270b1c24fea",
+    "packet": "P184",
+    "source_commit": "30868fd86bd8aea012ecfb31ca92920540436851",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5725,9 +5745,9 @@
       }
     },
     "packets": {
-      "total": 183,
+      "total": 184,
       "counts": {
-        "done": 182,
+        "done": 183,
         "open": 0,
         "blocked": 1
       }
@@ -5771,7 +5791,7 @@
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "queued",
+        "phase": "done",
         "dependencies": [
           "D01-T01"
         ],
@@ -5780,8 +5800,12 @@
           "Conflicting or unsupported combinations remain blocked."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Prediction scope and executable outcome windows](PREDICTION_SCOPE_QUALIFICATION.md)"
+        ],
+        "packet_refs": [
+          "P185"
+        ],
         "order": 2,
         "basis": "Remaining acceptance scope from D01; existing tested foundation is reused, not rebuilt."
       },
@@ -7577,16 +7601,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P184 prediction contract qualification",
+      "label": "Before P185 prediction scope qualification",
       "recorded_on": "2026-11-18",
-      "inventory_source_commit": "3955c591ec17bea0f67073f550340270b1c24fea",
+      "inventory_source_commit": "30868fd86bd8aea012ecfb31ca92920540436851",
       "total": 66,
       "counts": {
         "ready": 4,
         "in_progress": 0,
-        "waiting": 33,
+        "waiting": 32,
         "blocked": 7,
-        "done": 22
+        "done": 23
       }
     },
     "baseline_history": [
@@ -7882,6 +7906,20 @@
           "waiting": 34,
           "blocked": 7,
           "done": 21
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P184 prediction contract qualification",
+        "recorded_on": "2026-11-18",
+        "inventory_source_commit": "3955c591ec17bea0f67073f550340270b1c24fea",
+        "total": 66,
+        "counts": {
+          "ready": 4,
+          "in_progress": 0,
+          "waiting": 33,
+          "blocked": 7,
+          "done": 22
         }
       }
     ]

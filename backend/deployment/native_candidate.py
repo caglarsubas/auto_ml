@@ -81,6 +81,7 @@ def validate(raw, expected_sha256):
             or frozen_prediction_task(contract) not in {"classification", "regression"}
             or (contract["task"] == "classification" and len(contract["class_mapping"]) != 2)
             or contract["target_column"] in features
+            or set(features).intersection(contract.get("forbidden_features") or [])
             or not isinstance(result["model_json"], str)
         ):
             raise ValueError

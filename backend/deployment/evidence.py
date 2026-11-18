@@ -111,7 +111,7 @@ def resolve_handoff(file_id, execution_id=None, assessment_id=None):
 def _verify_exact_scoring(out, manifest, files, metadata_bytes):
     """Check that frozen scoring state agrees with the copied execution and assessment."""
     from encoding.fitted import scoring_encoding_reports
-    from modeling.prediction_contract import frozen_prediction_task
+    from modeling.prediction_contract import contract_business_understanding, frozen_prediction_task
     from preprocessing.replay import subset_purifier
 
     def evidence(name):
@@ -191,6 +191,10 @@ def _verify_exact_scoring(out, manifest, files, metadata_bytes):
     elif manifest.get('input_stage') != 'processed_unencoded' or manifest.get('purifier_file'):
         raise ValueError('Scoring input stage disagrees with the recorded execution.')
     input_columns = set(manifest['input_features'] if purifier else features).union(report['feature'] for report in reports)
+    if contract.get('schema_version') == 2 and (
+            evidence('business_understanding.json') != contract_business_understanding(contract)
+            or input_columns.intersection([contract['target_column'], *contract['forbidden_features']])):
+        raise ValueError('Scoring inputs or published declaration disagree with the frozen prediction scope.')
     text_columns = manifest.get('input_text_columns')
     numeric = manifest.get('input_numeric_kinds')
     if (not isinstance(text_columns, list) or any(not isinstance(name, str) for name in text_columns)

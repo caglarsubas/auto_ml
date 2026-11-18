@@ -203,6 +203,15 @@ describe('ModelDevelopmentComponent', () => {
   it('should send business understanding to the AI assistant as project metadata', () => {
     component.businessUnderstanding.objective = 'Approve or decline personal loan applications';
     component.businessUnderstanding.population = 'New-to-bank applicants';
+    component.businessUnderstanding.prediction_horizon = '12 months';
+    component.businessUnderstanding.target_contract.label_maturity = 'Complete 12-month follow-up';
+    component.businessUnderstanding.feature_availability = {
+      default: 'available_at_prediction',
+      overrides: {
+        income_at_application: 'available_at_prediction',
+        post_disbursement_balance: 'excluded',
+      },
+    };
     component.businessUnderstanding.regulatory_notes = 'Adverse-action reasons required';
     component.forbiddenFeaturesText = 'post_disbursement_balance, internal_score';
     component.onEventDefinitionChanged('Bad = 90+ DPD within 12 months');
@@ -210,9 +219,18 @@ describe('ModelDevelopmentComponent', () => {
     const bu = component.getPipelineConfig().business_understanding;
     expect(bu.objective).toBe('Approve or decline personal loan applications');
     expect(bu.population).toBe('New-to-bank applicants');
+    expect(bu.prediction_horizon).toBe('12 months');
     expect(bu.regulatory_notes).toBe('Adverse-action reasons required');
     expect(bu.forbidden_features).toEqual(['post_disbursement_balance', 'internal_score']);
     expect(bu.target_contract.event_definition).toBe('Bad = 90+ DPD within 12 months');
+    expect(bu.target_contract.label_maturity).toBe('Complete 12-month follow-up');
+    expect(bu.feature_availability).toEqual({
+      default: 'available_at_prediction',
+      overrides: {
+        income_at_application: 'available_at_prediction',
+        post_disbursement_balance: 'excluded',
+      },
+    });
     expect(bu.problem_type).toBe('');
   });
 

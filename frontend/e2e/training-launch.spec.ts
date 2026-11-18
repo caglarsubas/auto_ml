@@ -109,8 +109,17 @@ test('developer reviews and queues binary search by keyboard and downloads nativ
   await signIn(page);
   await open(page, 'Training binary.csv');
   await fill(page);
+  await page.getByText('Feature availability overrides', { exact: true }).click();
+  await page.getByLabel('Explicitly available columns', { exact: true }).fill('x');
   const { receipt, options } = await preview(page);
   expect(receipt.prediction_contract.positive_class).toBe('bad');
+  const reviewed = page.locator('app-training-launch .preview');
+  await expect(reviewed).toContainText('Synthetic development applicants');
+  await expect(reviewed).toContainText('12 months');
+  await expect(reviewed).toContainText('Complete synthetic follow-up');
+  await expect(
+    reviewed.getByRole('list', { name: 'Accepted feature availability overrides' }),
+  ).toContainText(/x\s*·\s*Available at prediction time/);
   await page.getByText('Exact declaration, row membership and runtime', { exact: true }).click();
   await expect(page.locator('app-training-launch pre')).toContainText(receipt.training_sha256);
   await page.getByText('Exact declaration, row membership and runtime', { exact: true }).click();
@@ -143,6 +152,10 @@ test('developer reviews and queues binary search by keyboard and downloads nativ
   const result = await finish(page, await response.json(), testInfo);
   expect(result.result.metric.primary_metric).toBe('roc_auc');
   expect(result.result.prediction_contract.positive_class).toBe('bad');
+  expect(result.result.prediction_contract.feature_availability).toEqual({
+    default: 'available_at_prediction',
+    overrides: { x: 'available_at_prediction' },
+  });
   await page.getByRole('button', { name: 'Close training panel', exact: true }).click();
   await open(page, 'Training binary.csv');
   await page.getByRole('button', { name: 'Open job ' + result.id, exact: true }).click();
@@ -156,6 +169,8 @@ test('regression edit invalidates approval and uncertain admission retries the i
   await signIn(page);
   await open(page, 'Training regression.csv');
   await fill(page, true);
+  await page.getByText('Feature availability overrides', { exact: true }).click();
+  await page.getByLabel('Excluded columns', { exact: true }).fill('entity');
   await preview(page);
   await page.getByLabel('I reviewed this exact declaration', { exact: false }).check();
   await page
@@ -194,6 +209,9 @@ test('regression edit invalidates approval and uncertain admission retries the i
   expect(job.replayed).toBe(true);
   const result = await finish(page, job, testInfo);
   expect(result.result.prediction_contract.task).toBe('regression');
+  expect(result.result.prediction_contract.feature_availability.overrides).toEqual({
+    entity: 'excluded',
+  });
   expect(result.result.metric.primary_metric).toBe('rmse');
   expect(result.result.candidates[0].folds).toHaveLength(2);
   await page.screenshot({

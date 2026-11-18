@@ -39,7 +39,7 @@ from modeling.holdout_evidence import holdout_history, reserve_holdout_access
 from modeling.execution_artifacts import publish_assessment, replace_projection, projection_lock
 from modeling.lineage import load_lineage
 from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
-from modeling.prediction_contract import PredictionContractError, frozen_prediction_task
+from modeling.prediction_contract import PredictionContractError, contract_business_understanding, frozen_prediction_task
 
 logger = logging.getLogger(__name__)
 
@@ -204,14 +204,7 @@ class EvaluationRunView(APIView):
                 identity = model_info.get('holdout_spec')
                 if identity and identity.get('target_column') != contract['target_column']:
                     raise PredictionContractError('The holdout target disagrees with the frozen prediction contract.')
-                bu = normalize_business_understanding({
-                    'problem_type': declared_task, 'target_contract': {
-                        **contract['target_contract'], 'target_column': contract['target_column'],
-                        'positive_class': contract['positive_class'],
-                    },
-                    'population': contract['population'], 'prediction_horizon': contract['prediction_horizon'],
-                    'success_criteria': contract['objective'], 'forbidden_features': contract['forbidden_features'],
-                })
+                bu = normalize_business_understanding(contract_business_understanding(contract))
             except (PredictionContractError, KeyError, TypeError):
                 return Response({'error': 'The fitted evidence disagrees with the frozen prediction contract. Select a valid execution before assessment.'}, status=status.HTTP_409_CONFLICT)
         if not os.path.exists(model_abs):

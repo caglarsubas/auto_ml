@@ -65,6 +65,85 @@ def test_protected_assessment_preserves_frozen_numeric_labels_across_csv_types()
         score(held.assign(outcome=development['outcome'].astype(str)))
 
 
+def test_prediction_scope_binds_saved_declaration_and_blocks_conflicts():
+    import copy
+
+    from modeling.prediction_contract import bind_training_declaration, fixed_outcome_window, frozen_prediction_task
+
+    base = declaration()
+    base['exclusions'] = 'Incomplete follow-up'
+    base['feature_availability']['overrides'] = {'x': 'available_at_prediction', 'late': 'excluded'}
+    state = {'business_understanding': base}
+    frame = pd.DataFrame({'x': range(4), 'late': range(4), 'outcome': ['good', 'bad'] * 2})
+    accepted, _ = resolve_prediction_contract(frame, bind_training_declaration(None, state), 'xgboost')
+    assert accepted['schema_version'] == 2 and accepted['forbidden_features'] == ['late']
+    for section, field, value in (
+        ((), 'population', 'Another population'), ((), 'exclusions', ''),
+        ((), 'prediction_horizon', '1 month'), (('target_contract',), 'label_maturity', 'Same day'),
+        (('target_contract',), 'event_definition', 'Different event'),
+        (('feature_availability',), 'overrides', {'x': 'available_at_prediction'}),
+    ):
+        requested = copy.deepcopy(base)
+        changed = requested[section[0]] if section else requested
+        changed[field] = value
+        with pytest.raises(PredictionContractError, match='saved pipeline declaration'):
+            bind_training_declaration(requested, state)
+    for conflicting in (
+        {**base, 'forbidden_features': ['x']},
+        {**base, 'population': ['malformed']},
+        {**base, 'feature_availability': {**base['feature_availability'], 'overrides': {'outcome': 'excluded'}}},
+        {**base, 'feature_availability': {**base['feature_availability'], 'overrides': {'unknown': 'excluded'}}},
+    ):
+        with pytest.raises(PredictionContractError):
+            resolve_prediction_contract(frame, conflicting, 'xgboost')
+    with pytest.raises(PredictionContractError, match='recorded digest'):
+        frozen_prediction_task({**accepted, 'population': 'tampered'})
+    with pytest.raises(PredictionContractError, match='version is unsupported'):
+        frozen_prediction_task({**accepted, 'schema_version': 99})
+    earlier = {**accepted, 'schema_version': 1, 'target_contract': {**accepted['target_contract'], 'outcome_window': {'legacy': True}}}
+    assert frozen_prediction_task(earlier) == 'classification' and fixed_outcome_window(earlier) is None
+    with pytest.raises(PredictionContractError, match='requested exclusions'):
+        bind_training_declaration(base, {'business_understanding': {**base, 'exclusions': ''}})
+
+
+def test_native_fixed_outcome_window_validation_and_replay():
+    import copy
+
+    from modeling.native_training_replay import prepare_training
+
+    dates = pd.date_range('2020-01-01', periods=80)
+    frame = pd.DataFrame({'date': dates, 'end': dates + pd.Timedelta(days=2), 'x': range(80),
+                          'outcome': ['good', 'bad'] * 40})
+    spec = declaration()
+    spec['target_contract']['outcome_window'] = {'horizon_days': 2, 'maturity_lag_days': 3,
+                                                 'development_as_of': '2020-05-01T08:00:00+08:00'}
+    options = {'business_understanding': spec, 'data_role': 'development_only', 'features': ['x'],
+               'validation': {'strategy': 'oot', 'date_column': 'date', 'label_end_column': 'end', 'n_splits': 2}}
+    raw = frame.to_csv(index=False).encode()
+    contract, folds, _ = prepare_training(raw, options)
+    assert contract['target_contract']['outcome_window']['development_as_of'] == '2020-05-01T00:00:00+00:00'
+    assert prepare_training(raw, options)[:2] == (contract, folds)
+    assert all(max(fold['train_rows']) + 5 < min(fold['valid_rows']) for fold in folds)
+    with pytest.raises(PredictionContractError, match='native numeric out-of-time'):
+        resolve_prediction_contract(frame, spec, 'xgboost')
+    invalid = copy.deepcopy(options)
+    invalid['validation'] = {'strategy': 'random', 'n_splits': 2}
+    with pytest.raises(PredictionContractError, match='requires out-of-time'):
+        prepare_training(raw, invalid)
+    invalid = copy.deepcopy(options)
+    invalid['business_understanding']['feature_availability']['overrides'] = {'date': 'available_at_prediction'}
+    with pytest.raises(PredictionContractError, match='Validation control'):
+        prepare_training(raw, invalid)
+    window = spec['target_contract']['outcome_window']
+    window['development_as_of'] = '2020-03-21T00:00:00Z'
+    with pytest.raises(PredictionContractError, match='mature labels'):
+        prepare_training(raw, options)
+    window['development_as_of'] = '2020-05-01T00:00:00Z'
+    frame.loc[0, 'end'] = frame.loc[0, 'date'] + pd.Timedelta(days=1)
+    with pytest.raises(PredictionContractError, match='complete prediction window'):
+        prepare_training(frame.to_csv(index=False).encode(), options)
+
+
 @pytest.mark.parametrize('values,task,algorithm,positive', [
     ([1, None, 0], 'classification', 'xgboost', 1),
     ([1, float('inf'), 0], 'regression', 'xgboost', None),

@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 from django.db import connection
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test.utils import CaptureQueriesContext
 
 from deployment import native_candidate, offline_reproduce
@@ -65,6 +66,12 @@ def test_reproduce_regression_blocks_altered_evidence_or_authority(world):
     w = world
     options = copy.deepcopy(w.options)
     options["business_understanding"] = declaration("regression")
+    options['business_understanding']['exclusions'] = 'Rows without a complete outcome window'
+    options['business_understanding']['feature_availability']['overrides'] = {'entity': 'excluded', 'x': 'available_at_prediction'}
+    options['business_understanding']['target_contract']['outcome_window'] = {
+        'horizon_days': 1, 'maturity_lag_days': 3, 'development_as_of': '2020-06-01T00:00:00Z',
+    }
+    options['validation'] = {'strategy': 'oot', 'date_column': 'date', 'label_end_column': 'end', 'n_splits': 2}
     w.frame["outcome"] = [10.0, 20.0] * 60
     w.frame.to_csv(w.path, index=False)
     body, _ = admission(w, options)
@@ -73,6 +80,18 @@ def test_reproduce_regression_blocks_altered_evidence_or_authority(world):
     w.trained = NativeJob.objects.get(pk=job_id)
     p = approve(w, proposal(w))
     frame = pd.DataFrame({"z": [None, 2.0, 4.0] * 20, "x": range(60), "outcome": [10.0, 20.0] * 30})
+    frame['date'] = pd.date_range('2021-01-01', periods=60).strftime('%Y-%m-%d')
+    frame['end'] = pd.date_range('2021-01-02', periods=60).strftime('%Y-%m-%d')
+    immature = frame.copy()
+    immature.loc[59, 'end'] = '2026-10-20'
+    denied = w.clients['reviewer'].post(f"/api/native-adoptions/{p['id']}/protected-inputs/", {
+        'request_id': str(uuid.uuid4()), 'proposal_sha256': p['proposal_sha256'],
+        'rationale': 'Complete outcome maturity required for this frozen candidate.',
+        'assessment_as_of': '2026-10-21T00:00:00Z', 'population_and_maturity_attested': 'true',
+        'file': SimpleUploadedFile('immature.csv', immature.to_csv(index=False).encode()),
+    })
+    assert denied.status_code == 409 and denied.json()['error_code'] == 'native_assessment_time_or_maturity_invalid'
+    assert not NativeProtectedInput.objects.exists() and not HoldoutAccess.objects.exists()
     sealed, raw, _ = seal(w, p, frame)
     identifier = queued(w, sealed)
     service.execute(identifier)
@@ -84,6 +103,11 @@ def test_reproduce_regression_blocks_altered_evidence_or_authority(world):
     assert report["task"] == "regression" and report["n_assessed"] == 60
     assert report["scores_sha256"] == data["assessment"]["result"]["scores_sha256"]
     assert report["model_sha256"] == data["training"]["fit"]["model_sha256"]
+    frozen = data['training']['specification']['training']['prediction_contract']
+    assert frozen == data['assessment']['result']['prediction_contract']
+    assert frozen['forbidden_features'] == ['entity']
+    assert data['assessment']['result']['population_checks']['fixed_outcome_window_checked'] is True
+    assert data['assessment']['result']['population_checks']['prediction_contract_sha256'] == frozen['sha256']
 
     for role in ("anonymous", "outsider", "developer", "admin"):
         denied = w.clients[role].get(request)

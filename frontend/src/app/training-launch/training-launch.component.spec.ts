@@ -18,6 +18,10 @@ describe('Reviewed durable training launch', () => {
       task: 'classification',
       target_column: 'outcome',
       positive_class: 'bad',
+      population: 'Development applicants',
+      prediction_horizon: '12 months',
+      target_contract: { label_maturity: 'Complete follow-up' },
+      feature_availability: { default: 'available_at_prediction' },
     },
     folds: [{ train_rows: [0, 1], valid_rows: [2, 3] }],
     budget: { candidates: 2, seconds: 120 },
@@ -41,12 +45,23 @@ describe('Reviewed durable training launch', () => {
       available: true,
     });
   }
-  function prepare() {
+  function prepare(response: object = preview) {
     component.prepare();
     const request = http.expectOne(previewUrl);
-    request.flush(structuredClone(preview));
+    request.flush(structuredClone(response) as Record<string, any>);
     component.approved = true;
     return request.request.body;
+  }
+  function datedWindow() {
+    Object.assign(component.draft, {
+      strategy: 'oot',
+      date: 'prediction_date',
+      labelEnd: 'outcome_end',
+      outcomeWindow: true,
+      horizonDays: 365,
+      maturityLagDays: 0,
+      developmentAsOf: '2026-11-18T08:00:00+08:00',
+    });
   }
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -76,6 +91,10 @@ describe('Reviewed durable training launch', () => {
     expect(body.data_role).toBe('development_only');
     expect(body.features).toEqual(['x', 'z']);
     expect(body.business_understanding.target_contract.positive_class).toBe('bad');
+    expect(body.business_understanding.target_contract.outcome_window).toBeUndefined();
+    expect(body.business_understanding.feature_availability).toEqual({
+      default: 'available_at_prediction',
+    });
     expect(body.validation).toEqual({ strategy: 'random', n_splits: 2 });
     expect(body.request_id).toBeUndefined();
     http.expectNone(url);
@@ -95,6 +114,151 @@ describe('Reviewed durable training launch', () => {
     );
     expect(fixture.nativeElement.textContent).toContain('No model adoption');
     expect(fixture.nativeElement.textContent).not.toContain('Queue integrity check');
+    const reviewedTerms = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.preview dd'),
+      (item) => item.textContent?.trim(),
+    );
+    expect(reviewedTerms).toContain('Development applicants');
+    expect(reviewedTerms).toContain('12 months');
+    expect(reviewedTerms).toContain('Complete follow-up');
+    expect(reviewedTerms).toContain('Selected predictors available at prediction time');
+  });
+  it('keeps explicit availability policy and predictor order in the exact reviewed request', () => {
+    component.draft.explicitlyAvailable = ' z\r\n';
+    component.draft.excluded = 'post prediction value';
+    const availability = {
+      default: 'available_at_prediction',
+      overrides: { 'post prediction value': 'excluded', z: 'available_at_prediction' },
+    };
+    const body = prepare({
+      ...preview,
+      prediction_contract: { ...preview.prediction_contract, feature_availability: availability },
+    });
+    expect(body.features).toEqual(['x', 'z']);
+    expect(body.business_understanding.feature_availability).toEqual(availability);
+    fixture.detectChanges();
+    const list = fixture.nativeElement.querySelector(
+      'ul[aria-label="Accepted feature availability overrides"]',
+    );
+    expect(list.textContent).toContain('post prediction value');
+    expect(list.textContent).toContain('Excluded');
+    expect(list.textContent).toContain('Available at prediction time');
+    component.submit();
+    const submission = http.expectOne(url);
+    expect(submission.request.body.business_understanding.feature_availability).toEqual(
+      availability,
+    );
+    submission.flush({}, { status: 409, statusText: 'Conflict' });
+  });
+  it('invalidates the reviewed preview when an availability override changes in the form', async () => {
+    prepare();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const excluded = fixture.nativeElement.querySelector('textarea[name=excluded]');
+    excluded.closest('details').open = true;
+    excluded.value = 'post_prediction';
+    excluded.dispatchEvent(new Event('input'));
+    expect(component.draft.excluded).toBe('post_prediction');
+    expect(component.preview).toBeNull();
+    expect(component.approved).toBeFalse();
+  });
+  it('rejects overrides the server omitted from its accepted contract', () => {
+    component.draft.excluded = 'post_prediction';
+    component.prepare();
+    http.expectOne(previewUrl).flush(preview);
+    expect(component.preview).toBeNull();
+    expect(component.error).toContain('did not preserve');
+    http.expectNone(url);
+  });
+  for (const [change, message] of [
+    [{ explicitlyAvailable: 'z\nz' }, 'once'],
+    [{ explicitlyAvailable: 'locked', excluded: 'locked' }, 'once'],
+    [{ excluded: 'z' }, 'Remove excluded columns from the predictor list: z'],
+    [{ excluded: 'outcome' }, 'Remove the target column'],
+    [
+      { strategy: 'group', group: 'entity', explicitlyAvailable: 'entity' },
+      'Validation control columns',
+    ],
+  ] as const) {
+    it(`blocks conflicting availability ${JSON.stringify(change)}`, () => {
+      Object.assign(component.draft, change);
+      component.prepare();
+      expect(component.error).toContain(message);
+      http.expectNone(previewUrl);
+    });
+  }
+  it('submits the dated window and displays the accepted normalized timezone and maturity lag', () => {
+    datedWindow();
+    component.draft.excluded = 'outcome_end';
+    const window = {
+      horizon_days: 365,
+      maturity_lag_days: 0,
+      development_as_of: '2026-11-18T00:00:00+00:00',
+    };
+    const body = prepare({
+      ...preview,
+      prediction_contract: {
+        ...preview.prediction_contract,
+        target_contract: { label_maturity: 'Complete follow-up', outcome_window: window },
+        feature_availability: {
+          default: 'available_at_prediction',
+          overrides: { outcome_end: 'excluded' },
+        },
+      },
+    });
+    expect(body.business_understanding.target_contract.outcome_window).toEqual({
+      ...window,
+      development_as_of: '2026-11-18T08:00:00+08:00',
+    });
+    expect(body.validation).toEqual({
+      strategy: 'oot',
+      n_splits: 2,
+      date_column: 'prediction_date',
+      label_end_column: 'outcome_end',
+    });
+    fixture.detectChanges();
+    const timestamp = fixture.nativeElement.querySelector('.preview time');
+    expect(timestamp.getAttribute('datetime')).toBe(window.development_as_of);
+    expect(timestamp.parentElement.textContent).toContain('365 days minimum');
+    expect(timestamp.parentElement.textContent).toContain('0 days maturity lag');
+    component.submit();
+    const submission = http.expectOne(url);
+    expect(submission.request.body.business_understanding).toEqual(body.business_understanding);
+    submission.flush({}, { status: 409, statusText: 'Conflict' });
+  });
+  for (const [change, message] of [
+    [{ strategy: 'random' }, 'requires temporal validation'],
+    [{ labelEnd: 'prediction_date' }, 'distinct date and label end'],
+    [{ horizonDays: 0 }, 'whole-number horizon'],
+    [{ maturityLagDays: 0.5 }, 'whole-number horizon'],
+    [{ developmentAsOf: '2026-11-18T08:00:00' }, 'ISO format with a timezone'],
+  ] as const) {
+    it(`blocks an unsupported outcome window ${JSON.stringify(change)}`, () => {
+      datedWindow();
+      Object.assign(component.draft, change);
+      component.prepare();
+      expect(component.error).toContain(message);
+      http.expectNone(previewUrl);
+    });
+  }
+  it('rejects a preview that drops the required outcome window', () => {
+    datedWindow();
+    component.prepare();
+    http.expectOne(previewUrl).flush(preview);
+    expect(component.preview).toBeNull();
+    expect(component.error).toContain('outcome window');
+    http.expectNone(url);
+  });
+  it('rejects a preview that changes the accepted population', () => {
+    component.prepare();
+    http.expectOne(previewUrl).flush({
+      ...preview,
+      prediction_contract: { ...preview.prediction_contract, population: 'Different applicants' },
+    });
+    expect(component.preview).toBeNull();
+    expect(component.error).toContain('population');
+    http.expectNone(url);
   });
   for (const key of ['developmentOnly', 'available'] as const) {
     it(`requires the explicit ${key} declaration`, () => {

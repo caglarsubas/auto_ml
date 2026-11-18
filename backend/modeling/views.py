@@ -35,7 +35,7 @@ from modeling.development_validation import (
 from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
 from modeling.collinearity import write_snapshot, load_snapshot, detail
 from modeling.execution_artifacts import begin_execution, digest_file, publish_execution, publish_candidate, replace_projection, load_development_data, load_execution, projection_lock
-from modeling.prediction_contract import bind_training_declaration, PredictionContractError, resolve_prediction_contract
+from modeling.prediction_contract import bind_training_declaration, check_availability_controls, PredictionContractError, resolve_prediction_contract
 from modeling.models import PipelineRun
 from modeling.split_contract import (
     resolve_modeling_splits, fit_numeric_imputer, transform_numeric_impute,
@@ -298,7 +298,7 @@ def execute_legacy_training(data):
             # Keep a raw copy to preserve original NaNs for interactive SHAP visualization
             # Exclude both target and excluded variables from feature matrix
             cols_to_exclude = [target_col] + excluded_cols_for_modeling
-            X_raw = df.drop(columns=cols_to_exclude)
+            X_raw = df.drop(columns=[name for name in cols_to_exclude if name in df])
             # Detect categorical columns:
             #   1) from encoding sidecar metadata (authoritative)
             #   2) fallback: dtype 'category', 'object', or string (Pandas 3.0+ StringDtype)
@@ -332,7 +332,10 @@ def execute_legacy_training(data):
                 split_artifact=purifier_recipe['outer_split'] if purifier_recipe else None,
             )
 
-            split_columns = [value for key, value in (split_meta.get('split_config') or {}).items() if key in ('date_column', 'group_column', 'label_end_column') and value in X_raw.columns]
+            controls = [value for key, value in (split_meta.get('split_config') or {}).items()
+                        if key in ('date_column', 'group_column', 'label_end_column') and value in df]
+            check_availability_controls(prediction_contract, controls)
+            split_columns = [column for column in controls if column in X_raw]
             excluded_cols_for_modeling = list(dict.fromkeys(excluded_cols_for_modeling + split_columns))
             X_raw = X_raw.drop(columns=split_columns)
             cat_cols = [column for column in cat_cols if column in X_raw.columns]

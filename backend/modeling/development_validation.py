@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupKFold, KFold, StratifiedKFold, TimeSeriesSplit
 
+from modeling.prediction_contract import fixed_outcome_window, outcome_window_bounds
 from modeling.split_contract import fit_numeric_imputer, transform_numeric_impute, validation_strategy
 from preprocessing.purifier_contract import parse_split_dates
 
@@ -30,16 +31,20 @@ def development_folds(context, row_index, y, n_splits):
         date_column = config.get('date_column')
         if not date_column or date_column not in frame:
             raise ValueError('Development temporal folds require an explicit date_column. Legacy chronology cannot be qualified.')
-        dates = parse_split_dates(frame[date_column])
-        if dates.isna().any():
-            raise ValueError('Development temporal folds require valid timestamps.')
-        order = dates.sort_values(kind='mergesort').index
         end_column = config.get('label_end_column')
         if end_column and end_column not in frame:
             raise ValueError('Declared label_end_column is absent from the development population.')
-        ends = parse_split_dates(frame[end_column]) if end_column else dates
-        if ends.isna().any() or (ends < dates).any():
-            raise ValueError('Development label windows are invalid.')
+        window = fixed_outcome_window(context.get('prediction_contract') or {})
+        if window:
+            dates, ends = outcome_window_bounds(frame, {'strategy': strategy, **config}, window, window['development_as_of'])
+        else:
+            dates = parse_split_dates(frame[date_column])
+            if dates.isna().any():
+                raise ValueError('Development temporal folds require valid timestamps.')
+            ends = parse_split_dates(frame[end_column]) if end_column else dates
+            if ends.isna().any() or (ends < dates).any():
+                raise ValueError('Development label windows are invalid.')
+        order = dates.sort_values(kind='mergesort').index
         splitter = TimeSeriesSplit(n_splits=n_splits)
         for train_pos, valid_pos in splitter.split(order):
             train, valid = order[train_pos], order[valid_pos]
