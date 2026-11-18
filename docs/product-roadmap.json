@@ -248,7 +248,7 @@
         "GPT FIX-04",
         "Gemini C4"
       ],
-      "status": "in_progress",
+      "status": "tested",
       "evidence": [
         "[P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md)",
         "[Local qualification record](evidence/foundation-2026-10-07.json)",
@@ -264,9 +264,10 @@
         "[P15 source qualification](evidence/p15-qualification-2026-10-09.json)",
         "[Grouped input diagnostics](GROUPED_COLLINEARITY_IMPLEMENTATION.md)",
         "[P28 source qualification](evidence/p28-qualification-2026-10-11.json)",
-        "[Matched development-fold diagnostic and limits](PAIRED_DIAGNOSTIC_UNCERTAINTY.md)"
+        "[Matched development-fold diagnostic and limits](PAIRED_DIAGNOSTIC_UNCERTAINTY.md)",
+        "[Diagnostic and explanation qualification](DIAGNOSTIC_EXPLANATION_QUALIFICATION.md)"
       ],
-      "progress": "Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. P04 reports undefined constant-target R² and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 exposes failed/unusable attempts and curve gaps without invented spread; surrogate importance/range guidance is explicitly descriptive rather than causal. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P15 centers/scales native numeric auxiliary regressions explicitly and distinguishes finite, unbounded/precision-indistinguishable, constant, excluded, solver and compute-budget states. Exact category-derived output groups are excluded; fixed VIF severity/removal thresholds are removed. Grouped categorical methods and paired uncertainty remain open. P28 adds immutable grouped training-input subspace GVIF with nominal category-code invariance, exact one-hot provenance, dimensional adjustment and explicit rank/precision/budget states. Exact native replay uses no fitted state or final outcomes; current reviewers may inspect both numeric and grouped reports, with revocation checks and keyboard summaries. Lossy category encodings block the conditioning set. Independent reference, full metadata and browser checks pass; paired uncertainty, SQLite worker contention, expert isolation and release/customer gates remain open. P28 final hardening validates native NumPy format, bounded header, exact dtype/shape and payload length before allocating arrays; a retained failing-before/passing-after case confirms the boundary. The final complete matrices and browser/runtime image qualify this stronger source without changing prediction calculations or budgets. P186 adds effect size and a leave-one-validation-fold-out sensitivity range for the two native XGBoost depth candidates when the metric and ordered development partitions match. Random, grouped and out-of-time plans retain their sampling limitations. Invalid matches provide an unavailable reason. The comparison is exploratory, sampling uncertainty is unavailable from dependent fold scores, and clean replay verifies the diagnostic. D05-T02 covers remaining diagnostic and explanation qualification."
+      "progress": "Qualified diagnostic workflows distinguish numeric VIF from grouped categorical GVIF. Exact authenticated replay preserves their meaning under nominal recoding and exposes unavailable evidence for lossy or unverified inputs. P186 records effect size and leave-one-fold-out sensitivity for the two matched native candidates; sampling uncertainty is unavailable from dependent development folds. P187 verifies the archived matrix bounds, ranking limitations, model and feature support for interactive explanations, and associational sequential scans on verified training predictors. Broader branch comparisons remain in D10."
     },
     {
       "id": "D06",
@@ -2285,6 +2286,10 @@
     {
       "date": "2026-11-18",
       "change": "Record D05-T01 paired diagnostic sensitivity for the supported native candidates. Backlog moves from 24/35/7 to 25/34/7 done/open/blocked across 66 tasks. D05-T02 is ready."
+    },
+    {
+      "date": "2026-11-18",
+      "change": "Qualify D05-T02 and record D05 as tested for the supported diagnostic workflows. Backlog moves from 25/34/7 to 26/33/7 done/open/blocked across 66 tasks."
     }
   ],
   "implementation_packets": [
@@ -5593,6 +5598,21 @@
         "[Matched development-fold diagnostic and limits](PAIRED_DIAGNOSTIC_UNCERTAINTY.md)"
       ],
       "remaining": "D05-T02 qualifies remaining diagnostics and explanations. Matched feature and model branch comparisons remain in D10."
+    },
+    {
+      "id": "P187",
+      "kind": "product_implementation",
+      "title": "Qualify diagnostics and explanation boundaries",
+      "items": [
+        "D05"
+      ],
+      "owner": "Backend/ML",
+      "status": "tested",
+      "description": "Verify nominal-code invariance and archive bounds for retained collinearity diagnostics. Keep ranking limits, unavailable explanations and sequential scan provenance visible in the review workflow.",
+      "evidence": [
+        "[Diagnostic and explanation qualification](DIAGNOSTIC_EXPLANATION_QUALIFICATION.md)"
+      ],
+      "remaining": "Broader feature and model branch comparisons remain in D10. Category-aware grids and class-specific interactive explanations require separate qualification."
     }
   ],
   "release_qualification": {
@@ -5754,20 +5774,20 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P185",
-    "source_commit": "b44c868109d083098d07137ad60de6b0a7e603d2",
+    "packet": "P186",
+    "source_commit": "9ecc98c99eef1c4214eee035dfbd249428bd6cda",
     "outcomes": {
       "total": 26,
       "counts": {
-        "done": 0,
-        "open": 26,
+        "done": 1,
+        "open": 25,
         "blocked": 0
       }
     },
     "packets": {
-      "total": 185,
+      "total": 186,
       "counts": {
-        "done": 184,
+        "done": 185,
         "open": 0,
         "blocked": 1
       }
@@ -6080,7 +6100,7 @@
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "queued",
+        "phase": "done",
         "dependencies": [
           "D05-T01"
         ],
@@ -6089,8 +6109,12 @@
           "Heuristic importance and associational patterns retain their limitations."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Diagnostic and explanation qualification](DIAGNOSTIC_EXPLANATION_QUALIFICATION.md)"
+        ],
+        "packet_refs": [
+          "P187"
+        ],
         "order": 11,
         "basis": "Remaining acceptance scope from D05; existing tested foundation is reused, not rebuilt."
       },
@@ -7625,16 +7649,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P186 paired diagnostic sensitivity",
+      "label": "Before P187 diagnostic and explanation qualification",
       "recorded_on": "2026-11-18",
-      "inventory_source_commit": "b44c868109d083098d07137ad60de6b0a7e603d2",
+      "inventory_source_commit": "9ecc98c99eef1c4214eee035dfbd249428bd6cda",
       "total": 66,
       "counts": {
         "ready": 4,
         "in_progress": 0,
-        "waiting": 31,
+        "waiting": 30,
         "blocked": 7,
-        "done": 24
+        "done": 25
       }
     },
     "baseline_history": [
@@ -7958,6 +7982,20 @@
           "waiting": 32,
           "blocked": 7,
           "done": 23
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P186 paired diagnostic sensitivity",
+        "recorded_on": "2026-11-18",
+        "inventory_source_commit": "b44c868109d083098d07137ad60de6b0a7e603d2",
+        "total": 66,
+        "counts": {
+          "ready": 4,
+          "in_progress": 0,
+          "waiting": 31,
+          "blocked": 7,
+          "done": 24
         }
       }
     ]

@@ -174,7 +174,10 @@ def test_canonical_inventory_covers_every_remaining_outcome_with_actionable_acce
     source = json.loads((ROOT / 'docs/product-roadmap.json').read_text())
     result = backlog.project_backlog(source)
     assert result['covered_outcomes'] == result['outcome_total'] == 26
-    assert not result['unmapped_outcomes'] and result['remaining'] > 40
+    assert not result['unmapped_outcomes']
+    tasks = source['backlog']['tasks']
+    assert {task['id'] for task in result['tasks']} == {task['id'] for task in tasks}
+    assert result['remaining'] == sum(task['phase'] != 'done' for task in tasks)
     assert result['counts']['ready'] > 0 and result['counts']['waiting'] > 0 and result['counts']['blocked'] > 0
     assert len([t for t in result['tasks'] if 'D07' in t['items']]) >= 8
     assert 'Remaining roadmap backlog' in roadmap.render(source)

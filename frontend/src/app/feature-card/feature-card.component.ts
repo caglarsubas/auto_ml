@@ -8,10 +8,10 @@ import {
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { DataService } from '../services/data.service';
+import { DataService, SequentialPatternReport } from '../services/data.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import * as math from 'mathjs'; // Optional: using math.js for easier percentile calculation
-import { forkJoin } from 'rxjs';
+import { forkJoin, Subscription } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSelectModule } from '@angular/material/select';
 
@@ -48,6 +48,7 @@ interface FeatureCardDialogData {
   columnName: string;
   features: FeatureInfo[];
   processedFile?: string;
+  executionId?: string;
   encodedFile?: string;
   dateColumn?: string;
   qualitySummary?: { [key: string]: any };
@@ -162,7 +163,9 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   explainabilityFetched: boolean = false; // Track if we've already fetched
   showNullsBeeswarm: boolean = false; // Control showing null values in SHAP Beeswarm (Single Feature)
   beeswarmMissingRatio: number = 0; // Missing ratio for current feature in beeswarm plot
-  sequentialCandidates: any[] = [];
+  sequentialReport: SequentialPatternReport | null = null;
+  sequentialError: string | null = null;
+  private explanationRequest?: Subscription;
   sequentialLoading = false;
 
   // Track current tab index (0=Descriptives, 1=Quality, 2=Importance, 3=Explainability)
@@ -178,15 +181,17 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
 
   loadSequentialPatterns(): void {
     const fileId = Number(this.data?.fileId);
-    if (!fileId || Number.isNaN(fileId)) return;
+    if (!fileId || this.sequentialLoading) return;
+    this.sequentialReport = null;
+    this.sequentialError = null;
     this.sequentialLoading = true;
-    this.dataService.getSequentialPatterns(fileId).subscribe({
-      next: (resp) => {
-        this.sequentialCandidates = resp?.candidates || [];
+    this.dataService.getSequentialPatterns(fileId, undefined, this.data.executionId).subscribe({
+      next: (report) => {
+        this.sequentialReport = report;
         this.sequentialLoading = false;
       },
-      error: () => {
-        this.sequentialCandidates = [];
+      error: (error) => {
+        this.sequentialError = error.error?.error || 'Sequential pattern evidence is unavailable.';
         this.sequentialLoading = false;
       },
     });
@@ -269,9 +274,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       setTimeout(() => this.drawImportancePlot(), 0);
     }
     // Reset explainability so it re-fetches with the new context
-    this.explainabilityData = null;
-    this.explainabilityFetched = false;
-    this.explainabilityError = null;
+    this.resetExplainability();
     // If the Explainability tab is active, fetch immediately
     if (this.currentTabIndex === 3) {
       this.fetchFeatureExplainability();
@@ -617,6 +620,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.explanationRequest?.unsubscribe();
     if (this.isBrowser) {
       window.removeEventListener('resize', this.resizeListener);
     }
@@ -633,9 +637,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       this.qualitySummary = null;
       this.initialQualitySummary = null;
       // Reset explainability data so it reloads for new feature
-      this.explainabilityData = null;
-      this.explainabilityFetched = false;
-      this.explainabilityError = null;
+      this.resetExplainability();
 
       // If user is currently on Quality tab, fetch quality for new feature
       if (this.currentTabIndex === 1) {
@@ -1925,8 +1927,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         'sfsViewMode=',
         this.sfsViewMode,
       );
-      // Always try sequential-pattern MVP (works with train_data even pre-SHAP)
-      if (!this.sequentialLoading && !this.sequentialCandidates?.length) {
+      if (!this.preModelingMode && !this.sequentialReport && !this.sequentialError) {
         this.loadSequentialPatterns();
       }
       if (this.preModelingMode) {
@@ -1940,6 +1941,14 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
   }
 
   // ===== Explainability (SHAP beeswarm + Partial Dependence) =====
+  private resetExplainability(): void {
+    this.explanationRequest?.unsubscribe();
+    this.explainabilityData = null;
+    this.explainabilityFetched = false;
+    this.explainabilityLoading = false;
+    this.explainabilityError = null;
+  }
+
   fetchFeatureExplainability(): void {
     try {
       console.log(
@@ -1951,6 +1960,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         this.data.fileId,
       );
       if (!this.isBrowser) return;
+      this.resetExplainability();
       if (!this.data.processedFile) {
         this.explainabilityError = 'Processed file required. Please run preprocessing first.';
         console.warn('[Explainability] No processedFile — aborting.');
@@ -1984,7 +1994,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
         'selectedFeatures=',
         explSelectedFeatures,
       );
-      this.dataService
+      this.explanationRequest = this.dataService
         .getFeatureExplainability(
           fid,
           this.selectedFeatureName,
@@ -1992,6 +2002,7 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
           500,
           explModelPath,
           explSelectedFeatures,
+          explModelPath ? undefined : this.data.executionId,
         )
         .subscribe({
           next: (resp: any) => {
@@ -2012,13 +2023,16 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
             setTimeout(() => this.drawExplainabilityPlots(), 0);
           },
           error: (err: any) => {
+            this.explainabilityLoading = false;
             console.error('Fetch explainability failed:', err);
 
             // Check if this is a "feature not in model" case (expected, not an error)
             const reason = err?.error?.reason;
             const detail = err?.error?.detail;
 
-            if (reason === 'feature_not_in_model') {
+            if (err?.error?.status === 'unavailable') {
+              this.explainabilityError = err.error.error || 'Explanation unavailable.';
+            } else if (reason === 'feature_not_in_model') {
               // This is expected - feature was not selected during modeling
               this.explainabilityError =
                 detail ||

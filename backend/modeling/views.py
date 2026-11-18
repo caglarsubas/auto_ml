@@ -12,6 +12,7 @@ import hashlib
 from django.conf import settings
 import json
 import math
+import pickle
 import warnings
 import pandas as pd
 from execution_jobs.legacy_execution import enabled as durable_legacy_enabled
@@ -32,7 +33,7 @@ from modeling.hyperparam_utils import (
 from modeling.development_validation import (
     development_folds, fit_category_levels, search_validation_context, target_encoding_features, target_encoding_plan,
 )
-from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
+from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS, category_derived_columns
 from modeling.collinearity import write_snapshot, load_snapshot, detail
 from modeling.execution_artifacts import begin_execution, digest_file, publish_execution, publish_candidate, replace_projection, load_development_data, load_execution, projection_lock
 from modeling.prediction_contract import bind_training_declaration, check_availability_controls, PredictionContractError, resolve_prediction_contract
@@ -508,7 +509,7 @@ def execute_legacy_training(data):
                             X_train, y_train, X_valid, y_valid, params,
                             num_boost_round=500, early_stopping_rounds=50,
                         )
-                        booster = adapter.shap_model()  # underlying model for SHAP / legacy paths
+                        booster = adapter.shap_model()
                         enable_cat = bool(adapter.enable_categorical or enable_cat)
 
                     # Quality metric on validation + probability calibration (fit on valid only)
@@ -560,16 +561,16 @@ def execute_legacy_training(data):
                         pass
 
                     shap_importance = []
-                    selected_features = [
-                        {
-                            'feature': g.get('feature'),
-                            'impact': float(g.get('score') or 0.0),
-                            'signed_impact': float(g.get('score') or 0.0),
-                        }
-                        for g in (gain_importance or [])[:40]
-                    ] if is_alt or num_classes > 2 else []
+                    gain_only = [
+                        {'feature': row['feature'], 'gain': row['score'], 'impact': None, 'signed_impact': None,
+                         'signed_mean': None, 'shap_percentile': None, 'gain_percentile': None, 'combined_score': None}
+                        for row in gain_importance[:40]
+                    ]
+                    selected_features = gain_only if is_alt or num_classes > 2 else []
+                    unordered_features = set(cat_cols) | category_derived_columns(encoding_report)
                     beeswarm_png = None
                     shap_beeswarm = None
+                    explanation_limitation = None
                     try:
                         if booster is None:
                             raise _SkipShap('alternate model — TreeExplainer not applicable')
@@ -598,59 +599,37 @@ def execute_legacy_training(data):
                                 Xv_shap[c] = Xv_shap[c].cat.codes.astype(float)
                                 # Replace -1 (NaN sentinel from .cat.codes) with NaN
                                 Xv_shap[c] = Xv_shap[c].replace(-1, np.nan)
-                        shap_vals = explainer.shap_values(Xv_shap)
-                        if isinstance(shap_vals, list):
-                            try:
-                                shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
-                            except Exception:
-                                shap_matrix = shap_vals[0]
-                        else:
-                            shap_matrix = shap_vals
+                        shap_matrix = explainer.shap_values(Xv_shap)
+                        if not isinstance(shap_matrix, np.ndarray) or shap_matrix.shape != Xv_shap.shape:
+                            raise _SkipShap('A single signed SHAP value per row and feature is required.')
                         mean_abs = np.mean(np.abs(shap_matrix), axis=0)
                         mean_signed = np.mean(shap_matrix, axis=0)
                         shap_details: list[dict[str, object]] = []
                         for idx, fname in enumerate(feat_names):
                             mean_abs_val = float(mean_abs[idx]) if np.isfinite(mean_abs[idx]) else 0.0
                             signed_mean_val = float(mean_signed[idx]) if np.isfinite(mean_signed[idx]) else 0.0
-                            # Direction from SHAP behavior vs feature value:
-                            # 1) Prefer robust top-vs-bottom quantile mean SHAP difference
-                            # 2) Fallback to Spearman correlation
-                            # 3) Fallback to signed mean
-                            direction = 0.0
-                            try:
-                                fv = pd.to_numeric(Xv_raw.iloc[:, idx], errors='coerce').to_numpy()
-                            except Exception:
-                                fv = Xv.iloc[:, idx].to_numpy() if hasattr(Xv, 'iloc') else np.asarray([])
-                            sv = shap_matrix[:, idx] if shap_matrix.ndim == 2 else np.asarray([])
-                            if fv.size and sv.size and fv.shape[0] == sv.shape[0]:
+                            # Category codes have no directional ordering.
+                            direction = None
+                            if fname not in unordered_features:
+                                direction = 0.0
+                                fv = pd.to_numeric(Xv_raw.iloc[:, idx], errors='coerce').to_numpy(dtype=float, na_value=np.nan)
+                                sv = shap_matrix[:, idx]
                                 mask = np.isfinite(fv) & np.isfinite(sv)
                                 if np.sum(mask) > 2:
                                     fv_m = fv[mask]
                                     sv_m = sv[mask]
-                                    try:
-                                        q_low = np.nanpercentile(fv_m, 25)
-                                        q_high = np.nanpercentile(fv_m, 75)
+                                    if np.ptp(fv_m) > 0 and np.ptp(sv_m) > 0:
+                                        q_low, q_high = np.nanpercentile(fv_m, [25, 75])
                                         top = sv_m[fv_m >= q_high]
                                         bot = sv_m[fv_m <= q_low]
                                         if top.size >= 5 and bot.size >= 5:
-                                            diff = float(np.nanmean(top) - np.nanmean(bot))
-                                            if np.isfinite(diff) and diff != 0.0:
-                                                direction = float(np.sign(diff))
-                                    except Exception:
-                                        pass
-                                    # Fallback to Spearman if still undecided
-                                    if direction == 0.0:
-                                        fv_rank = pd.Series(fv_m).rank(method='average').to_numpy()
-                                        sv_rank = pd.Series(sv_m).rank(method='average').to_numpy()
-                                        corr = np.corrcoef(fv_rank, sv_rank)[0, 1]
-                                        if not np.isfinite(corr):
-                                            corr = np.corrcoef(fv_m, sv_m)[0, 1]
-                                        if np.isfinite(corr) and corr != 0.0:
-                                            direction = float(np.sign(corr))
-                            if direction == 0.0 and signed_mean_val != 0.0:
-                                direction = float(np.sign(signed_mean_val))
-                            if direction == 0.0 and mean_abs_val > 0.0:
-                                direction = 1.0
+                                            direction = float(np.sign(np.nanmean(top) - np.nanmean(bot)))
+                                        if direction == 0.0:
+                                            fv_rank = pd.Series(fv_m).rank(method='average').to_numpy()
+                                            sv_rank = pd.Series(sv_m).rank(method='average').to_numpy()
+                                            corr = np.corrcoef(fv_rank, sv_rank)[0, 1]
+                                            if np.isfinite(corr):
+                                                direction = float(np.sign(corr))
                             shap_details.append({
                                 'index': idx,
                                 'feature': fname,
@@ -680,10 +659,7 @@ def execute_legacy_training(data):
                             n = len(arr)
                             if n == 0:
                                 return arr.copy()
-                            order = np.argsort(arr)
-                            ranks = np.empty_like(order, dtype=float)
-                            ranks[order] = np.arange(1, n + 1) / n
-                            return ranks
+                            return np.searchsorted(np.sort(arr), arr, side='right') / n
 
                         _shap_pct = _ecdf_rank(_shap_vals)
                         _gain_pct = _ecdf_rank(_gain_vals)
@@ -698,7 +674,7 @@ def execute_legacy_training(data):
                                     'feature': item['feature'],
                                     'description': desc,
                                     'impact': item['mean_abs'],
-                                    'signed_impact': item['mean_abs'] * item['direction'],
+                                    'signed_impact': None if item['direction'] is None else item['mean_abs'] * item['direction'],
                                     'signed_mean': item['signed_mean'],
                                     'gain': gain_lookup.get(item['feature'], 0.0),
                                     'vif': None,  # Filled from the immutable snapshot below.
@@ -713,7 +689,7 @@ def execute_legacy_training(data):
                                     'feature': item['feature'],
                                     'description': '',
                                     'impact': item['mean_abs'],
-                                    'signed_impact': item['mean_abs'] * item['direction'],
+                                    'signed_impact': None if item['direction'] is None else item['mean_abs'] * item['direction'],
                                     'signed_mean': item['signed_mean'],
                                     'gain': gain_lookup.get(item['feature'], 0.0),
                                     'vif': None,  # Filled from the immutable snapshot below.
@@ -840,50 +816,6 @@ def execute_legacy_training(data):
                                 'feature_values': feature_values_list,
                                 'metadata': feature_metadata,
                             }
-                            # Re-derive direction using the exact compact data used in the UI
-                            try:
-                                direction_map = {}
-                                for i in order_idx:
-                                    try:
-                                        fv = pd.to_numeric(Xv_raw_compact.iloc[:, i], errors='coerce').to_numpy()
-                                    except Exception:
-                                        fv = Xv_compact.iloc[:, i].to_numpy()
-                                    sv = shap_matrix_compact[:, i]
-                                    mask = np.isfinite(fv) & np.isfinite(sv)
-                                    dir_val = 0.0
-                                    if np.sum(mask) > 2:
-                                        fv_m = fv[mask]
-                                        sv_m = sv[mask]
-                                        try:
-                                            ql = np.nanpercentile(fv_m, 25)
-                                            qh = np.nanpercentile(fv_m, 75)
-                                            top = sv_m[fv_m >= qh]
-                                            bot = sv_m[fv_m <= ql]
-                                            if top.size >= 5 and bot.size >= 5:
-                                                d = float(np.nanmean(top) - np.nanmean(bot))
-                                                if np.isfinite(d) and d != 0.0:
-                                                    dir_val = float(np.sign(d))
-                                        except Exception:
-                                            pass
-                                        if dir_val == 0.0:
-                                            fv_rank = pd.Series(fv_m).rank(method='average').to_numpy()
-                                            sv_rank = pd.Series(sv_m).rank(method='average').to_numpy()
-                                            corr = np.corrcoef(fv_rank, sv_rank)[0, 1]
-                                            if not np.isfinite(corr):
-                                                corr = np.corrcoef(fv_m, sv_m)[0, 1]
-                                            if np.isfinite(corr) and corr != 0.0:
-                                                dir_val = float(np.sign(corr))
-                                    direction_map[feat_names[i]] = dir_val
-                                # Override signed_impact in selected_features when available
-                                try:
-                                    for row in selected_features:
-                                        fname = row.get('feature')
-                                        if fname in direction_map:
-                                            row['signed_impact'] = float(row.get('impact', 0.0)) * float(direction_map[fname])
-                                except Exception:
-                                    pass
-                            except Exception:
-                                pass
                         except Exception as e:
                             try:
                                 print(f"[ModelingStart] SHAP interactive payload failed: {e}")
@@ -891,14 +823,21 @@ def execute_legacy_training(data):
                                 pass
                             shap_beeswarm = None
                     except _SkipShap as e:
+                        selected_features = gain_only
                         print(f"[ModelingStart] SHAP skipped: {e}")
+                        if num_classes > 2:
+                            explanation_limitation = 'Multiclass SHAP requires class-specific explanations. Available gain scores rank feature use.'
+                        elif algorithm == 'isolation_forest':
+                            explanation_limitation = 'Isolation forest produces anomaly rankings. Class probability explanations are unavailable.'
+                        else:
+                            explanation_limitation = 'Tree SHAP is unavailable for this model or output. Review available model-specific evidence.'
                     except Exception as e:
                         print(f"[ModelingStart] SHAP computation outer exception: {type(e).__name__}: {e}")
+                        explanation_limitation = 'SHAP could not be computed for this execution. Available gain scores rank feature use.'
                         import traceback
                         traceback.print_exc()
-                        if not is_alt:
-                            shap_importance = []
-                            selected_features = []
+                        shap_importance = []
+                        selected_features = gain_only
                         beeswarm_png = None
                         shap_beeswarm = None
 
@@ -986,7 +925,7 @@ def execute_legacy_training(data):
                         'shap_beeswarm': shap_beeswarm,
                         # SFS/HP are boosting-path tools; alt models go straight to Evaluation
                         'sfs_ready': (not is_alt and num_classes == 2),
-                        'explanation_limitation': 'Multiclass class-specific SHAP is not yet supported; gain is a ranking heuristic.' if num_classes > 2 else None,
+                        'explanation_limitation': explanation_limitation,
                         'split': {
                             **(split_meta or {}),
                             'n_train': int(len(X_train)),
@@ -1322,8 +1261,8 @@ class ModelingStatusView(APIView):
 class FeatureExplainabilityView(APIView):
     """Returns SHAP explainability data for a single feature: beeswarm and partial dependence.
 
-    Payload: { file_id: number, feature_name: string, processed_file?: string, n_samples?: number,
-              model_path?: string, selected_features?: string[] }
+    Payload: { file_id: number, feature_name: string, execution_id?: string,
+              n_samples?: number, model_path?: string, selected_features?: string[] }
     When selected_features is provided (without model_path), a temporary model is trained
     on-demand with only those features — used for SFS per-step explainability.
     """
@@ -1331,155 +1270,103 @@ class FeatureExplainabilityView(APIView):
     def post(self, request, *args, **kwargs):
         file_id = request.data.get('file_id')
         feature_name = request.data.get('feature_name')
-        processed_file = request.data.get('processed_file')
         n_samples = request.data.get('n_samples', 500)
-        custom_model_path = request.data.get('model_path')  # Optional: e.g. SFS final model
-        selected_features = request.data.get('selected_features')  # Optional: train on-demand with these features
-
-        print(f"[FeatureExplainability] Request for file_id={file_id}, feature={feature_name}, custom_model={custom_model_path or 'default'}, selected_features={len(selected_features) if selected_features else 'N/A'}")
+        custom_model_path = request.data.get('model_path')
+        selected_features = request.data.get('selected_features')
 
         if file_id is None:
             return Response({'error': 'file_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         if not feature_name:
             return Response({'error': 'feature_name is required'}, status=status.HTTP_400_BAD_REQUEST)
 
+        step_model = isinstance(selected_features, list) and bool(selected_features) and not custom_model_path
+        if step_model and feature_name not in selected_features:
+            return Response({
+                'error': f'Feature "{feature_name}" was not selected at this SFS step.',
+                'reason': 'feature_not_in_model',
+                'detail': 'This feature is not part of the model at this SFS step.',
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        def unavailable(code, message):
+            return Response({'status': 'unavailable', 'error_code': code, 'error': message},
+                            status=status.HTTP_409_CONFLICT)
+
         try:
-            booster = None
-            governed_data = None
-            active_status = {}
-            active_path = Path(settings.MEDIA_ROOT) / 'modeling' / f'{file_id}_status.json'
-            if active_path.is_file():
-                active_status = json.loads(active_path.read_text())
-            execution_id = request.data.get('execution_id') or active_status.get('execution_id')
+            from deployment.evidence import execution_artifact
+            from modeling.execution_artifacts import execution_root
+
+            execution_id = request.data.get('execution_id')
+            if not execution_id:
+                active_path = Path(settings.MEDIA_ROOT) / 'modeling' / f'{file_id}_status.json'
+                if active_path.is_file():
+                    execution_id = json.loads(active_path.read_text()).get('execution_id')
             if custom_model_path:
                 absolute_model = Path(managed_path(custom_model_path))
                 relative = absolute_model.relative_to(Path(settings.MEDIA_ROOT).resolve())
                 if len(relative.parts) < 3 or relative.parts[0] != 'execution_runs':
-                    return Response({'error': 'Select a verified immutable execution for model overrides.',
-                        'error_code': 'unverified_model_override'}, status=status.HTTP_409_CONFLICT)
+                    return unavailable('unverified_model_override', 'Select a verified immutable execution for model overrides.')
                 if request.data.get('execution_id') and str(request.data['execution_id']) != relative.parts[1]:
-                    return Response({'error': 'Model path and execution_id must agree.',
-                        'error_code': 'unverified_model_override'}, status=status.HTTP_409_CONFLICT)
+                    return unavailable('unverified_model_override', 'Model path and execution_id must agree.')
                 execution_id = relative.parts[1]
-            if execution_id:
-                active_status, _ = load_execution(execution_id, int(file_id))
-                governed_data = load_development_data(int(file_id), execution_id)
-                if governed_data['algorithm'] != 'xgboost' or len(governed_data['prediction_contract']['class_mapping']) > 2:
-                    return Response({'error': 'This interactive PDP supports binary/regression XGBoost models. Other model families retain their recorded diagnostics; this PDP requires a separately qualified implementation.'}, status=status.HTTP_409_CONFLICT)
-                if custom_model_path and str(relative) != active_status['model']['model_path']:
-                    return Response({'error': 'Model path does not match the verified execution.'}, status=status.HTTP_409_CONFLICT)
+            if not execution_id:
+                return unavailable('explanation_provenance_unverified',
+                                   'Select a verified execution to explain its development predictions.')
 
-            # Option 1: On-demand model from selected_features (SFS step context)
-            if selected_features and isinstance(selected_features, list) and not custom_model_path:
-                if feature_name not in selected_features:
-                    return Response({
-                        'error': f'Feature "{feature_name}" was not selected at this SFS step.',
-                        'reason': 'feature_not_in_model',
-                        'detail': 'This feature is not part of the model at this SFS step.'
-                    }, status=status.HTTP_404_NOT_FOUND)
-                # Load training data to train a temporary model
-                train_data_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
-                if not os.path.exists(train_data_path):
-                    return Response({'error': 'Training data not found. Please run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
-                train_data = governed_data or load_development_data(int(file_id))
-                X_tr = train_data['X_train']
-                y_tr = train_data['y_train']
+            try:
+                active_status, manifest = load_execution(execution_id, int(file_id))
+                model_info = active_status['model']
+                if custom_model_path and str(relative) != model_info['model_path']:
+                    return unavailable('unverified_model_override', 'Model path does not match the verified execution.')
+                data_path = execution_artifact(execution_id, manifest, model_info['train_data_path'])
+                if data_path == execution_root(execution_id).resolve() / 'final_holdout.pkl':
+                    raise ValueError('Protected outcome storage cannot be used for diagnostics.')
+                with data_path.open('rb') as stream:
+                    governed_data = pickle.load(stream)
+            except (OSError, ValueError, KeyError, TypeError, pickle.UnpicklingError, EOFError):
+                return unavailable('explanation_execution_unverified',
+                                   'Development predictors could not be verified for this execution.')
+
+            if (governed_data['algorithm'] != 'xgboost'
+                    or governed_data['prediction_contract']['task'] not in ('classification', 'regression')
+                    or len(governed_data['prediction_contract']['class_mapping']) > 2):
+                return unavailable('interactive_explanation_unsupported',
+                    'Interactive SHAP and partial dependence require a binary or regression XGBoost model.')
+
+            X = pd.concat([governed_data['X_train'], governed_data['X_valid']])
+            raw_train, raw_valid = governed_data.get('X_train_raw'), governed_data.get('X_valid_raw')
+            X_raw = pd.concat([
+                governed_data['X_train'] if raw_train is None else raw_train,
+                governed_data['X_valid'] if raw_valid is None else raw_valid,
+            ])
+            _cat_cols_expl = [name for name in X if isinstance(X[name].dtype, pd.CategoricalDtype)]
+            _enable_cat_expl = bool(_cat_cols_expl)
+            encoding_report = governed_data.get('encoding_report') or model_info.get('encoding_report')
+            if feature_name in set(_cat_cols_expl) | category_derived_columns(encoding_report):
+                return unavailable('categorical_pdp_unavailable',
+                    'Partial dependence for categorical predictors requires a category-aware grid.')
+
+            if step_model:
+                X_tr = governed_data['X_train']
                 valid_sf = [f for f in selected_features if f in X_tr.columns]
                 if not valid_sf:
                     return Response({'error': 'None of the selected_features exist in training data.'}, status=status.HTTP_400_BAD_REQUEST)
                 _params_sf = {
-                    'objective': 'reg:squarederror' if train_data.get('task') == 'regression' else 'binary:logistic',
-                    'eval_metric': 'rmse' if train_data.get('task') == 'regression' else 'auc',
+                    'objective': 'reg:squarederror' if governed_data.get('task') == 'regression' else 'binary:logistic',
+                    'eval_metric': 'rmse' if governed_data.get('task') == 'regression' else 'auc',
                     'max_depth': 6, 'eta': 0.1, 'subsample': 0.8,
-                    'colsample_bytree': 0.8, 'seed': 42, 'nthread': native_threads(0)
+                    'colsample_bytree': 0.8, 'seed': 42, 'nthread': native_threads(0),
                 }
                 from modeling.declared_metric import bind_declared_metric
-                _params_sf = bind_declared_metric(_params_sf, train_data.get('prediction_contract'))
-                diagnostic_adapter = get_adapter('xgboost').train(X_tr[valid_sf], y_tr,
-                    train_data['X_valid'][valid_sf], train_data['y_valid'], _params_sf,
-                    num_boost_round=100, early_stopping_rounds=10)
-                booster = diagnostic_adapter.shap_model()[:diagnostic_adapter.best_iteration + 1]
-                print(f"[FeatureExplainability] Trained on-demand model with {len(valid_sf)} features for step explainability")
-
-            # Option 2: Load saved model (custom or default)
-            if booster is None:
-                models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
-                if custom_model_path:
-                    model_path = managed_path(custom_model_path)
-                else:
-                    model_path = managed_path(active_status.get('model', {}).get('model_path') or f'models/{file_id}_xgb_classifier.json')
-                if not os.path.exists(model_path):
-                    return Response({'error': 'Model not found. Please train a model first.'}, status=status.HTTP_404_NOT_FOUND)
-                
+                _params_sf = bind_declared_metric(_params_sf, governed_data['prediction_contract'])
+                diagnostic_adapter = get_adapter('xgboost').train(
+                    X_tr[valid_sf], governed_data['y_train'], governed_data['X_valid'][valid_sf], governed_data['y_valid'],
+                    _params_sf, num_boost_round=100, early_stopping_rounds=10,
+                )
+                booster = diagnostic_adapter.shap_model()
+            else:
+                model_path = execution_artifact(execution_id, manifest, model_info['model_path'])
                 booster = xgb.Booster()
                 booster.load_model(model_path)
-
-            if governed_data:
-                # Diagnostic navigation cannot open sealed final assessment outcomes.
-                X = pd.concat([governed_data['X_train'], governed_data['X_valid']])
-                X_raw = pd.concat([governed_data['X_train_raw'], governed_data['X_valid_raw']])
-                y = pd.concat([governed_data['y_train'], governed_data['y_valid']])
-                _cat_cols_expl = [name for name in X if isinstance(X[name].dtype, pd.CategoricalDtype)]
-                _enable_cat_expl = bool(_cat_cols_expl)
-                if feature_name in _cat_cols_expl:
-                    return Response({'error': 'Categorical PDP needs a category-aware grid; numeric interpolation of category codes is prohibited.'}, status=status.HTTP_409_CONFLICT)
-            else:
-                # Load processed data
-                if processed_file:
-                    full_path = managed_path(processed_file, table=True)
-                else:
-                    # Try to find from status
-                    modeling_dir = os.path.join(settings.MEDIA_ROOT, 'modeling')
-                    status_path = os.path.join(modeling_dir, f'{file_id}_status.json')
-                    if os.path.exists(status_path):
-                        with open(status_path, 'r', encoding='utf-8') as f:
-                            status_data = json.load(f)
-                        processed_file = status_data.get('processed_file')
-                        if processed_file:
-                            full_path = managed_path(processed_file, table=True)
-                        else:
-                            return Response({'error': 'processed_file not found in modeling status'}, status=status.HTTP_404_NOT_FOUND)
-                    else:
-                        return Response({'error': 'processed_file required'}, status=status.HTTP_400_BAD_REQUEST)
-            
-                if not os.path.exists(full_path):
-                    return Response({'error': f'processed file not found: {processed_file}'}, status=status.HTTP_404_NOT_FOUND)
-
-                # Load data
-                df = pd.read_csv(full_path) if full_path.lower().endswith('.csv') else pd.read_excel(full_path)
-            
-                # Heuristically choose target
-                target_col = None
-                for candidate in ['Target', 'target', 'label', 'Label', 'y']:
-                    if candidate in df.columns:
-                        target_col = candidate
-                        break
-                if target_col is None and len(df.columns) >= 2:
-                    target_col = df.columns[-1]
-            
-                if target_col is None or target_col not in df.columns:
-                    return Response({'error': 'Target column not found'}, status=status.HTTP_400_BAD_REQUEST)
-
-                y = df[target_col]
-                X_raw = df.drop(columns=[target_col])
-                # Detect categorical columns for enable_categorical support
-                _cat_cols_expl = []
-                for c in X_raw.columns:
-                    if hasattr(X_raw[c], 'cat') or X_raw[c].dtype.name == 'category':
-                        _cat_cols_expl.append(c)
-                    elif X_raw[c].dtype == 'object' or pd.api.types.is_string_dtype(X_raw[c]):
-                        _cat_cols_expl.append(c)
-                _keep_expl = [c for c in X_raw.columns if pd.api.types.is_numeric_dtype(X_raw[c]) or c in _cat_cols_expl]
-                X_raw = X_raw[_keep_expl].copy()
-                _enable_cat_expl = len(_cat_cols_expl) > 0
-                for c in _cat_cols_expl:
-                    if c in X_raw.columns:
-                        X_raw[c] = X_raw[c].astype('category')
-                X_raw = X_raw.dropna(axis=1, how='all')
-                X = X_raw.copy()
-                _num_expl = X.select_dtypes(include=['number']).columns
-                if len(_num_expl) > 0:
-                    X[_num_expl] = X[_num_expl].fillna(X[_num_expl].mean())
 
             # Check if feature was used in the trained model FIRST (before checking data)
             # This ensures we give the correct message for features excluded during modeling
@@ -1532,14 +1419,10 @@ class FeatureExplainabilityView(APIView):
             with warnings.catch_warnings():
                 warnings.filterwarnings('ignore', category=FutureWarning, module='shap')
                 explainer = shap.TreeExplainer(booster, feature_perturbation='interventional')
-            shap_vals = explainer.shap_values(dmatrix)
-            if isinstance(shap_vals, list):
-                try:
-                    shap_matrix = np.mean(np.stack(shap_vals, axis=0), axis=0)
-                except Exception:
-                    shap_matrix = shap_vals[0]
-            else:
-                shap_matrix = shap_vals
+            shap_matrix = explainer.shap_values(dmatrix)
+            if not isinstance(shap_matrix, np.ndarray) or shap_matrix.shape != (len(X_sampled), len(feature_names)):
+                return unavailable('single_output_shap_unavailable',
+                    'This explanation requires one signed attribution per development row and feature.')
 
             # Get feature index
             feat_idx = list(X.columns).index(feature_name)
@@ -1696,7 +1579,13 @@ class FeatureExplainabilityView(APIView):
             
             result = {
                 'execution_id': execution_id,
-                'evidence_partition': 'development_only' if governed_data else 'legacy_provenance_unverified',
+                'evidence_partition': 'development_only',
+                'output_scale': 'raw_model_margin',
+                'limitations': [
+                    'SHAP and partial dependence describe model predictions on the raw model margin.',
+                    'Correlated predictors can produce grid combinations that are rare in the development rows.',
+                    'These diagnostic associations provide exploratory evidence.',
+                ],
                 'feature_name': feature_name,
                 'beeswarm': {
                     'shap_values': shap_values_clean,

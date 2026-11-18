@@ -221,6 +221,7 @@ def test_anomaly_assessment_reports_rankings_without_holdout_threshold_search(_u
         'business_understanding': declaration('anomaly', positive=1),
     }, format='json'))
     assert trained.status_code == 200, trained.data
+    assert 'anomaly rankings' in trained.data['model']['explanation_limitation']
     response = EvaluationRunView.as_view()(factory.post('/evaluation/run/', {
         'file_id': file.pk, 'execution_id': trained.data['execution_id'],
     }, format='json'))
@@ -257,6 +258,12 @@ def test_native_booster_contract_survives_assessment_and_scoring(_use_tmp_media,
     assert trained.status_code == 200, trained.data
     model = trained.data['model']
     assert model['prediction_contract']['task'] == task
+    if task == 'classification':
+        assert 'class-specific explanations' in model['explanation_limitation']
+        assert model['importances']['shap_mean_abs'] == [] and model['shap_beeswarm'] is None
+        assert any(row['gain'] > 0 for row in model['selected_features'])
+        assert all(row['impact'] is None and row['signed_impact'] is None and row['combined_score'] is None
+                   for row in model['selected_features'])
     with (Path(settings.MEDIA_ROOT) / model['train_data_path']).open('rb') as stream:
         development = pickle.load(stream)
     assert 'y_test' not in development
@@ -507,4 +514,6 @@ def test_feature_diagnostics_use_verified_development_rows_only(settings, tmp_pa
         payload, format='json'))
     assert response.status_code == 200, response.data.get('error')
     assert response.data['evidence_partition'] == 'development_only'
+    assert response.data['output_scale'] == 'raw_model_margin'
+    assert any('Correlated predictors' in text for text in response.data['limitations'])
     assert len(response.data['beeswarm']['feature_values_raw']) == 25
