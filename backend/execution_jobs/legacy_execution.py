@@ -268,6 +268,7 @@ def training_files(actor, file_id, options):
 
 def prepare(actor, file_id, operation, options):
     from execution_jobs import service
+    from modeling.prediction_contract import bind_training_declaration, PredictionContractError
 
     file_id = positive_file_id(file_id)
     authority = service.scope(actor, file_id)
@@ -293,10 +294,8 @@ def prepare(actor, file_id, operation, options):
             from modeling.models import PipelineRun
 
             run = PipelineRun.objects.get(pk=options["pipeline_run_id"], file_id=file_id)
-            state = run.state or {}
-            options.setdefault(
-                "business_understanding",
-                state.get("business_understanding") or (state.get("crisp_dm") or {}).get("business_understanding"),
+            options["business_understanding"] = bind_training_declaration(
+                options.get("business_understanding"), run.state or {},
             )
             options.pop("pipeline_run_id")
         if not isinstance(options.get("business_understanding"), dict):
@@ -310,7 +309,11 @@ def prepare(actor, file_id, operation, options):
         semantic_contract = payload.get("model", {}).get("prediction_contract", {})
         declared_task = payload.get("model", {}).get("task")
         if options.get("task") is not None and options["task"] != declared_task:
-            raise ValueError("The task is bound to the source candidate. Start a new training version to change it.")
+            raise PredictionContractError("The task is bound to the source candidate. Start a new training version to change it.")
+        if semantic_contract.get("task") == "classification" and len(semantic_contract.get("class_mapping") or []) > 2:
+            raise PredictionContractError("Legacy search and candidate refits do not support multiclass models. Use the initial model for assessment or scoring.")
+        if declared_task == "anomaly" and operation != "champion":
+            raise PredictionContractError("Legacy feature selection and tuning do not support anomaly ranking. Use the initial isolation forest for assessment or scoring.")
         algorithm = options.get("algorithm") or payload.get("algorithm")
         if operation == "champion":
             if not isinstance(options.get("features"), list) or not options["features"]:

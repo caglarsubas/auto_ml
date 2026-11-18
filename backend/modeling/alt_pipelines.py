@@ -534,6 +534,8 @@ def load_model_adapter(
     algorithm: Optional[str] = None,
     feature_names: Optional[List[str]] = None,
     cat_features: Optional[List[str]] = None,
+    *,
+    task: Optional[str] = None,
 ):
     """Dispatch booster vs sklearn adapters by algorithm / file extension."""
     from modeling.booster_adapters import load_adapter_from_path, get_adapter
@@ -542,9 +544,14 @@ def load_model_adapter(
     lower = (path or '').lower()
     if is_alt_algorithm(algo) or lower.endswith('.joblib') or lower.endswith('.pkl'):
         if is_alt_algorithm(algo) or 'logistic' in lower or 'scorecard' in lower or 'isolation' in lower:
-            return SklearnModelAdapter.load(path, feature_names=feature_names, cat_features=cat_features)
+            adapter = SklearnModelAdapter.load(path, feature_names=feature_names, cat_features=cat_features)
+            if task is not None and adapter.task != task:
+                from modeling.prediction_contract import PredictionContractError
+
+                raise PredictionContractError('The saved estimator task disagrees with the frozen prediction contract.')
+            return adapter
     return load_adapter_from_path(
-        path, algorithm=algorithm, feature_names=feature_names, cat_features=cat_features,
+        path, algorithm=algorithm, feature_names=feature_names, cat_features=cat_features, task=task,
     )
 
 

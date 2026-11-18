@@ -7,6 +7,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { FeatureCardComponent } from './feature-card.component';
 import { SharedService } from '../services/shared.service';
 import { DataService } from '../services/data.service';
+import { of, throwError } from 'rxjs';
 
 describe('FeatureCardComponent', () => {
   let component: FeatureCardComponent;
@@ -76,5 +77,17 @@ describe('FeatureCardComponent', () => {
 
   it('should default selectedImportanceType to shap', () => {
     expect(component.selectedImportanceType).toBe('shap');
+  });
+
+  it('keeps feature importance read-only when a result is missing or unavailable', () => {
+    const service = TestBed.inject(DataService);
+    spyOn(service, 'getModelingStatus').and.returnValues(of({}), throwError(() => new Error()));
+    const launch = spyOn(service, 'startModeling');
+    component.proceedModeling();
+    expect(component.modelingLoading).toBeFalse();
+    component.proceedModeling();
+    expect(component.modelingLoading).toBeFalse();
+    expect(component.modelingError).toContain('Open Modeling');
+    expect(launch).not.toHaveBeenCalled();
   });
 });

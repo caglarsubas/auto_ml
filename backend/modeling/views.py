@@ -35,7 +35,7 @@ from modeling.development_validation import (
 from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
 from modeling.collinearity import write_snapshot, load_snapshot, detail
 from modeling.execution_artifacts import begin_execution, digest_file, publish_execution, publish_candidate, replace_projection, load_development_data, load_execution, projection_lock
-from modeling.prediction_contract import PredictionContractError, resolve_prediction_contract
+from modeling.prediction_contract import bind_training_declaration, PredictionContractError, resolve_prediction_contract
 from modeling.models import PipelineRun
 from modeling.split_contract import (
     resolve_modeling_splits, fit_numeric_imputer, transform_numeric_impute,
@@ -165,6 +165,16 @@ def execute_legacy_training(data):
         except Declaration.DoesNotExist:
             return Response({'error': f'Declaration with id {file_id} not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    declaration = data.get('business_understanding')
+    if data.get('pipeline_run_id') is not None:
+        run = PipelineRun.objects.filter(pk=data['pipeline_run_id'], file_id=file_id).first()
+        if run is None:
+            return Response({'error': 'The selected pipeline run does not belong to this dataset.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            declaration = bind_training_declaration(declaration, run.state or {})
+        except PredictionContractError as error:
+            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
     # Validate processed file exists under MEDIA_ROOT
     full_path = managed_path(processed_file, table=True)
     if not os.path.exists(full_path):
@@ -262,12 +272,14 @@ def execute_legacy_training(data):
         else:
             print(f"[ModelingStart] No encoding sidecar metadata found at {meta_path}")
 
+        prediction_contract, encoded_target = resolve_prediction_contract(df, declaration, algorithm)
+        target_col = prediction_contract['target_column']
+
         # Track excluded variables (Model_Usage='No') but keep them in dataframe
         # They will be excluded when creating feature matrix X
         excluded_cols_for_modeling = []
         if excluded_variables and isinstance(excluded_variables, list):
-            # Exclude Target from the exclusion list (it's needed as label for training)
-            excluded_present = [col for col in excluded_variables if col in df.columns and col != 'Target']
+            excluded_present = [col for col in excluded_variables if col in df.columns and col != target_col]
             if excluded_present:
                 excluded_cols_for_modeling = excluded_present
                 print(f"[ModelingStart] Excluding {len(excluded_present)} variables from model training (kept in dataset): {excluded_present}")
@@ -278,18 +290,6 @@ def execute_legacy_training(data):
             'columns': list(map(str, df.columns[:50]))  # cap to 50 to keep response light
         }
 
-        declaration = data.get('business_understanding')
-        run_id = data.get('pipeline_run_id')
-        if run_id is not None:
-            run = PipelineRun.objects.filter(pk=run_id, file_id=file_id).first()
-            if run is None:
-                raise PredictionContractError('The selected pipeline run does not belong to this dataset.')
-            saved = run.state or {}
-            saved_declaration = saved.get('business_understanding') or (saved.get('crisp_dm') or {}).get('business_understanding')
-            if declaration is None:
-                declaration = saved_declaration
-        prediction_contract, encoded_target = resolve_prediction_contract(df, declaration, algorithm)
-        target_col = prediction_contract['target_column']
         excluded_cols_for_modeling = list(dict.fromkeys(excluded_cols_for_modeling + prediction_contract['forbidden_features']))
 
         if target_col is not None:
@@ -1829,6 +1829,8 @@ def execute_legacy_sfs(data):
         except ValueError as error:
             return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
         contract = train_data.get('prediction_contract') or {}
+        if contract.get('task', train_data.get('task')) == 'anomaly':
+            return Response({'error': 'Feature selection does not support anomaly ranking. Use the initial isolation forest for assessment or scoring.'}, status=status.HTTP_400_BAD_REQUEST)
         if len(contract.get('class_mapping') or []) > 2:
             return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)
         if context is not None:
@@ -2381,6 +2383,8 @@ def execute_legacy_hpo(data):
         except ValueError as error:
             return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
         contract = train_data.get('prediction_contract') or {}
+        if contract.get('task', train_data.get('task')) == 'anomaly':
+            return Response({'error': 'Hyperparameter tuning does not support anomaly ranking. Use the initial isolation forest for assessment or scoring.'}, status=status.HTTP_400_BAD_REQUEST)
         if len(contract.get('class_mapping') or []) > 2:
             return Response({'error': 'Multiclass candidate selection/tuning is not supported yet. The initial model and final multiclass assessment remain available.'}, status=status.HTTP_400_BAD_REQUEST)
         if context is not None:
@@ -3141,6 +3145,8 @@ def execute_legacy_champion(data):
         if data.get('execution_id') and data['execution_id'] != parent_id:
             return Response({'error': 'The selected execution has changed. Refresh the candidate evidence before accepting it.'}, status=status.HTTP_409_CONFLICT)
         development = load_development_data(file_id, parent_id)
+        if len((development.get('prediction_contract') or {}).get('class_mapping') or []) > 2:
+            raise ValueError('Legacy candidate refits do not support multiclass models. Use the initial model for assessment or scoring.')
         if not isinstance(features, list) or not all(isinstance(name, str) for name in features) or len(set(features)) != len(features):
             raise ValueError('Accepted features must be a unique list of column names.')
         missing = [name for name in features if name not in development['X_train']]

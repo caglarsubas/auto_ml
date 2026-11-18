@@ -450,15 +450,17 @@ def _handle_get_split_validation(file_id: int, args: dict) -> str:
     data = read_split_validation(file_id)
     if not data:
         return _not_available("split validation")
-    splits = data.get('splits', [])
-    lines = [f"Target column: {data.get('target_column', '?')}"]
-    for sp in splits:
-        lines.append(
-            f"  {sp.get('name','?')}: n={sp.get('count','?')}, "
-            f"target_mean={_fmt(sp.get('target_mean'))}, "
-            f"target=0: {sp.get('label_counts', {}).get('0', '?')}, "
-            f"target=1: {sp.get('label_counts', {}).get('1', '?')}"
-        )
+    column = data.get('target_column', '?')
+    business = (read_pipeline_config(file_id) or {}).get('business_understanding') or {}
+    declaration = business.get('target_contract') or {}
+    declared_column = declaration.get('target_column')
+    if declared_column and declared_column != column:
+        return f"Split distribution for declared target {declared_column!r} is unavailable. The cached split report describes {column!r}."
+    lines = [f"Split target column: {column}. Numeric label means describe the raw coding."]
+    for sp in data.get('splits', []):
+        counts = sp.get('label_counts') or {}
+        labels = ', '.join(f'{label!r}: {count}' for label, count in list(counts.items())[:12])
+        lines.append(f"  {sp.get('name','?')}: n={sp.get('count','?')}, numeric_label_mean={_fmt(sp.get('target_mean'))}, label counts: {labels or 'unavailable'}")
     return '\n'.join(lines)
 
 
@@ -807,6 +809,9 @@ def format_business_understanding(bu: Optional[dict], *, indent: str = '  ') -> 
         value = str(tc.get(key) or '').strip()
         if value:
             lines.append(f"{indent}{label}: {value}")
+    positive = tc.get('positive_class')
+    if bu.get('problem_type') in ('classification', 'anomaly') and positive is not None and positive != '':
+        lines.append(f"{indent}Declared positive label (for two-class outcomes): {positive}")
 
     sc = bu.get('success_criteria') if isinstance(bu.get('success_criteria'), dict) else {}
     if sc:

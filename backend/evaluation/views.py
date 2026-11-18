@@ -39,6 +39,7 @@ from modeling.holdout_evidence import holdout_history, reserve_holdout_access
 from modeling.execution_artifacts import publish_assessment, replace_projection, projection_lock
 from modeling.lineage import load_lineage
 from modeling.alt_pipelines import load_model_adapter as load_adapter_from_path
+from modeling.prediction_contract import PredictionContractError, frozen_prediction_task
 
 logger = logging.getLogger(__name__)
 
@@ -193,12 +194,26 @@ class EvaluationRunView(APIView):
         if not os.path.exists(train_data_path):
             return Response({'error': 'Training data not found. Run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
         contract = model_info.get('prediction_contract') or {}
+        declared_task = None
+        recorded_digest = (execution_manifest or {}).get('prediction_contract_sha256')
+        if recorded_digest and (not isinstance(contract, dict) or contract.get('sha256') != recorded_digest):
+            return Response({'error': 'The prediction contract differs from the exact execution manifest. Select valid execution evidence.'}, status=status.HTTP_409_CONFLICT)
         if contract:
-            bu = normalize_business_understanding({
-                'problem_type': contract['task'], 'target_contract': contract['target_contract'],
-                'population': contract['population'], 'prediction_horizon': contract['prediction_horizon'],
-                'success_criteria': contract['objective'], 'forbidden_features': contract['forbidden_features'],
-            })
+            try:
+                declared_task = frozen_prediction_task(contract, model_info.get('task'), (model_info.get('fit_receipt') or {}).get('task'))
+                identity = model_info.get('holdout_spec')
+                if identity and identity.get('target_column') != contract['target_column']:
+                    raise PredictionContractError('The holdout target disagrees with the frozen prediction contract.')
+                bu = normalize_business_understanding({
+                    'problem_type': declared_task, 'target_contract': {
+                        **contract['target_contract'], 'target_column': contract['target_column'],
+                        'positive_class': contract['positive_class'],
+                    },
+                    'population': contract['population'], 'prediction_horizon': contract['prediction_horizon'],
+                    'success_criteria': contract['objective'], 'forbidden_features': contract['forbidden_features'],
+                })
+            except (PredictionContractError, KeyError, TypeError):
+                return Response({'error': 'The fitted evidence disagrees with the frozen prediction contract. Select a valid execution before assessment.'}, status=status.HTTP_409_CONFLICT)
         if not os.path.exists(model_abs):
             return Response({'error': f'Model artifact not found: {model_rel}'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -219,6 +234,10 @@ class EvaluationRunView(APIView):
                      'contract_sha256': contract.get('sha256')}, dataset_digest)
             with open(train_data_path, 'rb') as f:
                 train_data = pickle.load(f)
+            if declared_task:
+                frozen_prediction_task(contract, train_data.get('task'))
+                if train_data.get('prediction_contract', contract) != contract:
+                    raise PredictionContractError('Training data disagrees with the frozen prediction contract. Select valid execution evidence.')
             final_data = train_data
             if train_data.get('holdout_path'):
                 final_path = os.path.join(settings.MEDIA_ROOT, train_data['holdout_path'])
@@ -267,8 +286,8 @@ class EvaluationRunView(APIView):
                         pass
 
             algo = _resolve_algorithm(model_info, train_data)
-            is_regression = _is_regression_task(model_info, train_data)
-            is_anomaly = (
+            is_regression = declared_task == 'regression' if declared_task else _is_regression_task(model_info, train_data)
+            is_anomaly = declared_task == 'anomaly' if declared_task else (
                 str(model_info.get('task') or train_data.get('task') or '').lower() == 'anomaly'
                 or 'isolation' in str(algo).lower()
             )
@@ -277,6 +296,7 @@ class EvaluationRunView(APIView):
                 algorithm=algo,
                 feature_names=list(map(str, X_test.columns)),
                 cat_features=list(model_info.get('categorical_features_used') or []),
+                task=declared_task,
             )
 
             if is_anomaly:
@@ -480,8 +500,9 @@ class EvaluationRunView(APIView):
                 receipt.save(update_fields=['attempt_state'])
             import traceback
             print("[Evaluation] ERROR:\n" + traceback.format_exc())
+            response_status = status.HTTP_409_CONFLICT if isinstance(e, PredictionContractError) else status.HTTP_500_INTERNAL_SERVER_ERROR
             return Response({'error': str(e), 'holdout_access_id': str(receipt.pk) if receipt else None,
-                             'evidence_status': 'exploratory'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                             'evidence_status': 'exploratory'}, status=response_status)
 
 
 class HoldoutHistoryView(APIView):

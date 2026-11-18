@@ -321,6 +321,8 @@ export class TrainingLaunchComponent implements OnChanges, OnDestroy {
         'Choose only numeric predictors with finite observed values. Missing predictors are imputed inside training folds.',
       job_training_csv_profile_invalid:
         'Use a headered UTF-8 CSV with 30–1,000 rows, at most 40 columns and consistent row widths.',
+      job_prediction_contract_invalid:
+        error.error?.error || 'Check the declared task, target, positive label and objective.',
       job_request_invalid:
         'Check the exact target and positive label, metric, required declarations and split columns. Unsupported or invalid folds cannot fall back to shuffled validation.',
     };

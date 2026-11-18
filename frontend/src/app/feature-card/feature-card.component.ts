@@ -339,48 +339,23 @@ export class FeatureCardComponent implements OnInit, OnDestroy {
       }
       this.modelingLoading = true;
 
-      // 1) Try cached results first (instant — no re-training)
       this.dataService.getModelingStatus(fid).subscribe({
         next: (cached: any) => {
+          this.modelingLoading = false;
           if (cached?.job_status === 'completed' && cached?.model?.importances) {
-            console.log('[FeatureCard] Using cached modeling results');
             this._applyModelingResponse(cached);
-            this.modelingLoading = false;
-            return;
           }
-          // 2) No cache — fall back to full training
-          this._runFullModeling(fid);
         },
         error: () => {
-          // Status endpoint failed — fall back to full training
-          this._runFullModeling(fid);
+          this.modelingLoading = false;
+          this.modelingError = 'Could not load feature importance. Open Modeling to check the run.';
         },
       });
     } catch (e) {
       console.warn('proceedModeling failed:', e);
-      this.modelingError = 'Failed to start modelling';
+      this.modelingError = 'Could not load feature importance.';
       this.modelingLoading = false;
     }
-  }
-
-  private _runFullModeling(fid: number): void {
-    if (!this.data.processedFile) {
-      this.modelingError = 'Processed file is required to start modelling.';
-      this.modelingLoading = false;
-      return;
-    }
-    this.dataService.startModeling(fid, this.data.processedFile, 'xgboost').subscribe({
-      next: (resp: any) => {
-        this._applyModelingResponse(resp);
-      },
-      error: (err: any) => {
-        console.error('Modeling failed:', err);
-        this.modelingError = 'Failed to run modelling';
-      },
-      complete: () => {
-        this.modelingLoading = false;
-      },
-    });
   }
 
   onImportanceTypeChange(t: 'shap' | 'gain') {

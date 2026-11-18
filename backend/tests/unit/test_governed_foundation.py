@@ -42,8 +42,27 @@ def test_many_class_classification_and_reversed_positive_meaning():
     contract, labels = resolve_prediction_contract(frame, declaration(), 'xgboost')
     assert len(contract['class_mapping']) == 65 and labels.nunique() == 65
     binary = pd.DataFrame({'outcome': ['good', 'bad', 'good', 'bad']})
-    _, y = resolve_prediction_contract(binary, declaration(positive='good'), 'xgboost')
+    contract, y = resolve_prediction_contract(binary, declaration(positive='good'), 'xgboost')
     assert y.tolist() == [1, 0, 1, 0]
+    assert contract['target_contract']['positive_class'] == contract['positive_class'] == 'good'
+
+
+def test_protected_assessment_preserves_frozen_numeric_labels_across_csv_types():
+    from modeling.declared_metric import metric_spec
+    from modeling.native_assessment_replay import AssessmentReplayError, calculate_assessment
+
+    development = pd.DataFrame({'x': [0, 1, 2, 3], 'outcome': [0, 1, 0, 1]})
+    contract, _ = resolve_prediction_contract(development, declaration(positive='0'), 'xgboost')
+    assert contract['target_contract']['positive_class'] == contract['positive_class'] == 0
+
+    def score(frame):
+        return calculate_assessment(frame, development, {'strategy': 'random'}, None, contract,
+                                    metric_spec(contract), ['x'], lambda raw: [.9, .1, .8, .2])
+
+    held = development.assign(outcome=development['outcome'].astype(float))
+    assert score(held)['primary_value'] == 1
+    with pytest.raises(AssessmentReplayError, match='native_assessment_labels_invalid'):
+        score(held.assign(outcome=development['outcome'].astype(str)))
 
 
 @pytest.mark.parametrize('values,task,algorithm,positive', [

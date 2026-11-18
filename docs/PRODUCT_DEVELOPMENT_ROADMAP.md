@@ -56,13 +56,13 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 4 (6.1%); in_progress: 0 (0.0%); waiting: 33 (50.0%); blocked: 7 (10.6%); done: 22 (33.3%).
+Inventory: 66 tasks; ready: 4 (6.1%); in_progress: 0 (0.0%); waiting: 32 (48.5%); blocked: 7 (10.6%); done: 23 (34.8%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
 ### D01-T01 — Qualify the prediction contract across supported entrypoints
 
-**Priority / status:** P0 / ready. **Owner:** Backend/ML. **Outcomes:** D01.
+**Priority / status:** P0 / done. **Owner:** Backend/ML. **Outcomes:** D01.
 
 Close UI/assistant/training/evaluation/scoring contract gaps with a supported-path matrix.
 
@@ -72,9 +72,11 @@ Close UI/assistant/training/evaluation/scoring contract gaps with a supported-pa
 
 **Source / rationale:** Remaining acceptance scope from D01; existing tested foundation is reused, not rebuilt.
 
+**Packet / evidence:** P184; [Supported prediction contract qualification](PREDICTION_CONTRACT_QUALIFICATION.md)
+
 ### D01-T02 — Qualify population, availability, horizon and maturity semantics
 
-**Priority / status:** P0 / waiting. **Owner:** Backend/ML. **Outcomes:** D01.
+**Priority / status:** P0 / ready. **Owner:** Backend/ML. **Outcomes:** D01.
 
 Extend accepted declarations and their evidence through all remaining supported combinations.
 
@@ -2748,6 +2750,16 @@ Record attributable independent decisions and bounded exceptions for a completed
 
 **Remaining:** D09-T03 still requires a named independent reviewer and an approved exercise.
 
+### P184 — Qualify the prediction contract across supported entrypoints
+
+**Packet status:** tested. **Mapped outcomes:** D01.
+
+Bind saved task, target and positive label at admission and preserve their meaning in the form, assistant, training, assessment and scoring. Reject unsupported legacy search/refit combinations.
+
+**Evidence:** [Supported prediction contract qualification](PREDICTION_CONTRACT_QUALIFICATION.md)
+
+**Remaining:** D01-T02 covers population, availability, prediction horizon and label maturity qualification.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.
@@ -2778,9 +2790,9 @@ Govern accepted task, target, positive class, population, feature availability, 
 
 **Source mapping:** Claude CC-2/RM-1; GPT P01/FIX-01; Gemini C1.
 
-**Progress:** Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Full contract/channel validation remains open. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 aligns native tuning selection with accepted metric/direction/cost semantics, rejects contradictions and records exact winner/refit evidence; fitter criteria were outside P07 scope. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P27 adds method-named support-weighted rank AUC for requested multiclass stopping, retaining independent sklearn full assessment, input validation and unavailable-objective blocking. Reference callback histories, selected models and replay match across all three native boosters; private/full workflow qualification passes with unchanged budgets. No full reproduction, capacity or release claim.
+**Progress:** Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Full contract/channel validation remains open. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 aligns native tuning selection with accepted metric/direction/cost semantics, rejects contradictions and records exact winner/refit evidence; fitter criteria were outside P07 scope. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P27 adds method-named support-weighted rank AUC for requested multiclass stopping, retaining independent sklearn full assessment, input validation and unavailable-objective blocking. Reference callback histories, selected models and replay match across all three native boosters; private/full workflow qualification passes with unchanged budgets. No full reproduction, capacity or release claim. P184 qualifies task, target and positive-label semantics across the documented entrypoints, with typed declaration errors and consistent task dispatch. D01-T02 remains open.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P06 feature-selection implementation and limits](FEATURE_SELECTION_IMPLEMENTATION.md); [P06 source qualification](evidence/p06-qualification-2026-10-08.json); [P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md); [P07 source qualification](evidence/p07-qualification-2026-10-08.json); [P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md); [P09 source qualification](evidence/p09-qualification-2026-10-09.json); [P27 source qualification](evidence/p27-qualification-2026-10-10.json)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P06 feature-selection implementation and limits](FEATURE_SELECTION_IMPLEMENTATION.md); [P06 source qualification](evidence/p06-qualification-2026-10-08.json); [P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md); [P07 source qualification](evidence/p07-qualification-2026-10-08.json); [P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md); [P09 source qualification](evidence/p09-qualification-2026-10-09.json); [P27 source qualification](evidence/p27-qualification-2026-10-10.json); [Supported prediction contract qualification](PREDICTION_CONTRACT_QUALIFICATION.md)
 
 ### D02 Shared validation and fold-local preprocessing
 

@@ -638,7 +638,10 @@
                 only.</small
               >
             </label>
-            @if (businessUnderstanding.problem_type === 'classification' || businessUnderstanding.problem_type === 'anomaly') {
+            @if (
+              businessUnderstanding.problem_type === 'classification' ||
+              businessUnderstanding.problem_type === 'anomaly'
+            ) {
               <label class="bu-field">
                 <span class="bu-label">Positive class for binary outcomes</span>
                 <input
@@ -1069,9 +1072,13 @@
           }
           @if (problemTypeMetricConflict) {
             <div class="bu-conflict" role="alert">
-              The objective wording and the selected primary metric disagree on the problem type.
-              Set the primary metric that matches the target you described &mdash; ROC-AUC / PR-AUC
-              / F1 for classification, RMSE / R&#178; for regression.
+              @if (businessUnderstanding.problem_type) {
+                The selected primary metric is incompatible with the declared task. Choose a metric
+                for that task.
+              } @else {
+                The objective wording and the metric suggest different tasks. Declare the task and
+                choose a compatible metric.
+              }
             </div>
           }
 

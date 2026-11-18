@@ -309,9 +309,20 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
 
   private static readonly METRIC_TASK: { [metric: string]: ProblemType } = {
     roc_auc: 'classification',
+    auc: 'classification',
     pr_auc: 'classification',
+    average_precision: 'classification',
     f1: 'classification',
+    accuracy: 'classification',
+    precision: 'classification',
+    recall: 'classification',
+    log_loss: 'classification',
+    ks: 'classification',
+    brier: 'classification',
+    expected_cost: 'classification',
     rmse: 'regression',
+    mse: 'regression',
+    mae: 'regression',
     r2: 'regression',
   };
 
@@ -2586,11 +2597,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   /**
    * Infer classification vs regression from the Business Understanding form.
    *
-   * A primary metric other than the `roc_auc` default is an explicit
-   * declaration of the task and wins outright.  While the metric is still at
-   * its default we fall back to keyword evidence in the objective, the
-   * Event/Target Definition and the good/bad window.  No signal at all leaves
-   * the type undetermined, and the full pipeline catalogue stays visible.
+   * Before a task is declared, use the metric and business wording as hints
+   * for the pipeline catalogue. Only an explicit task authorizes execution.
    */
   private refreshProblemType(prune: boolean = true): void {
     const bu = this.businessUnderstanding;
@@ -2636,7 +2644,7 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     this.problemTypeReason = declared ? 'declared task' : reason;
     this.problemTypeMetricConflict = declared === 'anomaly'
       ? !['roc_auc', 'pr_auc', 'auc', 'average_precision'].includes(metric)
-      : conflict || !!(declared && metricTask && declared !== metricTask);
+      : declared ? declared !== metricTask : conflict;
     // Clear the prior task's rejection once the accepted/suggested task changes.
     if (this.detectedProblemType !== previousType) this.pipelineResetNotice = '';
     if (prune) this.pruneIncompatiblePipeline();

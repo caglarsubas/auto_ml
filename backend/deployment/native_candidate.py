@@ -15,6 +15,8 @@ from importlib.metadata import version
 import numpy as np
 import pandas as pd
 
+from modeling.prediction_contract import frozen_prediction_task
+
 SCOPE = "native_training_candidate_export_v1"
 MAX_EXPORT_BYTES = 10 * 1024**2
 MAX_INPUT_BYTES = 5 * 1024**2
@@ -76,7 +78,8 @@ def validate(raw, expected_sha256):
             or set(means) != set(features) or any(not np.isfinite(float(n)) for n in means.values())
             or result["refit_preprocessing"].get("encoding") != []
             or result["refit_preprocessing"].get("purifier") is not None
-            or contract["task"] not in {"classification", "regression"}
+            or frozen_prediction_task(contract) not in {"classification", "regression"}
+            or (contract["task"] == "classification" and len(contract["class_mapping"]) != 2)
             or contract["target_column"] in features
             or not isinstance(result["model_json"], str)
         ):

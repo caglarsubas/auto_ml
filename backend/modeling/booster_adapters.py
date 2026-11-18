@@ -185,7 +185,7 @@ class BoosterAdapter(ABC):
     @classmethod
     @abstractmethod
     def load(cls, path: str, feature_names: Optional[List[str]] = None,
-             cat_features: Optional[List[str]] = None) -> 'BoosterAdapter':
+             cat_features: Optional[List[str]] = None, *, task: Optional[str] = None) -> 'BoosterAdapter':
         raise NotImplementedError
 
     @abstractmethod
@@ -316,7 +316,7 @@ class XGBoostAdapter(BoosterAdapter):
         return path
 
     @classmethod
-    def load(cls, path: str, feature_names=None, cat_features=None):
+    def load(cls, path: str, feature_names=None, cat_features=None, *, task=None):
         import xgboost as xgb
         obj = cls()
         # Model loading and small scoring batches must not create an all-core
@@ -327,7 +327,7 @@ class XGBoostAdapter(BoosterAdapter):
         obj.feature_names = list(feature_names or [])
         obj.cat_features = list(cat_features or [])
         obj.enable_categorical = bool(obj.cat_features)
-        obj.task = 'regression' if 'regressor' in os.path.basename(path).lower() else 'classification'
+        obj.task = task or ('regression' if 'regressor' in os.path.basename(path).lower() else 'classification')
         try:
             saved_iteration = getattr(obj.model, 'best_iteration', None)
             obj.best_iteration = int(saved_iteration) if saved_iteration is not None else None
@@ -443,14 +443,14 @@ class LightGBMAdapter(BoosterAdapter):
         return path
 
     @classmethod
-    def load(cls, path: str, feature_names=None, cat_features=None):
+    def load(cls, path: str, feature_names=None, cat_features=None, *, task=None):
         import lightgbm as lgb
         obj = cls()
         obj.model = lgb.Booster(model_file=path)
         obj.feature_names = list(feature_names or obj.model.feature_name() or [])
         obj.cat_features = list(cat_features or [])
         obj.enable_categorical = bool(obj.cat_features)
-        obj.task = 'regression' if 'regressor' in os.path.basename(path).lower() else 'classification'
+        obj.task = task or ('regression' if 'regressor' in os.path.basename(path).lower() else 'classification')
         obj.best_iteration = int(getattr(obj.model, 'best_iteration', 0) or 0)
         return obj
 
@@ -559,10 +559,10 @@ class CatBoostAdapter(BoosterAdapter):
         return path
 
     @classmethod
-    def load(cls, path: str, feature_names=None, cat_features=None):
+    def load(cls, path: str, feature_names=None, cat_features=None, *, task=None):
         from catboost import CatBoostClassifier, CatBoostRegressor
         obj = cls()
-        is_reg = 'regressor' in os.path.basename(path).lower()
+        is_reg = task == 'regression' if task else 'regressor' in os.path.basename(path).lower()
         obj.task = 'regression' if is_reg else 'classification'
         obj.model = CatBoostRegressor() if is_reg else CatBoostClassifier()
         obj.model.load_model(path)
@@ -713,6 +713,8 @@ def load_adapter_from_path(
     algorithm: Optional[str] = None,
     feature_names: Optional[List[str]] = None,
     cat_features: Optional[List[str]] = None,
+    *,
+    task: Optional[str] = None,
 ) -> BoosterAdapter:
     algo = (algorithm or 'xgboost').strip().lower()
     lower = path.lower()
@@ -724,4 +726,4 @@ def load_adapter_from_path(
         else:
             algo = 'xgboost'
     cls = _ADAPTERS[algo]
-    return cls.load(path, feature_names=feature_names, cat_features=cat_features)
+    return cls.load(path, feature_names=feature_names, cat_features=cat_features, task=task)
