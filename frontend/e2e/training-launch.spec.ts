@@ -78,6 +78,12 @@ async function finish(page: Page, job: any, testInfo: any) {
   await page.getByRole('button', { name: 'Refresh jobs', exact: true }).click();
   await expect(page.locator('app-package-jobs')).toContainText('Job state: succeeded');
   await expect(page.locator('app-package-jobs')).toContainText('Development search:');
+  const paired = page.getByText('Paired development comparison', { exact: true });
+  await paired.click();
+  await expect(page.getByRole('table', { name: 'Paired development fold scores' })).toBeVisible();
+  const sensitivity = page.getByText('Fold sensitivity:');
+  await expect(sensitivity).toBeVisible();
+  await expect(sensitivity).toContainText('Sampling uncertainty is unavailable.');
   await expect(
     page.getByRole('button', { name: 'Use receipt for review action', exact: true }),
   ).toHaveCount(0);
@@ -88,6 +94,12 @@ async function finish(page: Page, job: any, testInfo: any) {
   expect(download.suggestedFilename()).toBe(`job-${job.id}.json`);
   const receipt = JSON.parse(await readFile((await download.path())!, 'utf8'));
   expect(receipt.result.candidates).toHaveLength(2);
+  expect(receipt.result.paired_diagnostics).toMatchObject({
+    status: 'completed',
+    reference_max_depth: 1,
+    candidate_max_depth: 2,
+    sampling_uncertainty: { status: 'unavailable', reason_code: 'dependent_development_folds' },
+  });
   expect(receipt.result.model_format).toBe('xgboost_json');
   expect(JSON.parse(receipt.result.model_json).learner).toBeDefined();
   expect(receipt.result.final_holdout_accessed).toBe(false);

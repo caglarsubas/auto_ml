@@ -52,6 +52,19 @@ describe('Job evidence during an in-flight history refresh', () => {
     expect(component.job.revision).toBe(2);
     expect(component.busy).toBeFalse();
   });
+  it('reopens the exact requested receipt after authority recovers', () => {
+    component.candidateQueued(job);
+    http
+      .expectOne('/api/jobs/finished-job/?project_id=project-a')
+      .flush({ error_code: 'project_authority_unavailable' }, { status: 503, statusText: 'Unavailable' });
+    expect(component.job).toBeNull();
+    expect(component.directory).toBeNull();
+    component.refresh();
+    http.expectOne('/api/jobs/datasets/1/?project_id=project-a').flush(directory);
+    expect(component.job).toBeNull();
+    http.expectOne('/api/jobs/finished-job/?project_id=project-a').flush(job);
+    expect(component.job).toEqual(job);
+  });
   it('withholds a previously requested download once refresh supersedes its generation', () => {
     const create = spyOn(URL, 'createObjectURL');
     component.download();

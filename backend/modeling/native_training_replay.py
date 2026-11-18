@@ -10,10 +10,12 @@ import pandas as pd
 from deployment.native_candidate import MAX_INPUT_BYTES, canonical
 from modeling.declared_metric import bind_declared_metric, metric_spec, metric_value
 from modeling.development_validation import development_folds, prepare_fold
+from modeling.paired_diagnostic_uncertainty import compare_paired_folds
 from modeling.prediction_contract import check_availability_controls, PredictionContractError, resolve_prediction_contract
 
 KIND = "native_numeric_training_search_v1"
 CANDIDATE_DEPTHS = (1, 2)
+PLAN_SCHEMA = 2
 BUDGET = {
     "max_input_bytes": MAX_INPUT_BYTES,
     "max_rows": 1000,
@@ -238,6 +240,14 @@ def fit_prepared(plan, context, *, job_id, training_sha256, runtime, check=lambd
         "review_approved": False,
         "production_use_approved": False,
     }
+    if plan.get("schema_version") == PLAN_SCHEMA:
+        reference, candidate = candidates
+        result["paired_diagnostics"] = {
+            "reference_max_depth": reference["max_depth"],
+            "candidate_max_depth": candidate["max_depth"],
+            **compare_paired_folds(reference["folds"], candidate["folds"], metric=metric,
+                                   validation=plan["options"]["validation"]),
+        }
     if len(canonical(result)) > BUDGET["max_output_bytes"]:
         raise TrainingReplayError("job_output_budget_exceeded")
     check()
