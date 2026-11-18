@@ -114,7 +114,10 @@ def qualify(directory, expected, reports, path_check_image=None, adoption_check=
                 qualify_adoption(plan, result["plan_manifest_sha256"], path_check_image, reports)
                 from qualify_private_dependency_start import qualify as qualify_dependency_start
 
-                first = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports, profile_workloads=True)
+                first = qualify_dependency_start(
+                    plan, result["plan_manifest_sha256"], path_check_image, reports,
+                    profile_workloads=True, profile_threat_model=True,
+                )
                 repeated = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports / "clean-repeat", profile_workloads=True)
                 legacy = qualify_dependency_start(plan, result["plan_manifest_sha256"], path_check_image, reports / "legacy-execution", profile_legacy=True)
                 legacy_profile = legacy["qualification"]["fresh_application_adoption"]["legacy_execution"]

@@ -7,8 +7,9 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models.deletion import ProtectedError
+from django.test.utils import CaptureQueriesContext
 
 from access_control import projects
 from access_control.models import Project, ProjectDataset, ProjectMembership
@@ -82,7 +83,11 @@ def test_exact_receipt_attaches_downloads_and_preserves_provenance(world, settin
                 assert completed['result']['scores_truncated']
             else:
                 assert downloaded['job']['result']['model_state_loaded'] is False
-    assert world[4]['outsider'].get(receipt_url(case, event)).status_code == 403
+    with CaptureQueriesContext(connection) as queries:
+        assert world[4]['outsider'].get(receipt_url(case, event)).status_code == 403
+    table = f'"{NativeJob._meta.db_table}"'
+    assert not any(f'{table}."result"' in query["sql"] or f'{table}."specification"' in query["sql"]
+                   for query in queries)
     assert world[4]['developer'].post(receipt_url(case, event), '{}', content_type='application/json').status_code == 405
     with pytest.raises(ProtectedError):
         NativeJob.objects.get(pk=completed['id']).delete()
@@ -133,6 +138,23 @@ def test_wrong_result_missing_job_and_different_frozen_package_are_blocked(world
     case = create(world)[0].json()
     assert append(world, case, evidence=reference(completed) | {'result_sha256': '0' * 64}).json()['error_code'] == 'review_evidence_result_changed'
     assert append(world, case, evidence={'job_id': str(uuid.uuid4()), 'result_sha256': '0' * 64}).status_code == 404
+
+    # A real persisted receipt for another subject must fail before reading its result.
+    foreign_project = Project.objects.create(name='Foreign evidence project')
+    foreign_dataset = Declaration.objects.create(
+        name='foreign', file='data_files/foreign-evidence.csv', original_name='foreign-evidence.csv',
+    )
+    projects.bind_dataset(foreign_dataset, foreign_project.pk)
+    foreign = NativeJob.objects.get(pk=completed['id'])
+    foreign.id, foreign.project, foreign.dataset = uuid.uuid4(), foreign_project, foreign_dataset
+    foreign.save(force_insert=True)
+    with CaptureQueriesContext(connection) as queries:
+        denied = append(world, case, evidence={'job_id': str(foreign.pk), 'result_sha256': foreign.result_sha256})
+    assert denied.status_code == 409 and denied.json()['error_code'] == 'review_evidence_package_mismatch'
+    table = f'"{NativeJob._meta.db_table}"'
+    assert not any(f'{table}."result"' in query["sql"] or f'{table}."specification"' in query["sql"]
+                   for query in queries)
+
     file_id, project, _, users, clients = world
     newer = build_score_bundle(file_id)
     new_world = file_id, project, newer, users, clients

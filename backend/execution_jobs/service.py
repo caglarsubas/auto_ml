@@ -14,6 +14,7 @@ from pathlib import Path
 from django.core.exceptions import ObjectDoesNotExist
 from django.conf import settings
 from django.db import connection, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from access_control import projects
@@ -486,9 +487,21 @@ def scoring_receipt(actor, identifier, expected):
         return raw
 
 
-def read(actor, identifier):
+def receipt_subject(identifier, *, file_id=None):
+    """Resolve a single-dataset tool's subject before loading receipt metadata."""
+    jobs = NativeJob.objects.filter(pk=identifier)
+    if file_id is not None:
+        jobs = jobs.filter(dataset_id=file_id).filter(
+            Q(source_dataset_id__isnull=True) | Q(source_dataset_id=file_id)
+        )
+        if not jobs.exists():
+            raise projects.ProjectDenied("job_dataset_scope_denied")
+    return jobs.get()
+
+
+def read(actor, identifier, *, file_id=None):
     with locked():
-        job = NativeJob.objects.get(pk=identifier)
+        job = receipt_subject(identifier, file_id=file_id)
         return authorized_receipt(job, read_authority(actor, job))
 
 

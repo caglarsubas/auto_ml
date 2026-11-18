@@ -28,25 +28,27 @@ def source_scopes(actor, review, reference=None):
         except ValueError:
             # The action validator reports malformed optional references as 400.
             pass
-    scopes = {}
-    for job in NativeJob.objects.filter(pk__in=ids):
-        if job.source_dataset_id is not None:
-            scope = service.scope(actor, job.source_dataset_id)
-            if scope['project_id'] != str(review.project_id):
-                raise projects.ProjectDenied('review_evidence_input_project_mismatch')
-            scopes[job.source_dataset_id] = scope
-    return list(scopes.values())
+    sources = NativeJob.objects.filter(pk__in=ids, source_dataset_id__isnull=False).values_list(
+        'source_dataset_id', flat=True,
+    ).order_by('source_dataset_id').distinct()
+    scopes = []
+    for source_id in sources:
+        scope = service.scope(actor, source_id)
+        if scope['project_id'] != str(review.project_id):
+            raise projects.ProjectDenied('review_evidence_input_project_mismatch')
+        scopes.append(scope)
+    return scopes
 
 
 def capture(actor, review, reference):
     identifier, expected_sha = checked_reference(reference)
-    job = NativeJob.objects.get(pk=identifier)
+    job = NativeJob.objects.defer('specification', 'result').get(pk=identifier)
+    if job.dataset_id != review.dataset_id or job.project_id != review.project_id:
+        raise ReviewConflict('review_evidence_package_mismatch')
     try:
         scopes = service.read_authority(actor, job)
     except service.JobConflict as exc:
         raise ReviewConflict(exc.code) from None
-    if job.dataset_id != review.dataset_id or job.project_id != review.project_id:
-        raise ReviewConflict('review_evidence_package_mismatch')
     exact = {k: str(getattr(review, k)) for k in ('bundle_id', 'execution_id', 'assessment_id', 'manifest_sha256')}
     if any(job.specification.get(k) != value for k, value in exact.items()):
         raise ReviewConflict('review_evidence_package_mismatch')
