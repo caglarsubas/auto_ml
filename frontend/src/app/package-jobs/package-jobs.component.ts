@@ -51,6 +51,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   inputFileId = 0;
   source: any = null;
   pending: { url: string; body: any } | null = null;
+  private retryOpenId: string | null = null;
   private generation = 0;
   private receiptRequest = 0;
   private reproductionRequest = 0;
@@ -67,6 +68,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.requests.unsubscribe();
     this.requests = new Subscription();
     this.directory = this.job = this.handoff = this.pending = this.source = null;
+    this.retryOpenId = null;
     this.showHistory = false;
     this.inputFileId = this.fileId;
     this.busy = false;
@@ -93,7 +95,8 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.busy = true;
     this.error = '';
     const generation = ++this.generation;
-    const selected = this.job?.id;
+    const selected = this.job?.id ?? this.retryOpenId;
+    this.retryOpenId = selected;
     // Withdraw stale evidence before either refresh response can replace its
     // controls; keyboard actions must target the newly verified receipt.
     this.job = this.handoff = null;
@@ -121,6 +124,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   open(id: string): void {
     if (this.busy) return;
     this.busy = true;
+    this.retryOpenId = id;
     this.job = this.handoff = null;
     this.foldExportDigest = '';
     this.clearReproduction();
@@ -131,6 +135,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
         next: (job) => {
           if (generation === this.generation) {
             this.job = job;
+            this.retryOpenId = null;
             this.busy = false;
           }
         },
@@ -385,6 +390,9 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.job = this.handoff = null;
     this.foldExportDigest = '';
     this.clearReproduction();
+    // A temporary authority outage may preserve only the job ID for an
+    // explicit refresh. Both the listing and receipt require fresh authority.
+    if (error.status !== 503) this.retryOpenId = null;
     if (error.status === 403 || !mutation) {
       this.directory = null;
       this.source = null;

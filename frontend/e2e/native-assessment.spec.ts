@@ -384,6 +384,7 @@ for (const task of ['classification', 'regression']) {
     await page.getByRole('button', { name: 'Download job receipt', exact: true }).click();
     const download = await downloaded;
     const receipt = JSON.parse(await readFile((await download.path())!, 'utf8'));
+    expect(receipt.id).toBe(job.id);
     expect(receipt.result.final_holdout_accessed).toBe(true);
     expect(receipt.result.confirmatory).toBe(false);
     expect(receipt.result.production_use_approved).toBe(false);
