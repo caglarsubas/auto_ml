@@ -19,6 +19,7 @@ from django.conf import settings
 
 from encoding.fitted import apply_fitted_encoding, scoring_encoding_reports
 from modeling.execution_artifacts import digest_file, execution_root, projection_lock, replace_projection
+from modeling.prediction_contract import contract_business_understanding
 from deployment.evidence import (
     EXACT_SCORING_SCHEMA, current_selection, execution_artifact, resolve_handoff, verify_bundle,
 )
@@ -208,9 +209,7 @@ def _build_score_bundle(file_id, context, out, destination, retryable, predecess
 
     contract = model.get('prediction_contract') or {}
     if contract:
-        bu = {'problem_type': contract['task'], 'target_contract': contract['target_contract'],
-              'population': contract['population'], 'prediction_horizon': contract['prediction_horizon'],
-              'success_criteria': contract['objective'], 'forbidden_features': contract['forbidden_features']}
+        bu = contract_business_understanding(contract)
         success_criteria = contract['objective']
     card_abs = os.path.join(settings.MEDIA_ROOT, 'evaluation', f'{file_id}_model_card.json')
     model_card = None

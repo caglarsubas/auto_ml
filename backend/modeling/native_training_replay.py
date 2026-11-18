@@ -10,7 +10,7 @@ import pandas as pd
 from deployment.native_candidate import MAX_INPUT_BYTES, canonical
 from modeling.declared_metric import bind_declared_metric, metric_spec, metric_value
 from modeling.development_validation import development_folds, prepare_fold
-from modeling.prediction_contract import resolve_prediction_contract
+from modeling.prediction_contract import check_availability_controls, PredictionContractError, resolve_prediction_contract
 
 KIND = "native_numeric_training_search_v1"
 CANDIDATE_DEPTHS = (1, 2)
@@ -84,7 +84,7 @@ def prepare_training(raw, options, check=lambda: None):
         raise ValueError("Supply typed target, objective and availability declarations.")
     if not isinstance(business["success_criteria"].get("cost_matrix", {}), dict):
         raise ValueError("Business costs must be a named cost matrix.")
-    contract, labels = resolve_prediction_contract(frame, business, "xgboost")
+    contract, labels = resolve_prediction_contract(frame, business, "xgboost", allow_outcome_window=True)
     if contract["task"] not in {"classification", "regression"} or len(contract["class_mapping"]) > 2:
         raise TrainingReplayError("job_training_task_unsupported")
     validation = options["validation"]
@@ -110,6 +110,11 @@ def prepare_training(raw, options, check=lambda: None):
     controls = [value for key, value in validation.items() if key.endswith("_column")]
     if any(not isinstance(name, str) or name not in frame or name == contract["target_column"] for name in controls):
         raise ValueError("Validation columns must exist and cannot be the target.")
+    check_availability_controls(contract, controls)
+    window = contract['target_contract'].get('outcome_window')
+    if window and (strategy != 'oot' or not validation.get('label_end_column')
+                   or len(set(controls)) != len(controls)):
+        raise PredictionContractError('An executable outcome window requires out-of-time validation and distinct date, label-end and any group columns.')
     features = options["features"]
     if (
         not isinstance(features, list)

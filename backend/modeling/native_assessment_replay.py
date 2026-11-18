@@ -6,7 +6,7 @@ import pandas as pd
 from deployment.native_candidate import canonical, sha
 from modeling.declared_metric import metric_value
 from modeling.development_assessment import development_metrics
-from modeling.prediction_contract import frozen_prediction_task
+from modeling.prediction_contract import fixed_outcome_window, frozen_prediction_task, outcome_window_bounds, PredictionContractError
 
 
 CHUNK_SIZE = 500
@@ -18,7 +18,7 @@ class AssessmentReplayError(ValueError):
         super().__init__(code)
 
 
-def _population(frame, development, validation, as_of):
+def _population(frame, development, validation, as_of, contract):
     strategy = validation["strategy"]
     group = validation.get("group_column")
     if group:
@@ -30,7 +30,16 @@ def _population(frame, development, validation, as_of):
             or assessment_entities.isin(development_entities).any()
         ):
             raise AssessmentReplayError("native_assessment_entities_overlap_or_unverified")
-    if strategy == "oot":
+    window = fixed_outcome_window(contract)
+    if window:
+        try:
+            _, train_mature = outcome_window_bounds(development, validation, window, window['development_as_of'])
+            dates, _ = outcome_window_bounds(frame, validation, window, as_of)
+        except PredictionContractError:
+            raise AssessmentReplayError('native_assessment_time_or_maturity_invalid') from None
+        if train_mature.max() >= dates.min():
+            raise AssessmentReplayError('native_assessment_time_or_maturity_invalid')
+    elif strategy == "oot":
         date, end = validation["date_column"], validation.get("label_end_column", validation["date_column"])
         train_end = pd.to_datetime(development[end], errors="coerce", utc=True)
         held_date = pd.to_datetime(frame[date], errors="coerce", utc=True)
@@ -44,24 +53,33 @@ def _population(frame, development, validation, as_of):
             or held_end.max() > pd.Timestamp(as_of)
         ):
             raise AssessmentReplayError("native_assessment_time_or_maturity_invalid")
-    return {
+    checks = {
         "strategy": strategy,
         "entity_separation_checked": bool(group),
         "outcome_window_checked": strategy == "oot",
         "row_identity": "reviewer_declared; unknown upstream or modified imports are not linked automatically",
     }
+    if contract.get('schema_version') == 2:
+        checks['chronology_checked'] = strategy == 'oot'
+        checks['outcome_window_checked'] = strategy == 'oot' and bool(validation.get('label_end_column'))
+        checks['prediction_contract_sha256'] = contract['sha256']
+        checks['declared_population_assurance'] = 'reviewer_attested'
+        checks['declared_feature_availability_assurance'] = 'policy_enforced; upstream availability attested'
+        checks['fixed_outcome_window_checked'] = bool(window)
+    return checks
 
 
 def calculate_assessment(frame, development, validation, as_of, contract, metric, features, predict, *, check=lambda: None):
     """Recompute aggregate evidence on already admitted frames without authority or custody effects."""
-    population = _population(frame, development, validation, as_of)
+    task = frozen_prediction_task(contract)
+    population = _population(frame, development, validation, as_of, contract)
     target = contract["target_column"]
-    if target in features:
+    if target in features or set(features).intersection(contract.get('forbidden_features') or []):
         raise AssessmentReplayError("native_assessment_feature_contract_invalid")
     labels = frame[target]
     if labels.isna().any():
         raise AssessmentReplayError("native_assessment_labels_missing")
-    if frozen_prediction_task(contract) == "regression":
+    if task == "regression":
         labels = pd.to_numeric(labels, errors="coerce").to_numpy(dtype=float)
         if not np.isfinite(labels).all():
             raise AssessmentReplayError("native_assessment_labels_invalid")

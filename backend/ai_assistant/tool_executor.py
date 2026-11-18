@@ -805,13 +805,26 @@ def format_business_understanding(bu: Optional[dict], *, indent: str = '  ') -> 
     tc = bu.get('target_contract') if isinstance(bu.get('target_contract'), dict) else {}
     for key, label in (('target_column', 'Target column'),
                        ('event_definition', 'Event/Target definition'),
-                       ('good_bad_window', 'Good/bad window')):
+                       ('good_bad_window', 'Good/bad window'),
+                       ('label_maturity', 'Label maturity')):
         value = str(tc.get(key) or '').strip()
         if value:
             lines.append(f"{indent}{label}: {value}")
     positive = tc.get('positive_class')
     if bu.get('problem_type') in ('classification', 'anomaly') and positive is not None and positive != '':
         lines.append(f"{indent}Declared positive label (for two-class outcomes): {positive}")
+    window = tc.get('outcome_window')
+    if isinstance(window, dict):
+        lines.append(f"{indent}Outcome window: {window.get('horizon_days')} horizon days, "
+                     f"{window.get('maturity_lag_days')} maturity-lag days, development as-of {window.get('development_as_of')}")
+    availability = bu.get('feature_availability')
+    if isinstance(availability, dict) and availability.get('default'):
+        lines.append(f"{indent}Feature availability default: {availability['default']}")
+        overrides = availability.get('overrides')
+        if isinstance(overrides, dict) and overrides:
+            values = ', '.join(f'{name}={status}' for name, status in list(overrides.items())[:20])
+            suffix = f'; {len(overrides) - 20} more' if len(overrides) > 20 else ''
+            lines.append(f"{indent}Feature availability overrides: {values}{suffix}")
 
     sc = bu.get('success_criteria') if isinstance(bu.get('success_criteria'), dict) else {}
     if sc:

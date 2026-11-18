@@ -301,6 +301,9 @@ def prepare(actor, file_id, operation, options):
         if not isinstance(options.get("business_understanding"), dict):
             raise ValueError("Supply the accepted business declaration.")
         semantic_contract = options["business_understanding"]
+        target = semantic_contract.get('target_contract')
+        if isinstance(target, dict) and target.get('outcome_window') is not None:
+            raise PredictionContractError('Executable outcome windows require native numeric out-of-time training. Use that training entrypoint.')
         files = training_files(actor, file_id, options)
         algorithm = options.get("algorithm") or "xgboost"
     else:

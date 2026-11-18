@@ -7,7 +7,7 @@ adopts a champion or writes legacy model/search projections.
 
 import os
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -22,6 +22,7 @@ from execution_jobs import csv_scoring
 from execution_jobs.models import NativeJob
 from modeling import native_training_replay as replay
 from modeling.models import HoldoutAccess
+from modeling.prediction_contract import PredictionContractError
 
 KIND = replay.KIND
 BUDGET = replay.BUDGET
@@ -75,6 +76,9 @@ def prepare(actor_id, file_id, options, check=lambda: None, expected=None, *, pr
         contract, folds, context = replay.prepare_training(raw, options)
     except replay.TrainingReplayError as error:
         raise JobConflict(error.code) from None
+    window = contract['target_contract'].get('outcome_window')
+    if window and datetime.fromisoformat(window['development_as_of']) > timezone.now():
+        raise PredictionContractError('The development as-of timestamp must be at or before admission time.')
     plan = {
         "schema_version": 1,
         "profile": {"kind": KIND, "runtime": service.runtime(KIND), "limits": service.limits(KIND)},

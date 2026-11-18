@@ -106,10 +106,34 @@
           ></textarea>
         </label>
         <p id="predictors-help">
-          One exact column name per line, in scoring order. Exclude the target,
-          time/entity/outcome-window controls and unavailable or forbidden predictors. Only selected
-          predictors are declared available at prediction time.
+          Enter one exact column name per line in scoring order. Keep the target, validation
+          controls, and unavailable or forbidden columns out of this list.
         </p>
+        <details>
+          <summary>Feature availability overrides</summary>
+          <p id="availability-help">
+            Enter one existing column name per line. An exclusion records a restriction. Validation
+            controls can still be used to split rows when excluded from predictors.
+          </p>
+          <div class="fields">
+            <label
+              >Explicitly available columns<textarea
+                name="explicitlyAvailable"
+                [(ngModel)]="draft.explicitlyAvailable"
+                (ngModelChange)="changed()"
+                aria-describedby="availability-help"
+              ></textarea>
+            </label>
+            <label
+              >Excluded columns<textarea
+                name="excluded"
+                [(ngModel)]="draft.excluded"
+                (ngModelChange)="changed()"
+                aria-describedby="availability-help"
+              ></textarea>
+            </label>
+          </div>
+        </details>
         <div class="fields">
           <div>
             <label for="training-strategy">Validation strategy</label
@@ -157,13 +181,68 @@
                 required
             /></label>
             <label
-              >Label end column (optional)<input
+              >Label end column {{ draft.outcomeWindow ? '(required)' : '(optional)'
+              }}<input
                 name="end"
                 [(ngModel)]="draft.labelEnd"
                 (ngModelChange)="changed()"
+                [required]="draft.outcomeWindow"
             /></label>
           }
         </div>
+        @if (draft.strategy === 'oot' || draft.outcomeWindow) {
+          <label class="confirm"
+            ><input
+              type="checkbox"
+              name="outcomeWindow"
+              [(ngModel)]="draft.outcomeWindow"
+              (ngModelChange)="changed()"
+            />Enforce a dated outcome window</label
+          >
+          @if (draft.outcomeWindow) {
+            <p id="outcome-window-help">
+              Use temporal validation with distinct prediction-date and label-end columns. Each
+              observed outcome must span the declared horizon and mature by the development as-of
+              time. Temporal folds keep rows out of training until their labels mature.
+            </p>
+            <div class="fields">
+              <label
+                >Minimum prediction horizon in days<input
+                  type="number"
+                  name="horizonDays"
+                  min="1"
+                  max="3650"
+                  step="1"
+                  [(ngModel)]="draft.horizonDays"
+                  (ngModelChange)="changed()"
+                  required
+                />
+              </label>
+              <label
+                >Maturity lag in days after label end<input
+                  type="number"
+                  name="maturityLagDays"
+                  min="0"
+                  max="3650"
+                  step="1"
+                  [(ngModel)]="draft.maturityLagDays"
+                  (ngModelChange)="changed()"
+                  required
+                />
+              </label>
+              <label
+                >Development as-of timestamp (ISO with timezone)<input
+                  name="developmentAsOf"
+                  placeholder="2026-11-18T00:00:00Z"
+                  [(ngModel)]="draft.developmentAsOf"
+                  (ngModelChange)="changed()"
+                  aria-describedby="outcome-window-help"
+                  required
+                />
+              </label>
+            </div>
+          }
+        }
         <label class="confirm"
           ><input
             type="checkbox"
@@ -225,6 +304,35 @@
           {{ reviewedOptions.business_understanding.success_criteria.primary_metric }} ·
           {{ reviewedOptions.features.length }} predictors ·
           {{ reviewedOptions.validation.strategy }}
+        </dd>
+        <dt>Development population</dt>
+        <dd>{{ preview.prediction_contract.population }}</dd>
+        <dt>Prediction horizon</dt>
+        <dd>{{ preview.prediction_contract.prediction_horizon }}</dd>
+        <dt>Label maturity</dt>
+        <dd>{{ preview.prediction_contract.target_contract.label_maturity }}</dd>
+        @if (preview.prediction_contract.target_contract.outcome_window; as window) {
+          <dt>Enforced outcome window</dt>
+          <dd>
+            {{ window.horizon_days }} days minimum · {{ window.maturity_lag_days }} days maturity
+            lag · development as of
+            <time [attr.datetime]="window.development_as_of">{{ window.development_as_of }}</time>
+          </dd>
+        }
+        <dt>Feature availability</dt>
+        <dd>
+          Selected predictors available at prediction time
+          @let overrides = preview.prediction_contract.feature_availability.overrides | keyvalue;
+          @if (overrides?.length) {
+            <ul aria-label="Accepted feature availability overrides">
+              @for (override of overrides; track override.key) {
+                <li>
+                  <code>{{ override.key }}</code> ·
+                  {{ override.value === 'excluded' ? 'Excluded' : 'Available at prediction time' }}
+                </li>
+              }
+            </ul>
+          }
         </dd>
         <dt>Worker budget</dt>
         <dd>

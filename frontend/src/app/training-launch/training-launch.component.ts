@@ -14,6 +14,15 @@ import { AuthService } from '../services/auth.service';
 import { PackageJobsComponent } from '../package-jobs/package-jobs.component';
 
 const KIND = 'native_numeric_training_search_v1';
+const AVAILABLE = 'available_at_prediction';
+const EXCLUDED = 'excluded';
+
+interface OutcomeWindow {
+  horizon_days: number;
+  maturity_lag_days: number;
+  development_as_of: string;
+}
+
 interface Draft {
   task: string;
   target: string;
@@ -30,10 +39,16 @@ interface Draft {
   group: string;
   date: string;
   labelEnd: string;
+  outcomeWindow: boolean;
+  horizonDays: number | null;
+  maturityLagDays: number | null;
+  developmentAsOf: string;
   fnCost: number;
   fpCost: number;
   developmentOnly: boolean;
   available: boolean;
+  explicitlyAvailable: string;
+  excluded: string;
 }
 const emptyDraft = (): Draft => ({
   task: '',
@@ -51,11 +66,24 @@ const emptyDraft = (): Draft => ({
   group: '',
   date: '',
   labelEnd: '',
+  outcomeWindow: false,
+  horizonDays: null,
+  maturityLagDays: null,
+  developmentAsOf: '',
   fnCost: 1,
   fpCost: 1,
   developmentOnly: false,
   available: false,
+  explicitlyAvailable: '',
+  excluded: '',
 });
+
+function columnNames(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((column) => column.trim())
+    .filter(Boolean);
+}
 
 @Component({
   selector: 'app-training-launch',
@@ -136,23 +164,43 @@ export class TrainingLaunchComponent implements OnChanges, OnDestroy {
     this.draft.positive = '';
     this.changed();
   }
-  private options(): any {
+  private options() {
     const d = this.draft;
-    const features = d.predictors
-      .split(/\r?\n/)
-      .map((x) => x.trim())
-      .filter(Boolean);
+    const target = d.target.trim();
+    const features = columnNames(d.predictors);
+    const explicitlyAvailable = columnNames(d.explicitlyAvailable);
+    const excluded = columnNames(d.excluded);
+    const overrideColumns = [...explicitlyAvailable, ...excluded];
+    if (new Set(overrideColumns).size !== overrideColumns.length) {
+      throw new Error('List each column once in feature availability overrides.');
+    }
+    if (overrideColumns.includes(target)) {
+      throw new Error('Remove the target column from feature availability overrides.');
+    }
+    const excludedPredictors = features.filter((feature) => excluded.includes(feature));
+    if (excludedPredictors.length) {
+      throw new Error(
+        `Remove excluded columns from the predictor list: ${excludedPredictors.join(', ')}.`,
+      );
+    }
+    const overrides = Object.fromEntries<typeof AVAILABLE | typeof EXCLUDED>([
+      ...explicitlyAvailable.map((column) => [column, AVAILABLE] as const),
+      ...excluded.map((column) => [column, EXCLUDED] as const),
+    ]);
     const controls =
       d.strategy === 'group'
-        ? [d.group]
+        ? [d.group.trim()]
         : d.strategy === 'oot'
-          ? [d.date, d.group, d.labelEnd].filter(Boolean)
+          ? [d.date.trim(), d.group.trim(), d.labelEnd.trim()].filter(Boolean)
           : [];
+    if (explicitlyAvailable.some((column) => controls.includes(column))) {
+      throw new Error('Validation control columns cannot be marked as available predictors.');
+    }
     if (
       !d.developmentOnly ||
       !d.available ||
       !['classification', 'regression'].includes(d.task) ||
-      !d.target.trim() ||
+      !target ||
       (d.task === 'classification' && !d.positive.trim()) ||
       this.declarations.some((f) => !d[f.key].trim()) ||
       !this.metrics.includes(d.metric) ||
@@ -163,7 +211,7 @@ export class TrainingLaunchComponent implements OnChanges, OnDestroy {
       features.length < 1 ||
       features.length > 32 ||
       new Set(features).size !== features.length ||
-      features.some((f) => f === d.target.trim() || controls.map((x) => x.trim()).includes(f)) ||
+      features.some((f) => f === target || controls.includes(f)) ||
       (d.metric === 'expected_cost' &&
         [d.fnCost, d.fpCost].some((v) => typeof v !== 'number' || !Number.isFinite(v) || v < 0))
     ) {
@@ -178,6 +226,50 @@ export class TrainingLaunchComponent implements OnChanges, OnDestroy {
       if (d.group.trim()) validation.group_column = d.group.trim();
       if (d.labelEnd.trim()) validation.label_end_column = d.labelEnd.trim();
     }
+    let outcomeWindow: OutcomeWindow | undefined;
+    if (d.outcomeWindow) {
+      if (
+        d.strategy !== 'oot' ||
+        !d.date.trim() ||
+        !d.labelEnd.trim() ||
+        d.date.trim() === d.labelEnd.trim()
+      ) {
+        throw new Error(
+          'The outcome window requires temporal validation and distinct date and label end columns.',
+        );
+      }
+      const { horizonDays, maturityLagDays } = d;
+      if (
+        horizonDays === null ||
+        !Number.isInteger(horizonDays) ||
+        horizonDays < 1 ||
+        horizonDays > 3650 ||
+        maturityLagDays === null ||
+        !Number.isInteger(maturityLagDays) ||
+        maturityLagDays < 0 ||
+        maturityLagDays > 3650
+      ) {
+        throw new Error(
+          'Enter a whole-number horizon of 1–3,650 days and a maturity lag of 0–3,650 days.',
+        );
+      }
+      const developmentAsOf = d.developmentAsOf.trim();
+      if (
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+          developmentAsOf,
+        ) ||
+        !Number.isFinite(Date.parse(developmentAsOf))
+      ) {
+        throw new Error(
+          'Enter the development as-of timestamp in ISO format with a timezone, such as 2026-11-18T00:00:00Z.',
+        );
+      }
+      outcomeWindow = {
+        horizon_days: horizonDays,
+        maturity_lag_days: maturityLagDays,
+        development_as_of: developmentAsOf,
+      };
+    }
     return {
       data_role: 'development_only',
       features,
@@ -187,12 +279,16 @@ export class TrainingLaunchComponent implements OnChanges, OnDestroy {
         objective: d.objective.trim(),
         population: d.population.trim(),
         prediction_horizon: d.horizon.trim(),
-        feature_availability: { default: 'available_at_prediction' },
+        feature_availability: {
+          default: AVAILABLE,
+          ...(overrideColumns.length ? { overrides } : {}),
+        },
         target_contract: {
-          target_column: d.target.trim(),
+          target_column: target,
           positive_class: d.task === 'classification' ? d.positive.trim() : null,
           event_definition: d.event.trim(),
           label_maturity: d.maturity.trim(),
+          ...(outcomeWindow ? { outcome_window: outcomeWindow } : {}),
         },
         success_criteria: {
           primary_metric: d.metric,
@@ -203,10 +299,41 @@ export class TrainingLaunchComponent implements OnChanges, OnDestroy {
       },
     };
   }
+  private matchesDeclaration(
+    contract: any,
+    declaration: ReturnType<TrainingLaunchComponent['options']>['business_understanding'],
+  ): boolean {
+    const availability = contract.feature_availability;
+    const overrides = availability?.overrides === undefined ? {} : availability.overrides;
+    const expected = Object.entries(declaration.feature_availability.overrides ?? {});
+    const acceptedWindow = contract.target_contract?.outcome_window;
+    const requestedWindow = declaration.target_contract.outcome_window;
+    const windowMatches = requestedWindow
+      ? acceptedWindow?.horizon_days === requestedWindow.horizon_days &&
+        acceptedWindow.maturity_lag_days === requestedWindow.maturity_lag_days &&
+        typeof acceptedWindow.development_as_of === 'string' &&
+        Date.parse(acceptedWindow.development_as_of) ===
+          Date.parse(requestedWindow.development_as_of)
+      : acceptedWindow === undefined || acceptedWindow === null;
+    return (
+      contract.population === declaration.population &&
+      contract.prediction_horizon === declaration.prediction_horizon &&
+      contract.target_contract?.label_maturity === declaration.target_contract.label_maturity &&
+      windowMatches &&
+      availability?.default === declaration.feature_availability.default &&
+      overrides !== null &&
+      typeof overrides === 'object' &&
+      !Array.isArray(overrides) &&
+      Object.keys(overrides).length === expected.length &&
+      expected.every(
+        ([column, status]) => Object.hasOwn(overrides, column) && overrides[column] === status,
+      )
+    );
+  }
   prepare(): void {
     if (this.locked || this.role !== 'developer') return;
     this.changed();
-    let options: any;
+    let options: ReturnType<TrainingLaunchComponent['options']>;
     try {
       options = this.options();
     } catch (error) {
@@ -221,6 +348,7 @@ export class TrainingLaunchComponent implements OnChanges, OnDestroy {
           if (generation !== this.generation) return;
           this.busy = false;
           if (
+            !preview ||
             preview.kind !== KIND ||
             !/^[a-f0-9]{64}$/.test(preview.input_sha256) ||
             !/^[a-f0-9]{64}$/.test(preview.training_sha256) ||
@@ -230,6 +358,13 @@ export class TrainingLaunchComponent implements OnChanges, OnDestroy {
             !preview.runtime
           ) {
             this.error = 'The preview was incomplete. Prepare a fresh preview before submitting.';
+            return;
+          }
+          if (
+            !this.matchesDeclaration(preview.prediction_contract, options.business_understanding)
+          ) {
+            this.error =
+              'The preview did not preserve the declared population, horizon, label maturity, outcome window or feature availability. Prepare a fresh preview before submitting.';
             return;
           }
           this.preview = preview;
@@ -322,7 +457,8 @@ export class TrainingLaunchComponent implements OnChanges, OnDestroy {
       job_training_csv_profile_invalid:
         'Use a headered UTF-8 CSV with 30–1,000 rows, at most 40 columns and consistent row widths.',
       job_prediction_contract_invalid:
-        error.error?.error || 'Check the declared task, target, positive label and objective.',
+        error.error?.error ||
+        'Check the declared task, target, positive label, population, horizon, label maturity, feature availability and objective.',
       job_request_invalid:
         'Check the exact target and positive label, metric, required declarations and split columns. Unsupported or invalid folds cannot fall back to shuffled validation.',
     };

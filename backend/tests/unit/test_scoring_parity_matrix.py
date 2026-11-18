@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import dataclasses
+import json
 import pickle
 
 import numpy as np
@@ -131,6 +132,7 @@ def capture_scores(monkeypatch, case):
 def test_assessed_model_matches_exported_scores(case, _use_tmp_media, settings, bounded_matrix_fit, monkeypatch):
     frame = dataset(case)
     frame['Target'] = 1  # An excluded compatibility column distinct from the label.
+    frame['post_outcome'] = 2
     relative = 'data_files/scoring-matrix.csv'
     source = Path(settings.MEDIA_ROOT) / relative
     frame.to_csv(source, index=False)
@@ -142,6 +144,8 @@ def test_assessed_model_matches_exported_scores(case, _use_tmp_media, settings, 
         'business_understanding': declaration(case.task, positive='accepted'),
         'excluded_variables': ['Target'],
     }
+    data['business_understanding']['feature_availability']['overrides'] = {'income': 'available_at_prediction', 'post_outcome': 'excluded'}
+    data['business_understanding']['forbidden_features'] = ['removed_upstream']
     if case.encoder:
         data.update(encoding_plan=[{'feature': 'segment', 'user_lom': 'ordinal' if case.encoder == 'ordinal_encoding' else 'nominal',
                                     'encoding_method': case.encoder, 'nunique': 3,
@@ -174,6 +178,15 @@ def test_assessed_model_matches_exported_scores(case, _use_tmp_media, settings, 
     evidence = assessment.data['evaluation']
     assert evidence['task'] == case.task and evidence['scores_calibrated'] is bool(case.calibrator)
     bundle = build_score_bundle(file_id, trained.data['execution_id'], evidence['holdout_access_id'])
+    contract = model['prediction_contract']
+    card = assessment.data['model_card']['business_understanding']
+    exported = json.loads((Path(settings.MEDIA_ROOT) / bundle['bundle_path'] / 'business_understanding.json').read_text())
+    for key in ('population', 'prediction_horizon', 'target_contract', 'feature_availability', 'forbidden_features'):
+        # The model card also supplies the default good/bad-window form field.
+        if key == 'target_contract':
+            assert card[key]['label_maturity'] == exported[key]['label_maturity'] == contract[key]['label_maturity']
+        else:
+            assert card[key] == exported[key] == contract[key]
     bundle_id = bundle['bundle_id']
     features = pd.read_csv(source).loc[rows, ['income', 'segment', 'tenure']]
     assert features['segment'].eq('999').any() and features['segment'].isna().any() and features['tenure'].isna().any()

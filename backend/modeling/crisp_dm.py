@@ -60,6 +60,8 @@ def normalize_business_understanding(raw: Optional[Dict[str, Any]]) -> Dict[str,
         if tc.get(k) is not None:
             base['target_contract'][k] = str(tc.get(k) or '')
     base['target_contract']['positive_class'] = tc.get('positive_class')
+    if isinstance(tc.get('outcome_window'), dict):
+        base['target_contract']['outcome_window'] = dict(tc['outcome_window'])
     if isinstance(raw.get('feature_availability'), dict):
         base['feature_availability'] = dict(raw['feature_availability'])
     ff = raw.get('forbidden_features')
