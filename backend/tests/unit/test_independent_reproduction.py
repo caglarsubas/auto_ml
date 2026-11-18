@@ -103,6 +103,10 @@ def test_reproduce_regression_blocks_altered_evidence_or_authority(world):
     assert report["task"] == "regression" and report["n_assessed"] == 60
     assert report["scores_sha256"] == data["assessment"]["result"]["scores_sha256"]
     assert report["model_sha256"] == data["training"]["fit"]["model_sha256"]
+    paired = data["training"]["fit"]["paired_diagnostics"]
+    assert paired == w.trained.result["paired_diagnostics"]
+    assert paired["validation_strategy"] == "oot" and paired["direction"] == "minimize"
+    assert paired["status"] == "completed"
     frozen = data['training']['specification']['training']['prediction_contract']
     assert frozen == data['assessment']['result']['prediction_contract']
     assert frozen['forbidden_features'] == ['entity']
@@ -130,7 +134,7 @@ def test_reproduce_regression_blocks_altered_evidence_or_authority(world):
         offline_reproduce.reproduce(manifest, digest, w.path, outcomes)
 
     # A failed development comparison must finish before attempting to open outcomes.
-    data["training"]["fit"]["model_sha256"] = "0" * 64
+    data["training"]["fit"]["paired_diagnostics"]["reference_max_depth"] = True
     changed = native_candidate.canonical(data)
     manifest.write_bytes(changed)
     with pytest.raises(offline_reproduce.ReplayMismatch, match="refitted model"):

@@ -30,6 +30,7 @@ SOURCES = (
     "modeling/fit_receipts.py",
     "modeling/native_assessment_replay.py",
     "modeling/native_training_replay.py",
+    "modeling/paired_diagnostic_uncertainty.py",
     "modeling/prediction_contract.py",
     "modeling/rank_metrics.py",
     "modeling/sfs_objective.py",
@@ -77,7 +78,7 @@ def _verify_runtime(recorded):
 
 def reference_fit(result):
     """Record development evidence without including the executable model artifact."""
-    return {
+    evidence = {
         "model_sha256": native_candidate.sha(result["model_json"].encode()),
         "refit_receipt": result["refit_receipt"],
         "refit_preprocessing": result["refit_preprocessing"],
@@ -85,6 +86,9 @@ def reference_fit(result):
         "selected_max_depth": result["selected_max_depth"],
         "selection_rule": result["selection_rule"],
     }
+    if "paired_diagnostics" in result:
+        evidence["paired_diagnostics"] = result["paired_diagnostics"]
+    return evidence
 
 
 def _checked_members(manifest):
@@ -106,7 +110,11 @@ def _checked_members(manifest):
         raise ReplayBlocked("Reproduction manifest identity is inconsistent.")
 
     if (train_spec["kind"] != native_training_replay.KIND or train_spec["schema_version"] != 1
-            or plan["schema_version"] != 1
+            or type(plan["schema_version"]) is not int
+            or plan["schema_version"] not in (1, native_training_replay.PLAN_SCHEMA)
+            or ("paired_diagnostics" in training["fit"]) != (
+                plan["schema_version"] == native_training_replay.PLAN_SCHEMA
+            )
             or plan["profile"] != {"kind": train_spec["kind"], "runtime": train_spec["runtime"], "limits": train_spec["limits"]}
             or any(train_spec["limits"].get(key) != value for key, value in native_training_replay.BUDGET.items())
             or plan_sha != train_spec["training_sha256"]
@@ -214,7 +222,7 @@ def reproduce(manifest_path, manifest_sha256, development_path, outcomes_path):
         runtime=train_spec["runtime"],
     )
     result_sha256 = digest(fitted)
-    if result_sha256 != training["result_sha256"] or reference_fit(fitted) != training["fit"]:
+    if result_sha256 != training["result_sha256"] or digest(reference_fit(fitted)) != digest(training["fit"]):
         raise ReplayMismatch("The refitted model, transformations or development evidence differ from the recorded fit.")
     fresh_export = native_candidate.export_candidate(
         training["job_id"], manifest["dataset_id"], manifest["project_id"], fitted, result_sha256,

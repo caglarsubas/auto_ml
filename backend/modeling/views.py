@@ -3229,95 +3229,14 @@ def execute_legacy_champion(data):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class BoosterCompareView(APIView):
-    """Compare outer-test metrics across available booster (or alt) model files.
-
-    Uses the locked outer test in train_data.pkl. Scores every matching
-    model artifact under media/models for this file_id.
-    """
+    """Report the evidence boundary for historical saved-model comparisons."""
 
     def get(self, request, file_id: int, *args, **kwargs):
-        from sklearn.metrics import roc_auc_score, average_precision_score
-        from modeling.alt_pipelines import load_model_adapter, is_alt_algorithm
-        import pickle
-
-        train_path = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
-        if not os.path.exists(train_path):
-            return Response({'error': 'Training data not found'}, status=status.HTTP_404_NOT_FOUND)
-        with open(train_path, 'rb') as f:
-            td = pickle.load(f)
-        X_test = td.get('X_test')
-        y_test = td.get('y_test')
-        if X_test is None or y_test is None:
-            return Response({'error': 'Outer test missing'}, status=status.HTTP_409_CONFLICT)
-
-        models_dir = os.path.join(settings.MEDIA_ROOT, 'models')
-        rows = []
-        if os.path.isdir(models_dir):
-            for fn in sorted(os.listdir(models_dir)):
-                if not fn.startswith(f'{file_id}_'):
-                    continue
-                if not (fn.endswith('.json') or fn.endswith('.joblib') or fn.endswith('.cbm') or fn.endswith('.txt')):
-                    continue
-                if 'sfs_' in fn or 'calibrator' in fn:
-                    continue
-                path = os.path.join(models_dir, fn)
-                algo = 'xgboost'
-                lower = fn.lower()
-                if 'lightgbm' in lower or 'lgbm' in lower:
-                    algo = 'lightgbm'
-                elif 'catboost' in lower:
-                    algo = 'catboost'
-                elif 'logistic' in lower:
-                    algo = 'logistic_regression'
-                elif 'scorecard' in lower:
-                    algo = 'scorecard'
-                elif 'isolation' in lower:
-                    algo = 'isolation_forest'
-                try:
-                    adapter = load_model_adapter(
-                        path, algorithm=algo,
-                        feature_names=list(map(str, X_test.columns)),
-                    )
-                    # Align columns when possible
-                    feats = list(getattr(adapter, 'feature_names', None) or X_test.columns)
-                    cols = [c for c in feats if c in X_test.columns]
-                    Xt = X_test[cols] if cols else X_test
-                    scores = np.asarray(adapter.predict_proba(Xt), dtype=float).ravel()
-                    y = pd.to_numeric(y_test, errors='coerce')
-                    mask = y.notna().to_numpy()
-                    row = {
-                        'algorithm': algo,
-                        'model_file': fn,
-                        'n_test': int(mask.sum()),
-                        'roc_auc': None,
-                        'pr_auc': None,
-                    }
-                    if mask.sum() > 10 and y[mask].nunique() > 1:
-                        yy = y[mask].astype(int).to_numpy()
-                        ss = scores[mask[:len(scores)]] if len(scores) == len(mask) else scores
-                        if len(ss) == len(yy):
-                            row['roc_auc'] = float(roc_auc_score(yy, ss))
-                            try:
-                                row['pr_auc'] = float(average_precision_score(yy, ss))
-                            except Exception:
-                                pass
-                    rows.append(row)
-                except Exception as e:
-                    rows.append({
-                        'algorithm': algo,
-                        'model_file': fn,
-                        'error': str(e),
-                    })
-
-        rows_ok = [r for r in rows if r.get('roc_auc') is not None]
-        rows_ok.sort(key=lambda r: -(r.get('roc_auc') or 0))
         return Response({
-            'status': 'ok',
+            'status': 'unavailable',
             'file_id': file_id,
-            'n_models': len(rows),
-            'comparison': rows_ok or rows,
-            'message': (
-                'Outer-test comparison across saved model artifacts. '
-                'Train each booster separately on the same split to populate rows.'
-            ),
+            'n_models': 0,
+            'comparison': [],
+            'reason_code': 'legacy_comparison_unverified',
+            'message': 'Saved models lack verified matching development folds. Open a native training job to compare its candidates.',
         })

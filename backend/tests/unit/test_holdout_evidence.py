@@ -19,7 +19,7 @@ from evaluation.views import EvaluationPackView, EvaluationRunView, HoldoutHisto
 from modeling.execution_artifacts import begin_execution, digest_file, execution_root, publish_execution
 from modeling.holdout_evidence import holdout_history, holdout_spec, reserve_holdout_access, verify_holdout_spec
 from modeling.models import HoldoutAccess
-from modeling.views import ChampionPromoteView, ModelingStartView
+from modeling.views import BoosterCompareView, ChampionPromoteView, ModelingStartView
 from tests.unit.test_governed_foundation import declaration
 
 pytestmark = pytest.mark.unit
@@ -228,6 +228,23 @@ def test_history_never_deserializes_final_outcomes_and_validates_dataset_binding
     assert HoldoutAccess.objects.count() == 0
     assert view(factory.get('/', {'file_id': file_id + 1}), execution_id=parent['execution_id']).status_code == 409
     assert view(factory.get('/', {'file_id': file_id, 'limit': 101}), execution_id=parent['execution_id']).status_code == 400
+
+
+def test_saved_model_comparison_never_reads_legacy_holdout(settings, tmp_path, monkeypatch):
+    settings.MEDIA_ROOT = str(tmp_path)
+    legacy = tmp_path / 'train_data' / '1_train_data.pkl'
+    legacy.parent.mkdir()
+    legacy.write_bytes(pickle.dumps({'X_test': [[1]], 'y_test': [1]}))
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Saved-model comparison attempted to open results.')
+
+    monkeypatch.setattr('builtins.open', forbidden)
+    result = BoosterCompareView.as_view()(APIRequestFactory().get('/'), file_id=1)
+    assert result.status_code == 200
+    assert result.data['status'] == 'unavailable'
+    assert result.data['reason_code'] == 'legacy_comparison_unverified'
+    assert result.data['file_id'] == 1 and result.data['comparison'] == []
 
 
 def test_export_selects_exact_assessment_and_preserves_manifest_bytes(trained):

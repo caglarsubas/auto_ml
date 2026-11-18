@@ -127,6 +127,21 @@ def test_real_training_search_and_refit_survive_process_local_state_loss(world, 
     assert result["training_sha256"] == preview["training_sha256"]
     assert len(result["candidates"]) == 2 and all(len(c["folds"]) == 3 for c in result["candidates"])
     assert result["model_format"] == "xgboost_json" and json.loads(result["model_json"])["learner"]
+    paired = result["paired_diagnostics"]
+    assert paired["status"] == "completed"
+    assert (paired["reference_max_depth"], paired["candidate_max_depth"]) == (1, 2)
+    assert paired["metric"] == result["metric"]["primary_metric"]
+    reference, candidate = result["candidates"]
+    expected_diff = sum(
+        after["score"] - before["score"]
+        for before, after in zip(reference["folds"], candidate["folds"])
+    ) / 3
+    assert paired["effect"]["difference"] == pytest.approx(expected_diff)
+    direction = -1 if task == "regression" else 1
+    assert paired["effect"]["improvement"] == pytest.approx(direction * expected_diff)
+    assert paired["effect"]["n_validation_rows"] == 120
+    assert len(paired["sensitivity"]["omissions"]) == 3
+    assert paired["sampling_uncertainty"]["status"] == "unavailable"
     assert result["refit_receipt"]["train"]["n_rows"] == 120
     for candidate in result["candidates"]:
         for fold in candidate["folds"]:
@@ -163,6 +178,8 @@ def test_declared_entity_time_and_outcome_windows_govern_actual_folds(world, str
     service.execute(identifier)
     job = NativeJob.objects.get(pk=identifier)
     assert job.state == "succeeded", job.reason_code
+    assert job.result["paired_diagnostics"]["status"] == "completed"
+    assert job.result["paired_diagnostics"]["validation_strategy"] == strategy
     for fold in preview["folds"]:
         train, valid = w.frame.loc[fold["train_rows"]], w.frame.loc[fold["valid_rows"]]
         assert not set(train.entity) & set(valid.entity)

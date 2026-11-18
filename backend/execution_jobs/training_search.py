@@ -80,7 +80,7 @@ def prepare(actor_id, file_id, options, check=lambda: None, expected=None, *, pr
     if window and datetime.fromisoformat(window['development_as_of']) > timezone.now():
         raise PredictionContractError('The development as-of timestamp must be at or before admission time.')
     plan = {
-        "schema_version": 1,
+        "schema_version": replay.PLAN_SCHEMA,
         "profile": {"kind": KIND, "runtime": service.runtime(KIND), "limits": service.limits(KIND)},
         "source": source,
         "options": options,

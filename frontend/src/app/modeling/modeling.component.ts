@@ -1098,8 +1098,6 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  boosterCompare: any[] = [];
-  boosterCompareLoading = false;
 
   continueToEvaluation(): void {
     if (this.modelingStatus?.native_job_id && !this.modelingStatus?.selected_for_development) {
@@ -1160,21 +1158,6 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dataService.cancelLegacyJob(jobId).subscribe({
       next: () => this.startStatusPolling(),
       error: error => this.legacySelectionError = error.error?.error_code || 'Cancellation could not be recorded. Refresh this job.',
-    });
-  }
-
-  loadBoosterCompare(): void {
-    if (this.currentFileId == null) return;
-    this.boosterCompareLoading = true;
-    this.dataService.compareModels(this.currentFileId).subscribe({
-      next: (resp) => {
-        this.boosterCompare = resp?.comparison || [];
-        this.boosterCompareLoading = false;
-      },
-      error: () => {
-        this.boosterCompare = [];
-        this.boosterCompareLoading = false;
-      },
     });
   }
 

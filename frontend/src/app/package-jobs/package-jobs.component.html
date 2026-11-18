@@ -338,6 +338,58 @@
           The fold export records development fits. Model adoption and final assessment have
           separate evidence.
         </p>
+        <details>
+          <summary>Paired development comparison</summary>
+          @if (job.result.paired_diagnostics; as paired) {
+            @if (paired.status === 'completed') {
+              <p>
+                Depth {{ paired.candidate_max_depth }} compared with depth
+                {{ paired.reference_max_depth }} across {{ paired.fold_pairs.length }} matched
+                folds. Metric: {{ paired.metric }}.
+              </p>
+              <p>
+                Mean improvement: {{ paired.effect.improvement | number: '1.0-8' }}.
+                Positive values favor depth {{ paired.candidate_max_depth }}.
+              </p>
+              <p>
+                Fold sensitivity: {{ paired.sensitivity.lower_improvement | number: '1.0-8' }}
+                to {{ paired.sensitivity.upper_improvement | number: '1.0-8' }}.
+                Sampling uncertainty is unavailable.
+              </p>
+              <table aria-label="Paired development fold scores">
+                <thead>
+                  <tr>
+                    <th scope="col">Fold</th>
+                    <th scope="col">Validation rows</th>
+                    <th scope="col">Depth {{ paired.reference_max_depth }}</th>
+                    <th scope="col">Depth {{ paired.candidate_max_depth }}</th>
+                    <th scope="col">Improvement</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (pair of paired.fold_pairs; track pair.fold) {
+                    <tr>
+                      <th scope="row">{{ pair.fold }}</th>
+                      <td>{{ pair.n_validation_rows }}</td>
+                      <td>{{ pair.reference_score | number: '1.0-8' }}</td>
+                      <td>{{ pair.candidate_score | number: '1.0-8' }}</td>
+                      <td>{{ pair.improvement | number: '1.0-8' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              <ul aria-label="Comparison limitations">
+                @for (limitation of paired.limitations; track limitation) {
+                  <li>{{ limitation }}</li>
+                }
+              </ul>
+            } @else {
+              <p>Paired comparison unavailable. Reason: {{ paired.reason_code }}.</p>
+            }
+          } @else {
+            <p>This training receipt predates paired comparison evidence.</p>
+          }
+        </details>
         <app-native-candidate
           [job]="job"
           [projectId]="projectId"

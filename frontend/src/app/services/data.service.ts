@@ -1103,14 +1103,4 @@ export class DataService {
   applyRecommendationConfirm(fileId: number, payload: any): Observable<any> {
     return this.executeAiAction(fileId, 'apply_recommendation', payload);
   }
-
-  compareModels(fileId: number): Observable<any> {
-    return this.http.get(`${this.apiUrl}modeling/compare/${fileId}/`).pipe(
-      catchError((err: any) => {
-        console.error('Error comparing models:', err);
-        return throwError(() => err);
-      })
-    );
-  }
-
 }
