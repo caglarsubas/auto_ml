@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from asgiref.sync import sync_to_async
-from django.db import DatabaseError, connection
+from django.db import DatabaseError, connection, connections
 from django.test.utils import CaptureQueriesContext
 from mcp.shared.memory import create_connected_server_and_client_session
 
@@ -106,29 +106,32 @@ def test_sealed_private_authority_crosses_native_assessment_review_and_mcp(
     monkeypatch.setenv("DECLARAI_MCP_SCOPES", "declarai.pipeline.read")
 
     async def exercise():
-        async with create_connected_server_and_client_session(
-            create_mcp_server(), read_timeout_seconds=timedelta(seconds=15),
-        ) as session:
-            receipt = await read_job(session, w.file_id, assessment.pk)
-            assert not receipt.isError
-            summary = json.loads(tool_text(receipt))
-            assert summary["job_id"] == str(assessment.pk) and summary["result_sha256"] == assessment.result_sha256
-            assert summary["state"] == "succeeded" and not summary["production_use_approved"]
-            assert not {"scores", "labels", "payload"} & summary.keys()
+        try:
+            async with create_connected_server_and_client_session(
+                create_mcp_server(), read_timeout_seconds=timedelta(seconds=15),
+            ) as session:
+                receipt = await read_job(session, w.file_id, assessment.pk)
+                assert not receipt.isError
+                summary = json.loads(tool_text(receipt))
+                assert summary["job_id"] == str(assessment.pk) and summary["result_sha256"] == assessment.result_sha256
+                assert summary["state"] == "succeeded" and not summary["production_use_approved"]
+                assert not {"scores", "labels", "payload"} & summary.keys()
 
-            reason = "Project authority is unavailable."
-            await assert_job_withheld(session, w.file_id, scoring_job, reason, subject_lookup=True)
-            await sync_to_async(MCPDatasetGrant.objects.create)(
-                actor=technical_actor, dataset_id=w.input_id, role="read",
-            )
-            await assert_job_withheld(session, w.input_id, assessment.pk, reason, subject_lookup=True)
-            with patch.object(MCPAccessEvent.objects, "create", side_effect=DatabaseError("unavailable")):
-                denied = await assert_job_withheld(session, w.file_id, assessment.pk, "mcp_access_audit_unavailable")
+                reason = "Project authority is unavailable."
+                await assert_job_withheld(session, w.file_id, scoring_job, reason, subject_lookup=True)
+                await sync_to_async(MCPDatasetGrant.objects.create)(
+                    actor=technical_actor, dataset_id=w.input_id, role="read",
+                )
+                await assert_job_withheld(session, w.input_id, assessment.pk, reason, subject_lookup=True)
+                with patch.object(MCPAccessEvent.objects, "create", side_effect=DatabaseError("unavailable")):
+                    denied = await assert_job_withheld(session, w.file_id, assessment.pk, "mcp_access_audit_unavailable")
+                    assert denied.isError
+
+                await sync_to_async(projects.change_member)(w.project, technical_actor, "none")
+                denied = await assert_job_withheld(session, w.file_id, assessment.pk, "project_access_denied")
                 assert denied.isError
-
-            await sync_to_async(projects.change_member)(w.project, technical_actor, "none")
-            denied = await assert_job_withheld(session, w.file_id, assessment.pk, "project_access_denied")
-            assert denied.isError
+        finally:
+            await sync_to_async(connections.close_all)()
 
     asyncio.run(exercise())
     grant.refresh_from_db()
