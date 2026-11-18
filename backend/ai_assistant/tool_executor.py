@@ -1134,12 +1134,10 @@ def _handle_get_execution_job(file_id, args):
     if actor_id is None:
         raise projects.ProjectDenied("job_actor_required")
     actor = get_user_model().objects.get(pk=actor_id, is_active=True)
-    record = service.read(actor, args["job_id"])
-    if record["file_id"] != file_id:
-        raise projects.ProjectDenied("job_dataset_mismatch")
+    record = service.read(actor, args["job_id"], file_id=file_id)
     result = record.get("result") or {}
     choices = (
-        preview(actor, record["id"])["candidates"]
+        preview(actor, record["id"], file_id=file_id)["candidates"]
         if record["state"] == "succeeded" and record["specification"]["kind"] == "legacy_native_execution_v1"
         else []
     )

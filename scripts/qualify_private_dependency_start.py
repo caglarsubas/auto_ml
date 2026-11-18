@@ -17,7 +17,8 @@ from qualify_private_installation_resources import fixture_plan
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def host_case(plan, expected, parent, recovery=None, *, profile_workloads=False, profile_legacy=False):
+def host_case(plan, expected, parent, recovery=None, *, profile_workloads=False, profile_legacy=False,
+              profile_threat_model=False):
     value = startup.checker.verify(plan, expected)
     if (
         sys.platform != "linux"
@@ -28,7 +29,6 @@ def host_case(plan, expected, parent, recovery=None, *, profile_workloads=False,
     ):
         raise startup.checker.planner.PlanError("dependency_start_fixture_scope_required")
     initialized, prepared = None, None
-    other = None
     redactions = []
 
     def command(args, data=None):
@@ -254,6 +254,7 @@ def host_case(plan, expected, parent, recovery=None, *, profile_workloads=False,
 
             workload_envelope = {}
             legacy_execution = {}
+            installed_threat_model = {}
             observer = None if recovery is None else recovery.observe(value, accounts, account_passwords, parent, prepared, adopted, command)
             if profile_workloads:
                 if recovery is not None:
@@ -267,12 +268,26 @@ def host_case(plan, expected, parent, recovery=None, *, profile_workloads=False,
                 from qualify_private_legacy_execution import qualify as qualify_legacy
                 def observer(session, handles):
                     legacy_execution.update(qualify_legacy(session, value, accounts, parent, prepared, adopted, command))
+            if profile_threat_model:
+                if not profile_workloads or recovery is not None or profile_legacy:
+                    raise startup.checker.planner.PlanError("dependency_threat_model_observer_conflict")
+                from qualify_private_threat_model import qualify as qualify_threat_model
+
+                workload_observer = observer
+
+                def observer(session, handles):
+                    workload_observer(session, handles)
+                    installed_threat_model.update(
+                        qualify_threat_model(session, handles, value, accounts, account_passwords, parent, adopted, command)
+                    )
+
             installed_workflow = qualify_installed_workflow(
                 value, accounts, account_passwords, parent, prepared, command,
                 observer=observer,
             )
             account_adoption = {
                 "installed_developer_workflow": installed_workflow,
+                "installed_threat_model": installed_threat_model,
                 "workload_envelope": workload_envelope,
                 "legacy_execution": legacy_execution,
                 "queue_consistency": queue_consistency,
@@ -530,13 +545,15 @@ created=False
 try:
     parent.mkdir(mode=0o700);created=True;plan=parent/'plan';plan.mkdir(mode=0o700)
     for name,data in v['files'].items():(plan/name).write_text(data)
-    print(json.dumps(q.host_case(plan,v['expected'],parent,profile_workloads=v.get('profile_workloads',False),profile_legacy=v.get('profile_legacy',False))))
+    print(json.dumps(q.host_case(plan,v['expected'],parent,profile_workloads=v.get('profile_workloads',False),
+        profile_legacy=v.get('profile_legacy',False),profile_threat_model=v.get('profile_threat_model',False))))
 finally:
     if created:shutil.rmtree(parent)
 """
 
 
-def qualify(plan, expected, image, reports, *, profile_workloads=False, profile_legacy=False):
+def qualify(plan, expected, image, reports, *, profile_workloads=False, profile_legacy=False,
+            profile_threat_model=False):
     value = startup.checker.verify(plan, expected)
     if (
         sys.platform != "linux"
@@ -558,6 +575,7 @@ def qualify(plan, expected, image, reports, *, profile_workloads=False, profile_
             "expected": pin,
             "profile_workloads": profile_workloads,
             "profile_legacy": profile_legacy,
+            "profile_threat_model": profile_threat_model,
         }
     )
     result = subprocess.run(
@@ -578,6 +596,23 @@ def qualify(plan, expected, image, reports, *, profile_workloads=False, profile_
     }
     reports.mkdir(parents=True, exist_ok=True)
     (reports / "dependency-start.json").write_bytes(startup.checker.planner.encoded(receipt))
+    if profile_threat_model:
+        from qualify_private_threat_model import REPORT, SCHEMA
+
+        result = receipt["qualification"]
+        record = result["fresh_application_adoption"]["installed_threat_model"]
+        backup = result["baseline_backup"]
+        if (record.get("schema") != SCHEMA or record.get("result") != "passed"
+                or backup["tamper_and_wrong_plan_binding"] != "refused"):
+            raise startup.checker.planner.PlanError("dependency_threat_model_evidence_missing")
+        (reports / REPORT).write_bytes(startup.checker.planner.encoded({
+            **record,
+            "source_plan_sha256": expected,
+            "fixture_plan_sha256": pin,
+            "quiescent_backup_manifest_sha256": backup["backup_manifest_sha256"],
+            "quiescent_backup_tamper_and_wrong_plan": backup["tamper_and_wrong_plan_binding"],
+            "owned_root_and_resources_removed": receipt["owned_root_and_resources_removed"],
+        }))
     return receipt
 
 

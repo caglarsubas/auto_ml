@@ -18,8 +18,8 @@ from modeling.execution_artifacts import projection_lock, replace_projection
 from modeling.sfs_evidence import _sync_directory
 
 
-def bound_job(actor, identifier, expected=None):
-    job = NativeJob.objects.get(pk=identifier)
+def bound_job(actor, identifier, expected=None, *, file_id=None):
+    job = service.receipt_subject(identifier, file_id=file_id)
     scopes = service.read_authority(actor, job)
     if (
         job.state != "succeeded"
@@ -180,9 +180,9 @@ def current(file_id):
     return hashlib.sha256(raw).hexdigest(), payload
 
 
-def preview(actor, identifier):
+def preview(actor, identifier, *, file_id=None):
     with service.locked():
-        job, scopes = bound_job(actor, identifier)
+        job, scopes = bound_job(actor, identifier, file_id=file_id)
         choices = []
         for name in job.result["files"]:
             if name.startswith("execution_runs/") and name.endswith("/modeling_status.json"):

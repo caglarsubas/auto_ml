@@ -2,6 +2,7 @@
 """Exercise the actual MCP protocol only in an explicitly disposable installation."""
 
 import asyncio
+import hashlib
 import json
 import os
 import subprocess
@@ -26,9 +27,10 @@ def main():
     from asgiref.sync import sync_to_async
     from django.contrib.auth import get_user_model
     from django.core.management import call_command
-    from access_control.models import MCPAccessEvent
+    from access_control.models import AssistantActionApproval, MCPAccessEvent
     from ai_assistant.cache import cache_put, cache_delete, ARTIFACT_DATA_DICTIONARY
     from declaration.models import Declaration
+    from execution_jobs.models import NativeJob
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
@@ -116,6 +118,47 @@ def main():
                 item.text for item in result.content if hasattr(item, "text")
             )
 
+        expert_marker = f"synthetic-expert-{token}"
+        expert_payload = {"mode": "apply", "code": f"raise RuntimeError({expert_marker!r})"}
+        guarded_proposals = {
+            "declarai.prepare.execute_code": expert_payload,
+            "declarai.prepare.start_modeling": {},
+        }
+        unavailable_tools = {
+            "declarai.action.execute_code",
+            "declarai.action.start_modeling",
+            "declarai.action.approve_model",
+            "declarai.get_reproduction_manifest",
+            "declarai.export_expert_fitted_state",
+        }
+
+        async def qualify_unavailable_controls(session, names):
+            assert set(guarded_proposals) <= names
+            assert unavailable_tools.isdisjoint(names)
+            for name, payload in guarded_proposals.items():
+                result = await session.call_tool(name, {"file_id": allowed.pk, "payload": payload})
+                assert not result.isError
+                proposal = json.loads(text(result))
+                assert proposal["status"] == "prepared"
+                assert proposal["action_type"] == name.removeprefix("declarai.prepare.")
+                assert proposal["requires_approval"] is True
+                assert proposal["side_effects"] is False
+                assert proposal["execution_available"] is False
+                assert proposal["execution_blocker"] == "mcp_exact_approval_unavailable"
+                assert proposal["access_receipt"]["actor"]["id"] == actor_id
+                assert proposal["access_receipt"]["grant"]["role"] == "prepare"
+            for name in sorted(unavailable_tools):
+                refused = await session.call_tool(
+                    name,
+                    {
+                        "file_id": allowed.pk,
+                        "approval_id": str(uuid.uuid4()),
+                        "payload": expert_payload,
+                    },
+                )
+                assert refused.isError and "unknown tool" in text(refused).lower(), name
+                assert expert_marker not in text(refused)
+
         async def exercise():
             async with stdio_client(parameters) as (reader, writer):
                 async with ClientSession(reader, writer) as session:
@@ -171,6 +214,7 @@ def main():
                     prepared = json.loads(text(proposal))
                     assert prepared["execution_available"] is False
                     assert prepared["access_receipt"]["grant"]["role"] == "prepare"
+                    await qualify_unavailable_controls(session, names)
                     if project_id:
                         def role_change(role):
                             return projects.operator_change({'operation': 'member', 'project_id': project_id,
@@ -253,10 +297,20 @@ def main():
             for value in ["completed", "denied"]
         }
         expected = {"completed": 8, "denied": 6} if project_id else {"completed": 6, "denied": 4}
+        expected["completed"] += len(guarded_proposals)
         expected_count = sum(expected.values())
         assert outcomes == expected and len(events) == expected_count
         assert all(event.finished_at for event in events)
-        assert all("synthetic candidate" not in str(event.__dict__) for event in events)
+        assert all("synthetic candidate" not in str(event.__dict__) and expert_marker not in str(event.__dict__)
+                   for event in events)
+        for name, payload in guarded_proposals.items():
+            event, = [entry for entry in events if entry.tool_name == name]
+            arguments = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            assert event.arguments_sha256 == hashlib.sha256(arguments.encode()).hexdigest()
+            assert event.outcome == "completed" and event.operation == "prepare_action"
+            assert event.file_id == allowed.pk and event.grant_snapshot["role"] == "prepare"
+        assert not AssistantActionApproval.objects.filter(file_id=allowed.pk).exists()
+        assert not NativeJob.objects.filter(dataset_id=allowed.pk).exists()
         summary = {
             "status": "passed",
             "transport": "actual_sdk_stdio",
@@ -265,6 +319,14 @@ def main():
             "outcomes": outcomes,
             "network_transport": "blocked",
             "direct_execution": "blocked",
+            "private_threat_model_mcp_controls": {
+                "schema": "declarai_mcp_non_bypass_v1",
+                "status": "passed",
+                "expert_and_training_proposals": "review_only",
+                "unavailable_tools": sorted(unavailable_tools),
+                "dispatch_and_job_store": "unchanged",
+                "audit": "exact_digest_without_payload",
+            },
             "fixture_data": "synthetic",
             "cleanup": "fixtures_removed_audit_retained",
         }
