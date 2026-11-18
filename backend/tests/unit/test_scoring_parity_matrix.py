@@ -130,6 +130,7 @@ def capture_scores(monkeypatch, case):
 @pytest.mark.parametrize('case', MATRIX, ids=lambda case: case.id)
 def test_assessed_model_matches_exported_scores(case, _use_tmp_media, settings, bounded_matrix_fit, monkeypatch):
     frame = dataset(case)
+    frame['Target'] = 1  # An excluded compatibility column distinct from the label.
     relative = 'data_files/scoring-matrix.csv'
     source = Path(settings.MEDIA_ROOT) / relative
     frame.to_csv(source, index=False)
@@ -139,6 +140,7 @@ def test_assessed_model_matches_exported_scores(case, _use_tmp_media, settings, 
     data = {
         'file_id': file_id, 'processed_file': relative, 'algorithm': case.algorithm,
         'business_understanding': declaration(case.task, positive='accepted'),
+        'excluded_variables': ['Target'],
     }
     if case.encoder:
         data.update(encoding_plan=[{'feature': 'segment', 'user_lom': 'ordinal' if case.encoder == 'ordinal_encoding' else 'nominal',
@@ -157,6 +159,14 @@ def test_assessed_model_matches_exported_scores(case, _use_tmp_media, settings, 
                    for report in model['encoding_report'])
 
     scored = capture_scores(monkeypatch, case)
+    if case.algorithm == 'logistic_regression':
+        load = evaluation_views.load_execution
+
+        def load_with_legacy_name(*args):
+            snapshot, manifest = load(*args)
+            return {**snapshot, 'model': {**snapshot['model'], 'model_type': 'historical_regressor_name'}}, manifest
+
+        monkeypatch.setattr(evaluation_views, 'load_execution', load_with_legacy_name)
     assessment = assess(file_id, trained.data['execution_id'], threshold=.42)
     assert assessment.status_code == 200, assessment.data
     rows, reference = scored[0]

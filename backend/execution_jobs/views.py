@@ -11,6 +11,7 @@ from access_control.project_http import AuthorityUnavailable
 from execution_jobs import service
 from execution_jobs import csv_scoring, training_search, training_scoring, native_assessment, history
 from execution_jobs.models import NativeJob
+from modeling.prediction_contract import PredictionContractError
 
 
 def failure(exc):
@@ -22,6 +23,8 @@ def failure(exc):
         return Response({"error_code": "job_unavailable"}, status=404)
     if isinstance(exc, service.JobConflict):
         return Response({"error_code": exc.code}, status=503 if exc.code == "job_service_disabled" else 409)
+    if isinstance(exc, PredictionContractError):
+        return Response({"error_code": "job_prediction_contract_invalid", "error": str(exc)}, status=400)
     return Response({"error_code": "job_request_invalid"}, status=400)
 
 

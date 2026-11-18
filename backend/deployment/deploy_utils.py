@@ -522,6 +522,7 @@ def score_bundle_directory(out, file_id: int, df: pd.DataFrame, bundle_id=None, 
         algorithm=manifest.get('algorithm') or 'xgboost',
         feature_names=feature_names,
         cat_features=cat_feats,
+        task=manifest.get('task') if manifest.get('prediction_contract') else None,
     )
     proba = np.asarray(adapter.predict(X) if manifest.get('task') == 'regression' else adapter.predict_proba(X), dtype=float)
     multiclass = proba.ndim == 2 and proba.shape[1] > 1

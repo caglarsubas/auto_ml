@@ -116,10 +116,9 @@ PIPELINE_TOOLS = [
         "function": {
             "name": "get_split_validation",
             "description": (
-                "Get the train/test split validation data: row counts, target=0 and "
-                "target=1 counts, target mean (bad rate) per split (Full, Train, Test). "
-                "Call this when the user asks about split balance, target rates, or "
-                "train-test distribution."
+                "Get the cached split row counts, observed label distributions and raw numeric "
+                "label means when available. Interpret a binary event rate using the declared "
+                "positive label and the corresponding count for that target."
             ),
             "parameters": {
                 "type": "object",

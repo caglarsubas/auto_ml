@@ -125,6 +125,29 @@ def test_unreviewed_legacy_launch_never_starts_local_thread(world):
     assert not NativeJob.objects.exists()
 
 
+def test_saved_prediction_identity_cannot_be_overridden_by_legacy_requests(world):
+    from access_control import projects
+    from modeling.models import PipelineRun
+    from modeling.views import execute_legacy_training
+
+    w = world
+    data = options(w)
+    run = PipelineRun.objects.create(name='accepted task', file_id=w.file_id,
+                                     state={'business_understanding': data['business_understanding']})
+    projects.bind_pipeline(run, w.project.pk)
+    data['pipeline_run_id'] = run.pk
+    preview_path = f'/api/jobs/datasets/{w.file_id}/legacy-input/'
+    valid = post(w.clients['developer'], preview_path, {'operation': 'training', 'options': data})
+    assert valid.status_code == 200, valid.content
+    data['business_understanding']['target_contract']['positive_class'] = 'good'
+    blocked = post(w.clients['developer'], preview_path, {'operation': 'training', 'options': data})
+    assert blocked.status_code == 400, blocked.content
+    assert blocked.json()['error_code'] == 'job_prediction_contract_invalid'
+    rejected = execute_legacy_training(data)
+    assert rejected.status_code == 400 and 'saved pipeline declaration' in rejected.data['error']
+    assert not NativeJob.objects.exists()
+
+
 def test_sfs_and_hpo_use_the_exact_native_source_and_keep_results_unselected(world):
     w = world
     identifier, _, _ = launch(w, "training", options(w))

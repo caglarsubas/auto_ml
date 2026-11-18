@@ -204,7 +204,7 @@ def test_stale_lease_and_late_candidate_tampering_cannot_publish(candidate):
     assert job.state == 'blocked' and job.result is None
 
 
-@pytest.mark.parametrize('fault', ['digest', 'model_format', 'features', 'means', 'objective', 'encoding', 'runtime', 'native_json'])
+@pytest.mark.parametrize('fault', ['digest', 'model_format', 'features', 'means', 'objective', 'positive_label', 'encoding', 'runtime', 'native_json'])
 def test_export_or_runtime_tampering_blocks_offline_scoring(candidate, fault):
     raw, sha = exported(candidate)
     value = json.loads(raw)
@@ -220,6 +220,8 @@ def test_export_or_runtime_tampering_blocks_offline_scoring(candidate, fault):
             r['refit_preprocessing']['impute_means'].pop('z')
         elif fault == 'objective':
             r['prediction_contract']['task'] = 'regression'
+        elif fault == 'positive_label':
+            r['prediction_contract']['positive_class'] = r['prediction_contract']['class_mapping'][0]['label']
         elif fault == 'encoding':
             r['refit_preprocessing']['encoding'] = ['unavailable']
         elif fault == 'runtime':

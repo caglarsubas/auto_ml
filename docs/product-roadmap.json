@@ -76,9 +76,10 @@
         "[P07 source qualification](evidence/p07-qualification-2026-10-08.json)",
         "[P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md)",
         "[P09 source qualification](evidence/p09-qualification-2026-10-09.json)",
-        "[P27 source qualification](evidence/p27-qualification-2026-10-10.json)"
+        "[P27 source qualification](evidence/p27-qualification-2026-10-10.json)",
+        "[Supported prediction contract qualification](PREDICTION_CONTRACT_QUALIFICATION.md)"
       ],
-      "progress": "Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Full contract/channel validation remains open. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 aligns native tuning selection with accepted metric/direction/cost semantics, rejects contradictions and records exact winner/refit evidence; fitter criteria were outside P07 scope. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P27 adds method-named support-weighted rank AUC for requested multiclass stopping, retaining independent sklearn full assessment, input validation and unavailable-objective blocking. Reference callback histories, selected models and replay match across all three native boosters; private/full workflow qualification passes with unchanged budgets. No full reproduction, capacity or release claim."
+      "progress": "Explicit task/target/positive-label/objective contract is frozen with native runs and carried through assessment/scoring. UI and assistant preserve accepted task; binary, 65-class and low-cardinality regression behavior has local regression coverage. Full contract/channel validation remains open. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 aligns native tuning selection with accepted metric/direction/cost semantics, rejects contradictions and records exact winner/refit evidence; fitter criteria were outside P07 scope. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P27 adds method-named support-weighted rank AUC for requested multiclass stopping, retaining independent sklearn full assessment, input validation and unavailable-objective blocking. Reference callback histories, selected models and replay match across all three native boosters; private/full workflow qualification passes with unchanged budgets. No full reproduction, capacity or release claim. P184 qualifies task, target and positive-label semantics across the documented entrypoints, with typed declaration errors and consistent task dispatch. D01-T02 remains open."
     },
     {
       "id": "D02",
@@ -2270,6 +2271,10 @@
     {
       "date": "2026-11-18",
       "change": "Qualify D09-T02 with implementation PR #303, exact corrective test-fixture PR #304, and independent successor push-main CI 44154649624. Backlog moves from 21/38/7 to 22/37/7 done/open/blocked across 66 tasks."
+    },
+    {
+      "date": "2026-11-18",
+      "change": "Qualify D01-T01 on the documented supported paths. Backlog moves from 22/37/7 to 23/36/7 done/open/blocked across 66 tasks."
     }
   ],
   "implementation_packets": [
@@ -5533,6 +5538,21 @@
         "[Test-fixture corrective PR #304](https://github.com/caglarsubas/auto_ml/pull/304)"
       ],
       "remaining": "D09-T03 still requires a named independent reviewer and an approved exercise."
+    },
+    {
+      "id": "P184",
+      "kind": "product_implementation",
+      "title": "Qualify the prediction contract across supported entrypoints",
+      "items": [
+        "D01"
+      ],
+      "owner": "Backend/ML",
+      "status": "tested",
+      "description": "Bind saved task, target and positive label at admission and preserve their meaning in the form, assistant, training, assessment and scoring. Reject unsupported legacy search/refit combinations.",
+      "evidence": [
+        "[Supported prediction contract qualification](PREDICTION_CONTRACT_QUALIFICATION.md)"
+      ],
+      "remaining": "D01-T02 covers population, availability, prediction horizon and label maturity qualification."
     }
   ],
   "release_qualification": {
@@ -5694,8 +5714,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P182",
-    "source_commit": "f70b8ad851dfb96f3222dae7f28bccca8348c313",
+    "packet": "P183",
+    "source_commit": "3955c591ec17bea0f67073f550340270b1c24fea",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5705,9 +5725,9 @@
       }
     },
     "packets": {
-      "total": 182,
+      "total": 183,
       "counts": {
-        "done": 181,
+        "done": 182,
         "open": 0,
         "blocked": 1
       }
@@ -5726,15 +5746,19 @@
         ],
         "priority": "P0",
         "owner": "Backend/ML",
-        "phase": "queued",
+        "phase": "done",
         "dependencies": [],
         "acceptance": [
           "Task, target and positive-class semantics agree across every supported path.",
           "Unsupported configurations stop with actionable diagnostics."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Supported prediction contract qualification](PREDICTION_CONTRACT_QUALIFICATION.md)"
+        ],
+        "packet_refs": [
+          "P184"
+        ],
         "order": 1,
         "basis": "Remaining acceptance scope from D01; existing tested foundation is reused, not rebuilt."
       },
@@ -7553,16 +7577,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P183 independent review decisions",
-      "recorded_on": "2026-11-17",
-      "inventory_source_commit": "f70b8ad851dfb96f3222dae7f28bccca8348c313",
+      "label": "Before P184 prediction contract qualification",
+      "recorded_on": "2026-11-18",
+      "inventory_source_commit": "3955c591ec17bea0f67073f550340270b1c24fea",
       "total": 66,
       "counts": {
         "ready": 4,
         "in_progress": 0,
-        "waiting": 34,
+        "waiting": 33,
         "blocked": 7,
-        "done": 21
+        "done": 22
       }
     },
     "baseline_history": [
@@ -7844,6 +7868,20 @@
           "waiting": 36,
           "blocked": 7,
           "done": 20
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P183 independent review decisions",
+        "recorded_on": "2026-11-17",
+        "inventory_source_commit": "f70b8ad851dfb96f3222dae7f28bccca8348c313",
+        "total": 66,
+        "counts": {
+          "ready": 4,
+          "in_progress": 0,
+          "waiting": 34,
+          "blocked": 7,
+          "done": 21
         }
       }
     ]

@@ -6,6 +6,7 @@ import pandas as pd
 from deployment.native_candidate import canonical, sha
 from modeling.declared_metric import metric_value
 from modeling.development_assessment import development_metrics
+from modeling.prediction_contract import frozen_prediction_task
 
 
 CHUNK_SIZE = 500
@@ -60,13 +61,13 @@ def calculate_assessment(frame, development, validation, as_of, contract, metric
     labels = frame[target]
     if labels.isna().any():
         raise AssessmentReplayError("native_assessment_labels_missing")
-    if contract["task"] == "regression":
+    if frozen_prediction_task(contract) == "regression":
         labels = pd.to_numeric(labels, errors="coerce").to_numpy(dtype=float)
         if not np.isfinite(labels).all():
             raise AssessmentReplayError("native_assessment_labels_invalid")
     else:
-        mapping = {str(c["label"]): c["encoded"] for c in contract["class_mapping"]}
-        labels = labels.astype(str).map(mapping)
+        mapping = {c["label"]: c["encoded"] for c in contract["class_mapping"]}
+        labels = labels.map(mapping)
         if labels.isna().any():
             raise AssessmentReplayError("native_assessment_labels_invalid")
         labels = labels.to_numpy(dtype=int)

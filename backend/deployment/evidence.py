@@ -111,6 +111,7 @@ def resolve_handoff(file_id, execution_id=None, assessment_id=None):
 def _verify_exact_scoring(out, manifest, files, metadata_bytes):
     """Check that frozen scoring state agrees with the copied execution and assessment."""
     from encoding.fitted import scoring_encoding_reports
+    from modeling.prediction_contract import frozen_prediction_task
     from preprocessing.replay import subset_purifier
 
     def evidence(name):
@@ -152,6 +153,9 @@ def _verify_exact_scoring(out, manifest, files, metadata_bytes):
     native_file(manifest.get('model_file'), lineage.get('model_path'))
     contract = lineage.get('prediction_contract') or {}
     fit = lineage.get('fit_receipt') or {}
+    frozen_prediction_task(contract, manifest.get('task'), evaluation.get('task'), fit.get('task'))
+    if evaluation.get('prediction_contract', contract) != contract:
+        raise ValueError('Scoring assessment disagrees with the frozen prediction contract.')
     features = manifest.get('feature_names')
     if (not isinstance(features, list) or not features or any(not isinstance(name, str) for name in features)
             or len(set(features)) != len(features) or features != (lineage.get('features') or {}).get('names')

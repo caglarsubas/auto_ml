@@ -160,6 +160,10 @@ describe('ModelDevelopmentComponent', () => {
     component.onBusinessUnderstandingChanged();
     expect(component.businessUnderstanding.problem_type).toBe('regression');
     expect(component.getPipelineConfig().problem_type).toBe('regression');
+    expect(component.problemTypeMetricConflict).toBeFalse();
+    component.businessUnderstanding.success_criteria.primary_metric = 'roc_auc';
+    component.onBusinessUnderstandingChanged();
+    expect(component.problemTypeMetricConflict).toBeTrue();
   });
 
   it('should flag a conflict when the wording and the primary metric disagree', () => {

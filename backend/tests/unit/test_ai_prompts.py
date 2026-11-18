@@ -814,6 +814,7 @@ class TestBusinessUnderstandingContext:
         'forbidden_features': ['post_disbursement_balance', 'internal_score'],
         'target_contract': {
             'target_column': 'Good_Bad_Flag',
+            'positive_class': 0,
             'event_definition': 'Bad = 90+ DPD within 12 months',
             'good_bad_window': 'observation 2022, performance 12 months',
         },
@@ -840,6 +841,7 @@ class TestBusinessUnderstandingContext:
             'No policy change during the performance window',
             'Adverse-action reasons required',
             'Target column: Good_Bad_Flag',
+            'Declared positive label (for two-class outcomes): 0',
             'Bad = 90+ DPD within 12 months',
             'observation 2022, performance 12 months',
             'roc_auc (maximize), business floor 0.72',
@@ -854,6 +856,19 @@ class TestBusinessUnderstandingContext:
 
         assert format_business_understanding(None) == []
         assert format_business_understanding({}) == []
+
+    def test_split_report_respects_declared_target_and_raw_label_coding(self, monkeypatch):
+        from ai_assistant import tool_executor
+
+        report = {'target_column': 'Target', 'splits': [
+            {'name': 'Train', 'count': 5, 'target_mean': .2, 'label_counts': {'0': 4, '1': 1}},
+        ]}
+        monkeypatch.setattr(tool_executor, 'read_split_validation', lambda _: report)
+        monkeypatch.setattr(tool_executor, 'read_pipeline_config', lambda _: {'business_understanding': self.BU})
+        assert 'declared target \'Good_Bad_Flag\' is unavailable' in tool_executor._handle_get_split_validation(1, {})
+        report['target_column'] = 'Good_Bad_Flag'
+        text = tool_executor._handle_get_split_validation(1, {})
+        assert 'numeric_label_mean=0.2000' in text and "'0': 4" in text and 'bad rate' not in text
 
     def test_get_pipeline_config_surfaces_business_understanding(self, monkeypatch):
         from ai_assistant import tool_executor
