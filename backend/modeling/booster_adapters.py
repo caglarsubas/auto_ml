@@ -304,15 +304,17 @@ class XGBoostAdapter(BoosterAdapter):
             )
         return np.asarray(self.model.predict(dmat), dtype=float)
 
-    def save(self, path: str) -> str:
-        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+    def shap_model(self):
+        """Use the same selected rounds for diagnostics and the saved model."""
         model = self.model
         if self.best_iteration is not None and 0 <= self.best_iteration < model.num_boosted_rounds() - 1:
-            # Native predict defaults to all saved rounds. Publish precisely the
-            # evaluated model, excluding patience rounds after its selected round.
             model = model[:self.best_iteration + 1]
             model.set_attr(**self.model.attributes())
-        model.save_model(path)
+        return model
+
+    def save(self, path: str) -> str:
+        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+        self.shap_model().save_model(path)
         return path
 
     @classmethod
@@ -337,7 +339,7 @@ class XGBoostAdapter(BoosterAdapter):
 
     def gain_importance(self) -> List[Dict[str, Any]]:
         try:
-            raw = self.model.get_score(importance_type='gain')
+            raw = self.shap_model().get_score(importance_type='gain')
         except Exception:
             return []
         items = sorted(((str(k), float(v)) for k, v in raw.items()), key=lambda kv: kv[1], reverse=True)

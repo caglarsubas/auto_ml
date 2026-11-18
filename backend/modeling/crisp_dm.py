@@ -305,54 +305,62 @@ def detect_sequential_pattern_candidates(
     id_cols: Optional[List[str]] = None,
     max_pairs: int = 25,
 ) -> List[Dict[str, Any]]:
-    """Sequential near-duplicate flags: near-duplicate rows with few differing columns over time."""
-    if df is None or df.empty or len(df) < 4:
-        return []
-    work = df.copy()
-    tcol = time_col
-    if not tcol:
-        for c in work.columns:
-            cl = str(c).lower()
-            if 'date' in cl or 'time' in cl or 'datetime' in cl:
-                tcol = c
-                break
-    if tcol and tcol in work.columns:
-        try:
-            work = work.sort_values(tcol)
-        except Exception:
-            pass
-    # Sample for cost
-    if len(work) > 800:
-        work = work.iloc[:: max(1, len(work) // 800)].copy()
-    feature_cols = [c for c in work.columns if c != tcol]
-    if id_cols:
-        feature_cols = [c for c in feature_cols if c not in id_cols]
-    if len(feature_cols) < 2:
-        return []
+    """Return candidate pairs for callers that only need the rows."""
+    return sequential_pattern_evidence(df, time_col=time_col, id_cols=id_cols,
+                                       max_pairs=max_pairs)['candidates']
 
-    # Hash rows on all-but-one feature groups is expensive; use pairwise on consecutive rows
+
+def sequential_pattern_evidence(
+    df: pd.DataFrame,
+    *,
+    time_col: Optional[str] = None,
+    id_cols: Optional[List[str]] = None,
+    max_pairs: int = 25,
+) -> Dict[str, Any]:
+    """Describe bounded near-duplicate comparisons and their actual order."""
+    rows = 0 if df is None else len(df)
+    tcol = time_col
+    if tcol is not None and (df is None or tcol not in df.columns):
+        raise ValueError('The selected ordering column is absent from the training predictors.')
+    if tcol is None and df is not None:
+        tcol = next((column for column in df.columns if set(str(column).lower().split('_'))
+                     & {'date', 'time', 'datetime', 'timestamp'}), None)
+    stride = max(1, (rows + 799) // 800)
     candidates: List[Dict[str, Any]] = []
-    vals = work[feature_cols].astype(str).fillna('__NA__').values
-    idx = list(work.index)
-    for i in range(1, len(vals)):
-        a, b = vals[i - 1], vals[i]
-        diffs = [feature_cols[j] for j in range(len(feature_cols)) if a[j] != b[j]]
-        n_diff = len(diffs)
-        if 1 <= n_diff <= 3:
-            candidates.append({
-                'row_a': str(idx[i - 1]),
-                'row_b': str(idx[i]),
-                'n_diff': n_diff,
-                'changed_features': diffs,
-                'time_col': tcol,
-                'rationale': (
-                    f'Consecutive rows differ in {n_diff} feature(s) only — '
-                    'possible sequential / near-duplicate pattern.'
-                ),
-            })
-        if len(candidates) >= max_pairs:
-            break
-    return candidates
+    scanned = 0
+    limit_reached = False
+    if rows >= 4 and max_pairs > 0:
+        work = df.sort_values(tcol, kind='stable') if tcol is not None else df
+        work = work.iloc[::stride]
+        feature_cols = [c for c in work.columns if c != tcol and c not in (id_cols or ())]
+        if len(feature_cols) >= 2:
+            vals = np.column_stack([pd.factorize(work[column], sort=False)[0] for column in feature_cols])
+            idx = list(work.index)
+            scanned = len(work)
+            for i in range(1, len(vals)):
+                diffs = [column for column, a, b in zip(feature_cols, vals[i - 1], vals[i]) if a != b]
+                if 1 <= len(diffs) <= 3:
+                    candidates.append({
+                        'row_a': str(idx[i - 1]),
+                        'row_b': str(idx[i]),
+                        'n_diff': len(diffs),
+                        'changed_features': diffs,
+                        'time_col': tcol,
+                        'rationale': f'Adjacent scanned rows differ in {len(diffs)} feature(s). Review the observed association.',
+                    })
+                if len(candidates) >= max_pairs and i < len(vals) - 1:
+                    scanned = i + 1
+                    limit_reached = True
+                    break
+    return {
+        'ordering': 'time_column' if tcol is not None else 'input_order',
+        'time_col': tcol,
+        'n_training_rows': rows,
+        'n_rows_scanned': scanned,
+        'sample_stride': stride,
+        'candidate_limit_reached': limit_reached,
+        'candidates': candidates,
+    }
 
 
 def compute_monitoring_report(

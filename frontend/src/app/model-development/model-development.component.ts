@@ -13,7 +13,7 @@ import { switchMap, finalize } from 'rxjs/operators';
 import { SharedService } from '../services/shared.service';
 import { MatSelectChange } from '@angular/material/select';
 import { Subscription } from 'rxjs';
-import { DataService } from '../services/data.service';
+import { DataService, SequentialPatternReport } from '../services/data.service';
 import { MatDialog } from '@angular/material/dialog';
 import { FeatureCardComponent } from '../feature-card/feature-card.component';
 import { AiAssistantService } from '../services/ai-assistant.service';
@@ -2683,7 +2683,8 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
     return true;
   }
 
-  sequentialCandidates: any[] = [];
+  sequentialReport: SequentialPatternReport | null = null;
+  sequentialError: { fileId: number; message: string } | null = null;
   sequentialLoading = false;
 
   exportCrispPack(): void {
@@ -2726,15 +2727,25 @@ export class ModelDevelopmentComponent implements OnInit, AfterViewChecked, OnDe
   }
 
   loadSequentialPatterns(): void {
-    if (this.currentFileId == null) return;
+    const fileId = this.currentFileId;
+    if (fileId == null || this.sequentialLoading) return;
     this.sequentialLoading = true;
-    this.dataService.getSequentialPatterns(this.currentFileId).subscribe({
-      next: (resp) => {
-        this.sequentialCandidates = resp?.candidates || [];
+    this.sequentialReport = null;
+    this.sequentialError = null;
+    const model = this.sharedService.getModelingCheckpoint()?.modelingStatus;
+    const executionId = Number(model?.file_id) === fileId ? model.execution_id : undefined;
+    this.dataService.getSequentialPatterns(fileId, undefined, executionId).subscribe({
+      next: (report) => {
+        if (fileId === this.currentFileId) this.sequentialReport = report;
         this.sequentialLoading = false;
       },
-      error: () => {
-        this.sequentialCandidates = [];
+      error: (error) => {
+        if (fileId === this.currentFileId) {
+          this.sequentialError = {
+            fileId,
+            message: error.error?.error || 'Sequential pattern evidence is unavailable.',
+          };
+        }
         this.sequentialLoading = false;
       },
     });

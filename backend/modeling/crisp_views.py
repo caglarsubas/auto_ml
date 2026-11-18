@@ -6,6 +6,7 @@ import io
 import json
 import os
 import pickle
+from pathlib import Path
 
 import pandas as pd
 from django.conf import settings
@@ -20,11 +21,14 @@ from access_control.storage import managed_path
 from modeling.crisp_dm import (
     build_crisp_export_zip,
     compute_monitoring_report,
-    detect_sequential_pattern_candidates,
+    sequential_pattern_evidence,
     enrich_datq_with_recommendations,
     merge_crisp_dm,
     normalize_business_understanding,
 )
+from deployment.evidence import execution_artifact
+from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
+from modeling.execution_artifacts import execution_root, load_execution
 from modeling.models import PipelineRun
 from preprocessing.stage_publication import StageConflict, read_datq
 
@@ -156,27 +160,48 @@ class CrispSequentialPatternsView(APIView):
     """Sequential near-duplicate pattern flags on train data."""
 
     def get(self, request, file_id: int, *args, **kwargs):
-        pkl = os.path.join(settings.MEDIA_ROOT, 'train_data', f'{file_id}_train_data.pkl')
-        if not os.path.exists(pkl):
-            # Fall back to processed declaration CSV if present via modeling status
-            return Response({
-                'status': 'error',
-                'error': 'Training data not found. Run modeling first.',
-            }, status=status.HTTP_404_NOT_FOUND)
-        with open(pkl, 'rb') as f:
-            td = pickle.load(f)
-        X = td.get('X_train_raw')
-        if X is None:
-            X = td.get('X_train')
-        if X is None:
-            return Response({'error': 'No feature matrix in train_data'}, status=status.HTTP_404_NOT_FOUND)
-        time_col = request.query_params.get('time_col')
-        candidates = detect_sequential_pattern_candidates(X, time_col=time_col)
+        root = Path(settings.MEDIA_ROOT)
+        execution_id = request.query_params.get('execution_id')
+        try:
+            if not execution_id:
+                current = root / 'modeling' / f'{file_id}_status.json'
+                execution_id = json.loads(current.read_text()).get('execution_id') if current.is_file() else None
+            if not execution_id:
+                if (root / 'train_data' / f'{file_id}_train_data.pkl').is_file():
+                    return Response({'status': 'unavailable', 'error_code': 'sequential_provenance_unverified',
+                        'error': 'Select a verified execution to inspect training-only sequential patterns.'},
+                        status=status.HTTP_409_CONFLICT)
+                return Response({'status': 'unavailable', 'error_code': 'sequential_training_missing',
+                    'error': 'Training evidence is unavailable. Run modeling first.'}, status=status.HTTP_404_NOT_FOUND)
+            payload, manifest = load_execution(execution_id, file_id)
+            path = execution_artifact(execution_id, manifest, payload['model']['train_data_path'])
+            if path == execution_root(execution_id).resolve() / 'final_holdout.pkl':
+                raise ValueError('Protected outcome storage cannot be used for diagnostics.')
+            with path.open('rb') as stream:
+                development = pickle.load(stream)
+            frame = development.get('X_train_raw')
+            if frame is None:
+                frame = development.get('X_train')
+            if not isinstance(frame, pd.DataFrame):
+                raise ValueError('The verified execution has no training predictor matrix.')
+        except (OSError, ValueError, KeyError, TypeError, pickle.UnpicklingError, EOFError):
+            return Response({'status': 'unavailable', 'error_code': 'sequential_execution_unverified',
+                'error': 'Training predictors could not be verified for this execution.'},
+                status=status.HTTP_409_CONFLICT)
+        try:
+            report = sequential_pattern_evidence(frame, time_col=request.query_params.get('time_col'))
+        except (TypeError, ValueError):
+            return Response({'status': 'unavailable', 'error_code': 'sequential_order_unavailable',
+                'error': 'Choose an orderable column in the training predictors.'}, status=status.HTTP_400_BAD_REQUEST)
         return Response({
             'status': 'ok',
+            'scope': 'associational_near_duplicate_patterns',
+            'limitation': DIAGNOSTIC_LIMITATIONS['sequential_patterns'],
+            'evidence_partition': 'training_only',
+            'execution_id': execution_id,
             'file_id': file_id,
-            'n_candidates': len(candidates),
-            'candidates': candidates,
+            'n_candidates': len(report['candidates']),
+            **report,
         })
 
 

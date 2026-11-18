@@ -1,8 +1,8 @@
 """Immutable, native numeric VIF inputs. No fitted Python state is loaded here."""
 
 import json
-from zipfile import BadZipFile
 from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 import numpy as np
 
@@ -106,6 +106,34 @@ def write_snapshot(root, file_id, execution_id, frame, encoding_report=None):
     return summary
 
 
+def load_native_matrix(path, shape):
+    """Read the bounded float64 member shared by both diagnostic snapshots."""
+    payload_bytes = shape[0] * shape[1] * np.dtype("float64").itemsize
+    header_limit = 4096
+    try:
+        with ZipFile(path) as archive:
+            entries = archive.infolist()
+            if (len(entries) != 1 or entries[0].filename != "matrix.npy"
+                    or entries[0].file_size > payload_bytes + header_limit):
+                raise ValueError("Diagnostic archive exceeds its recorded allocation.")
+            entry = entries[0]
+            with archive.open(entry) as stream:
+                version = np.lib.format.read_magic(stream)
+                readers = {(1, 0): np.lib.format.read_array_header_1_0,
+                           (2, 0): np.lib.format.read_array_header_2_0}
+                if version not in readers:
+                    raise ValueError("Unsupported diagnostic array format.")
+                dimensions, _, dtype = readers[version](stream, max_header_size=header_limit)
+                if dimensions != shape or dtype != np.dtype("float64"):
+                    raise ValueError("Diagnostic array header does not match recorded dimensions or dtype.")
+                if entry.file_size != stream.tell() + payload_bytes:
+                    raise ValueError("Diagnostic array payload does not match its header.")
+            with archive.open(entry) as stream:
+                return np.lib.format.read_array(stream, allow_pickle=False, max_header_size=header_limit)
+    except (BadZipFile, EOFError) as exc:
+        raise ValueError("Invalid native diagnostic archive.") from exc
+
+
 def load_snapshot(file_id, execution_id):
     from modeling.execution_artifacts import execution_root, load_execution
 
@@ -127,7 +155,7 @@ def load_snapshot(file_id, execution_id):
         raise ValueError("Numeric diagnostic budget exceeded. Use a bounded feature subset and refit a new version.")
     columns = summary.get("columns")
     if (not isinstance(columns, list) or any(not isinstance(name, str) for name in columns)
-        or not isinstance(summary.get("row_count"), int)
+        or type(summary.get("row_count")) is not int
         or not isinstance(summary.get("features"), dict)
         or any(not isinstance(record, dict) for record in summary["features"].values())
         or any(name not in summary["features"] for name in columns)
@@ -140,11 +168,7 @@ def load_snapshot(file_id, execution_id):
         or len(set(columns)) != len(columns)
     ):
         raise ValueError("Invalid diagnostic dimensions.")
-    try:
-        with np.load(root / ARRAY, allow_pickle=False) as data:
-            matrix = data["matrix"]
-    except (BadZipFile, KeyError, EOFError) as exc:
-        raise ValueError("Invalid native numeric diagnostic archive.") from exc
+    matrix = load_native_matrix(root / ARRAY, (summary["row_count"], len(columns)))
     if (
         matrix.dtype != np.float64
         or matrix.shape != (summary["row_count"], len(columns))

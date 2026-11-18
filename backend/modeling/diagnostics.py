@@ -6,16 +6,21 @@ CATEGORY_ENCODINGS = {'label_encoding', 'ordinal_encoding', 'manual_grouping',
     'native_categorical', 'one_hot_encoding', 'frequency_encoding', 'target_encoding'}
 
 
-def numeric_diagnostic_inputs(frame, encoding_report=None):
-    """Training-only mean imputation; category-derived columns stay out of VIF."""
-    excluded = {}
+def category_derived_columns(encoding_report):
+    columns = set()
     for entry in encoding_report or []:
         mapping = entry.get('mapping') or {}
         kind = mapping.get('type') or entry.get('strategy_applied') or entry.get('strategy')
         if kind in CATEGORY_ENCODINGS:
-            for name in [entry.get('feature'), *(mapping.get('columns') or [])]:
-                if name in frame.columns:
-                    excluded[name] = 'excluded_categorical'
+            columns.update(name for name in [entry.get('feature'), *(mapping.get('columns') or [])]
+                           if name is not None)
+    return columns
+
+
+def numeric_diagnostic_inputs(frame, encoding_report=None):
+    """Training-only mean imputation; category-derived columns stay out of VIF."""
+    category_derived = category_derived_columns(encoding_report)
+    excluded = {name: 'excluded_categorical' for name in frame.columns if name in category_derived}
     numeric, means, missing = {}, {}, {}
     for name in frame.columns:
         if name in excluded:
@@ -52,6 +57,6 @@ def numeric_collinearity_frame(frame, encoding_report=None):
 
 DIAGNOSTIC_LIMITATIONS = {
     'vif': 'Centered numeric training predictors only; category-derived columns are excluded. Mean imputation changes dependence. VIF is a descriptive auxiliary linear-regression diagnostic, not model importance, causal attribution, a statistical test or an automatic feature-removal gate. Category groups have a separate method and scope; sampling uncertainty remains unqualified. Historical values may use another method.',
-    'combined_score': 'A ranking heuristic combining SHAP and gain percentiles; not an effect estimate, statistical test or validation gate.',
-    'sequential_patterns': 'Consecutive near-duplicate patterns identify records for review; they do not establish causal relationships.',
+    'combined_score': 'A ranking heuristic combining SHAP and gain percentiles. Effect estimates, statistical inference and validation decisions require separate evidence.',
+    'sequential_patterns': 'Near-duplicate flags describe differences between adjacent scanned training rows in the reported order. Sampling can skip intervening rows. Use these associations for review.',
 }

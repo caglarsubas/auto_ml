@@ -8,7 +8,10 @@ gets injected back into the LLM conversation as a tool response.
 
 import json
 import logging
+import math
 from typing import Any, List, Optional
+
+from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
 
 from .prometa_config import (
     tool as prometa_tool,
@@ -45,6 +48,11 @@ def _fmt(value: Any) -> str:
     if isinstance(value, float):
         return f'{value:.4f}'
     return str(value)
+
+
+def format_combined_score(value: Any) -> str:
+    """Keep a missing ranking distinct from a recorded zero."""
+    return 'unavailable' if value is None else _fmt(value)
 
 
 def _not_available(name: str) -> str:
@@ -581,16 +589,22 @@ def _handle_get_selected_features(file_id: int, args: dict) -> str:
     top_n = args.get('top_n')
     if top_n and isinstance(top_n, int):
         features = features[:top_n]
-    lines = [f"Selected Features ({len(features)} shown):"]
+    lines = [f"Selected Features ({len(features)} shown):", DIAGNOSTIC_LIMITATIONS['combined_score']]
     for f in features:
         lines.append(
-            f"  {f.get('feature','?')}: combined={_fmt(f.get('combined_score'))}, "
+            f"  {f.get('feature','?')}: combined={format_combined_score(f.get('combined_score'))}, "
             f"SHAP%={_fmt(f.get('shap_percentile'))}, "
             f"Gain%={_fmt(f.get('gain_percentile'))}, "
             f"VIF={_fmt(f.get('vif'))}, state={f.get('vif_status', 'historical_method_unverified')}, "
             f"usage={f.get('usage', 'keep')}"
         )
     return '\n'.join(lines)
+
+
+SHAP_DIRECTION_LIMITATION = (
+    "Signed direction describes the recorded attribution heuristic within the fitted model. "
+    "Causal conclusions require separate evidence."
+)
 
 
 def _handle_get_shap_details(file_id: int, args: dict) -> str:
@@ -602,9 +616,7 @@ def _handle_get_shap_details(file_id: int, args: dict) -> str:
     # this handler dutifully rendered "|impact|=—, signed=—" for every
     # feature and the LLM could not reason about impact direction.
     # v2.36.0 fixes the FE bug AND upgrades this renderer to surface
-    # impact direction in PROSE form (UP / DOWN / NEUTRAL) so the LLM
-    # can quote it directly to the user without computing sign() from
-    # the numeric ``signed_impact``.
+    # a readable direction label while preserving unavailable signed evidence.
     data = read_shap_details(file_id)
     if not data:
         return _not_available("SHAP details")
@@ -612,20 +624,17 @@ def _handle_get_shap_details(file_id: int, args: dict) -> str:
     top_n = args.get('top_n')
     if top_n and isinstance(top_n, int):
         features = features[:top_n]
-    lines = [f"SHAP Feature Impact ({len(features)} features, sorted by |impact|):"]
+    lines = [f"SHAP Feature Impact ({len(features)} features, sorted by |impact|):", SHAP_DIRECTION_LIMITATION]
     for f in features:
         feat_name = f.get('feature', '?')
         impact = f.get('impact')
         signed = f.get('signed_impact')
-        # Direction is derived from sign(signed_impact).  Backend writes
-        # signed_impact = mean_abs * direction where direction ∈ {-1, +1, 0}
-        # (see modeling/views.py:488), so:
-        #   signed > 0   → feature pushes the prediction UP
-        #   signed < 0   → feature pushes the prediction DOWN
-        #   signed == 0  → no monotonic pattern detected (unusual)
-        if isinstance(signed, (int, float)) and signed > 0:
+        measured = type(signed) in (int, float) and math.isfinite(signed)
+        if not measured:
+            direction = 'UNAVAILABLE'
+        elif signed > 0:
             direction = 'UP'
-        elif isinstance(signed, (int, float)) and signed < 0:
+        elif signed < 0:
             direction = 'DOWN'
         else:
             direction = 'NEUTRAL'
@@ -642,14 +651,7 @@ def _handle_get_shap_details(file_id: int, args: dict) -> str:
         if isinstance(sm, (int, float)):
             tail_parts.append(f"raw_mean_signed={sm:+.4f}")
         tail = (' — ' + ', '.join(tail_parts)) if tail_parts else ''
-        # Prose direction first, raw numerics second — the LLM tends
-        # to copy the first salient phrase per line, so leading with
-        # "direction=DOWN" makes responses about impact direction
-        # more accurate.
-        if isinstance(signed, (int, float)):
-            signed_str = f"{signed:+.4f}"
-        else:
-            signed_str = '—'
+        signed_str = f"{signed:+.4f}" if measured else '—'
         lines.append(
             f"  {feat_name}: direction={direction}, "
             f"|impact|={_fmt(impact)}, signed={signed_str}{tail}"

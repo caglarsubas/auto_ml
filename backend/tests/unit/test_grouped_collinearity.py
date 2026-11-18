@@ -202,12 +202,13 @@ def test_insufficient_rows_and_solver_failures_have_explicit_states(monkeypatch)
 
 @pytest.fixture
 def archive(db, _use_tmp_media, tmp_path):
-    def create():
-        frame = fixture_frame()
+    def create(frame=None, encoding_kind="label_encoding"):
+        if frame is None:
+            frame = fixture_frame()
         source = tmp_path / 'source.csv'
         frame.to_csv(source, index=False)
         execution, root, _ = begin_execution(source)
-        summary = write_snapshot(root, 1, execution, frame, reports())
+        summary = write_snapshot(root, 1, execution, frame, reports(encoding_kind))
         (root / 'train_data.pkl').write_bytes(b'not a pickle')
         (root / 'final_holdout.pkl').write_bytes(b'sealed outcomes, not a pickle')
         publish_execution(execution, {'status': 'ok', 'file_id': 1, 'execution_id': execution, 'model': {'collinearity': summary}})
@@ -247,7 +248,7 @@ def test_malformed_or_tampered_native_evidence_fails_closed(archive, case):
         with ZipFile(root / ARRAY, 'w') as archive:
             archive.writestr('matrix.npy', header.getvalue())
         reseal(root, ARRAY)
-        with patch('numpy.load', side_effect=AssertionError('reject before array allocation')):
+        with patch('numpy.lib.format.read_array', side_effect=AssertionError('reject before array allocation')):
             with pytest.raises(ValueError):
                 load_snapshot(1, execution)
         return
@@ -303,6 +304,42 @@ def test_grouped_api_requires_real_session_csrf_and_exact_supported_identity(arc
     assert client.post(path, {**payload, 'file_id': 2}, format='json').status_code == 409
     assert client.post(path, {**payload, 'execution_id': None}, format='json').status_code == 400
     assert client.post(path, {**payload, 'diagnostic': 'unknown'}, format='json').status_code == 400
+
+    # A distinct execution records an arbitrary bijection on the same nominal groups.
+    recoded = fixture_frame()
+    recoded['category'] = recoded['category'].map({0: -78, 1: 30, 2: 5, 3: 110})
+    recoded_id, _ = archive(recoded)
+    frequencies = recoded['category'].value_counts(normalize=True)
+    frequency_encoded = recoded.assign(category=recoded['category'].map(frequencies))
+    lossy_id, _ = archive(frequency_encoded, encoding_kind='frequency_encoding')
+    assert len({execution, recoded_id, lossy_id}) == 3
+    grouped = client.post(path, {**payload, 'execution_id': recoded_id}, format='json')
+    assert grouped.status_code == 200 and grouped.json()['execution_id'] == recoded_id
+    original_grouped, recoded_grouped = response.json(), grouped.json()
+    for key in ('gvif', 'adjusted_gvif', 'log_gvif'):
+        assert recoded_grouped[key] == pytest.approx(original_grouped[key], rel=1e-10)
+    for key in ('df', 'status', 'support_counts', 'row_count', 'method', 'limitations'):
+        assert recoded_grouped[key] == original_grouped[key]
+
+    numeric = {**payload, 'feature': 'x', 'diagnostic': 'numeric'}
+    original = client.post(path, numeric, format='json')
+    numeric_recoded = client.post(path, {**numeric, 'execution_id': recoded_id}, format='json')
+    assert original.status_code == numeric_recoded.status_code == 200
+    original_numeric, recoded_numeric = original.json(), numeric_recoded.json()
+    assert recoded_numeric['execution_id'] == recoded_id
+    for key in ('vif', 'vif_status', 'contributions', 'preparation', 'limitations'):
+        assert recoded_numeric[key] == original_numeric[key]
+    assert all(entry['feature'] != 'category' for entry in original_numeric['contributions'])
+
+    lossy = client.post(path, {**payload, 'execution_id': lossy_id}, format='json')
+    assert lossy.status_code == 409
+    assert lossy.json()['error_code'] == 'diagnostic_inputs_unavailable'
+    recorded = client.get('/api/modeling/status/1/', {'execution_id': lossy_id})
+    assert recorded.status_code == 200
+    lossy_grouped = recorded.json()['model']['collinearity']['grouped']
+    assert lossy_grouped['status'] == 'unavailable'
+    assert lossy_grouped['groups']['category']['reason'] == 'original_category_partition_unavailable'
+    assert all(row['gvif'] is None for row in lossy_grouped['groups'].values())
 
 
 @pytest.mark.django_db(transaction=True)

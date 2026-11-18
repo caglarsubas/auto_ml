@@ -95,6 +95,28 @@ describe('ModelingComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Post-selection development CV');
   });
 
+  it('shows ranking limits and separates an unavailable explanation from a measured zero', () => {
+    component.modelingStatus = {
+      status: 'ok',
+      model: {
+        task: 'classification',
+        explanation_limitation: 'Class-specific SHAP is unavailable for this multiclass model.',
+        selected_features: [{ feature: 'x', gain: 0, shap_percentile: null, combined_score: null }],
+      },
+    };
+    component.applySfSort();
+    fixture.detectChanges();
+    const table: HTMLTableElement = fixture.nativeElement.querySelector(
+      '[aria-label="Feature ranking evidence"]',
+    );
+    expect(table.getAttribute('aria-describedby')).toBe('feature-ranking-limits');
+    expect(table.textContent).toContain('Ranking heuristic');
+    expect(table.textContent).toContain('0.00');
+    expect(table.textContent).toContain('Unavailable');
+    expect(fixture.nativeElement.textContent).toContain('validation decisions require separate evidence');
+    expect(fixture.nativeElement.textContent).toContain('Class-specific SHAP is unavailable');
+  });
+
   it('renders RMSE selection with unavailable R² and collapsed evidence', () => {
     component.modelingStatus = {
       status: 'ok',

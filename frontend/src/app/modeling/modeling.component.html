@@ -997,7 +997,9 @@
               </div>
             </div>
           }
-          <!-- Selected features table (sorted by SHAP |impact|) -->
+          @if (modelingStatus.model.explanation_limitation) {
+            <p>{{ modelingStatus.model.explanation_limitation }}</p>
+          }
           @if (modelingStatus.model?.selected_features?.length) {
             <div style="margin-top: 16px">
               <h4>
@@ -1005,14 +1007,20 @@
                   modelingStatus.model.candidate_source ? '' : ' (ranked by importance heuristic)'
                 }}
               </h4>
-              @if (modelingStatus.model.explanation_limitation) {
-                <p>{{ modelingStatus.model.explanation_limitation }}</p>
-              }
+              <p id="feature-ranking-limits">
+                Combined importance ranks features by the geometric mean of their SHAP and gain
+                percentiles when both are available. Effect estimates, statistical tests, and
+                validation decisions require separate evidence.
+              </p>
               <div style="font-size: 12px; color: #666; margin-bottom: 6px">
                 Total: {{ modelingStatus.model.selected_features.length }}
               </div>
               <div style="overflow: auto; max-height: 360px; border: 1px solid #eee">
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px">
+                <table
+                  aria-label="Feature ranking evidence"
+                  aria-describedby="feature-ranking-limits"
+                  style="width: 100%; border-collapse: collapse; font-size: 13px"
+                >
                   <thead>
                     <tr style="background: #fafafa; text-align: left">
                       <th
@@ -1150,7 +1158,7 @@
                           cursor: pointer;
                           user-select: none;
                         "
-                        title="Ranking heuristic: geometric mean of SHAP and gain percentiles. Not an effect estimate or statistical test."
+                        title="Geometric mean of SHAP and gain percentiles"
                         (click)="sortSelectedFeatures('combined_score')"
                       >
                         Ranking heuristic
@@ -1188,17 +1196,17 @@
                         <td
                           style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right"
                         >
-                          {{ f.impact | number: '1.6-6' }}
+                          {{ (f.impact | number: '1.6-6') ?? 'Unavailable' }}
                         </td>
                         <td
                           style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right"
                         >
-                          {{ f.signed_impact | number: '1.6-6' }}
+                          {{ (f.signed_impact | number: '1.6-6') ?? 'Unavailable' }}
                         </td>
                         <td
                           style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right"
                         >
-                          {{ f.gain | number: '1.2-2' }}
+                          {{ (f.gain | number: '1.2-2') ?? 'Unavailable' }}
                         </td>
                         <td
                           style="padding: 8px; border-bottom: 1px solid #f2f2f2; text-align: right"
@@ -1226,7 +1234,7 @@
                             color: #555;
                           "
                         >
-                          {{ f.shap_percentile | number: '1.4-4' }}
+                          {{ (f.shap_percentile | number: '1.4-4') ?? 'Unavailable' }}
                         </td>
                         <td
                           style="
@@ -1236,7 +1244,7 @@
                             color: #555;
                           "
                         >
-                          {{ f.gain_percentile | number: '1.4-4' }}
+                          {{ (f.gain_percentile | number: '1.4-4') ?? 'Unavailable' }}
                         </td>
                         <td
                           style="
@@ -1245,15 +1253,8 @@
                             text-align: right;
                             font-weight: 600;
                           "
-                          [style.color]="
-                            f.combined_score >= 0.8
-                              ? '#2e7d32'
-                              : f.combined_score >= 0.5
-                                ? '#1565c0'
-                                : '#555'
-                          "
                         >
-                          {{ f.combined_score | number: '1.4-4' }}
+                          {{ (f.combined_score | number: '1.4-4') ?? 'Unavailable' }}
                         </td>
                         <td style="padding: 8px; border-bottom: 1px solid #f2f2f2">
                           <div style="display: flex; align-items: center; gap: 8px">

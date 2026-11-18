@@ -1354,31 +1354,36 @@
               </button>
             </div>
           }
-          @if (sequentialCandidates?.length) {
-            <div
-              style="
-                margin: 8px 0 16px;
-                padding: 10px;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
-                background: #fafafa;
-                max-width: 900px;
-              "
-            >
-              <h4 style="margin: 0 0 8px">Sequential pattern candidates (MVP)</h4>
-              <p style="font-size: 12px; color: #666; margin: 0 0 8px">
-                Near-duplicate consecutive rows with few differing columns — review for record
-                dependence or leakage. These patterns do not establish causality.
+          @if (sequentialError?.fileId === currentFileId && sequentialError; as error) {
+            <p role="status">{{ error.message }}</p>
+          }
+          @if (sequentialReport?.file_id === currentFileId && sequentialReport; as report) {
+            <section aria-labelledby="sequential-patterns-title" style="margin: 8px 0 16px">
+              <h4 id="sequential-patterns-title">Associational pattern scan</h4>
+              <p>{{ report.limitation }}</p>
+              <p>
+                Scanned {{ report.n_rows_scanned }} of {{ report.n_training_rows }} training rows
+                in {{ report.time_col || 'input' }} order. Execution {{ report.execution_id }}.
               </p>
-              <ul style="margin: 0; padding-left: 18px; font-size: 12px">
-                @for (c of sequentialCandidates | slice: 0 : 12; track c) {
-                  <li>
-                    rows {{ c.row_a }} → {{ c.row_b }} · Δ{{ c.n_diff }} ·
-                    {{ (c.changed_features || []).join(', ') }}
-                  </li>
+              @if (report.candidates.length) {
+                @if (report.n_candidates > 12) {
+                  <p>Showing 12 of {{ report.n_candidates }} recorded candidates.</p>
                 }
-              </ul>
-            </div>
+                @if (report.candidate_limit_reached) {
+                  <p>The scan reached its candidate limit.</p>
+                }
+                <ul>
+                  @for (candidate of report.candidates | slice: 0 : 12; track candidate) {
+                    <li>
+                      Rows {{ candidate.row_a }} and {{ candidate.row_b }} differ in
+                      {{ candidate.n_diff }} features · {{ candidate.changed_features.join(', ') }}
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <p>The scan flagged zero pairs.</p>
+              }
+            </section>
           }
           <!-- Purifier breakdown: show which columns were dropped and how many rows were removed by each step -->
           @if (droppedColumnsByStep && droppedColumnsByStep.length) {

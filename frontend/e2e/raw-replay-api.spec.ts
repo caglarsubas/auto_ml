@@ -733,6 +733,21 @@ test('real-session numeric diagnostics retain singular and excluded states throu
     });
     expect(exclusion.status()).toBe(200);
     expect((await exclusion.json()).vif_status).toBe('excluded_categorical');
+    const patterns = await api.get(`crisp/sequential/${fileId}/`, {
+      params: { execution_id: run.execution_id },
+    });
+    expect(patterns.status()).toBe(200);
+    const sequential = await patterns.json();
+    expect(sequential).toMatchObject({
+      scope: 'associational_near_duplicate_patterns',
+      evidence_partition: 'training_only',
+      execution_id: run.execution_id,
+      ordering: 'input_order',
+      n_training_rows: run.model.split.n_train,
+    });
+    expect(sequential.n_rows_scanned).toBeGreaterThan(0);
+    expect(sequential.n_rows_scanned).toBeLessThanOrEqual(sequential.n_training_rows);
+    expect(sequential.limitation).toMatch(/causal|association/i);
     const name = `numeric-review-${fileId}`;
     const pipeline = await api.post('pipeline/create/', {
       data: {

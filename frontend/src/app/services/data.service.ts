@@ -9,6 +9,21 @@ import { ProjectWorkspaceService } from './project-workspace.service';
 import { AuthService } from './auth.service';
 import { isSearchOperationId } from './search-operation';
 
+export interface SequentialPatternReport {
+  file_id: number;
+  scope: 'associational_near_duplicate_patterns';
+  limitation: string;
+  execution_id: string;
+  ordering: 'time_column' | 'input_order';
+  time_col: string | null;
+  n_training_rows: number;
+  n_rows_scanned: number;
+  sample_stride: number;
+  candidate_limit_reached: boolean;
+  n_candidates: number;
+  candidates: { row_a: string; row_b: string; n_diff: number; changed_features: string[] }[];
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -529,8 +544,9 @@ export class DataService {
   }
 
   // Get feature explainability data (SHAP beeswarm + partial dependence)
-  getFeatureExplainability(fileId: number, featureName: string, processedFile?: string, nSamples?: number, modelPath?: string, selectedFeatures?: string[]): Observable<any> {
+  getFeatureExplainability(fileId: number, featureName: string, processedFile?: string, nSamples?: number, modelPath?: string, selectedFeatures?: string[], executionId?: string): Observable<any> {
     const payload: any = { file_id: fileId, feature_name: featureName };
+    if (executionId) payload.execution_id = executionId;
     if (processedFile) payload.processed_file = processedFile;
     if (nSamples) payload.n_samples = nSamples;
     if (modelPath) payload.model_path = modelPath;
@@ -1034,10 +1050,11 @@ export class DataService {
     );
   }
 
-  getSequentialPatterns(fileId: number, timeCol?: string): Observable<any> {
-    const params: any = {};
-    if (timeCol) params.time_col = timeCol;
-    return this.http.get(`${this.apiUrl}crisp/sequential/${fileId}/`, { params }).pipe(
+  getSequentialPatterns(fileId: number, timeCol?: string, executionId?: string): Observable<SequentialPatternReport> {
+    const params: Record<string, string> = {};
+    if (timeCol) params['time_col'] = timeCol;
+    if (executionId) params['execution_id'] = executionId;
+    return this.http.get<SequentialPatternReport>(`${this.apiUrl}crisp/sequential/${fileId}/`, { params }).pipe(
       catchError((err: any) => {
         console.error('Error fetching sequential patterns:', err);
         return throwError(() => err);

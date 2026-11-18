@@ -56,7 +56,7 @@ Remaining acceptance work across all26 current outcomes; a refinement inventory,
 
 Priorities: P0 correctness, security and operating foundations; P1 reviewable baseline/pilot; P2 credit and ongoing use; P3 selective research/expansion. Ready has no unmet prerequisites; waiting has unfinished task dependencies; blocked has a recorded external input, failure or reserved approval. In progress names an owned packet. Done requires qualified packet evidence; it does not close an outcome.
 
-Inventory: 66 tasks; ready: 4 (6.1%); in_progress: 0 (0.0%); waiting: 30 (45.5%); blocked: 7 (10.6%); done: 25 (37.9%).
+Inventory: 66 tasks; ready: 4 (6.1%); in_progress: 0 (0.0%); waiting: 29 (43.9%); blocked: 7 (10.6%); done: 26 (39.4%).
 
 Current remaining-scope inventory; task counts are not effort, release readiness or a guarantee that discovery adds no work.
 
@@ -202,7 +202,7 @@ Choose comparison methods appropriate to declared sampling and validation struct
 
 ### D05-T02 — Finish diagnostic and explanation qualification
 
-**Priority / status:** P0 / ready. **Owner:** Backend/ML. **Outcomes:** D05.
+**Priority / status:** P0 / done. **Owner:** Backend/ML. **Outcomes:** D05.
 
 Qualify supported diagnostics and explicitly disclose unavailable/lossy explanations.
 
@@ -211,6 +211,8 @@ Qualify supported diagnostics and explicitly disclose unavailable/lossy explanat
 **Acceptance:** Category-code permutations preserve meaning.; Heuristic importance and associational patterns retain their limitations.
 
 **Source / rationale:** Remaining acceptance scope from D05; existing tested foundation is reused, not rebuilt.
+
+**Packet / evidence:** P187; [Diagnostic and explanation qualification](DIAGNOSTIC_EXPLANATION_QUALIFICATION.md)
 
 ### D06-T01 — Finish identity enrollment and authority workflows
 
@@ -870,7 +872,7 @@ Compare guided, single-agent and additional-agent strategies with equal data/pol
 
 ### D17-T01 — Review exact model-family licenses, privacy and hardware
 
-**Priority / status:** P3 / waiting. **Owner:** ML Research. **Outcomes:** D17.
+**Priority / status:** P3 / ready. **Owner:** ML Research. **Outcomes:** D17.
 
 After scientific foundations, select permitted TabICLv2/TabPFN checkpoints and review deployment constraints.
 
@@ -2784,6 +2786,16 @@ Compare the two native depth candidates on their identical random, entity-groupe
 
 **Remaining:** D05-T02 qualifies remaining diagnostics and explanations. Matched feature and model branch comparisons remain in D10.
 
+### P187 — Qualify diagnostics and explanation boundaries
+
+**Packet status:** tested. **Mapped outcomes:** D05.
+
+Verify nominal-code invariance and archive bounds for retained collinearity diagnostics. Keep ranking limits, unavailable explanations and sequential scan provenance visible in the review workflow.
+
+**Evidence:** [Diagnostic and explanation qualification](DIAGNOSTIC_EXPLANATION_QUALIFICATION.md)
+
+**Remaining:** Broader feature and model branch comparisons remain in D10. Category-aware grids and class-specific interactive explanations require separate qualification.
+
 **Release qualification:** open. Design-partner acceptance and value gates: not_performed / not_performed.
 
 **Bounded agentic pilot prerequisites:** D01, D02, D03, D04, D05, D06, D07, D08, D09, D12, D18, D19, D20, D21, D22, D25, D26.
@@ -2804,7 +2816,7 @@ Correctness and evidence foundations precede feature expansion.
 | D02 | Shared validation and fold-local preprocessing | in_progress | D01 | Backend/ML |
 | D03 | Protected final assessment | in_progress | D01, D02 | Backend/ML |
 | D04 | Immutable runs and reliable scoring | in_progress | D01 | Backend/ML |
-| D05 | Trustworthy diagnostics | in_progress | D01 | Backend/ML |
+| D05 | Trustworthy diagnostics | tested | D01 | Backend/ML |
 
 ### D01 Executable prediction contract
 
@@ -2862,9 +2874,9 @@ Correct categorical collinearity treatment, describe combined importance as a he
 
 **Source mapping:** Claude CC-9; GPT FIX-04; Gemini C4.
 
-**Progress:** Categorical codes no longer enter numeric VIF; combined importance is a ranking heuristic, sequential patterns are associational, and anomaly metrics are ranking-only. Unsupported multiclass SHAP/PDP is disclosed/blocked. P04 reports undefined constant-target R² and incomplete metric aggregates explicitly, labels fold spread as descriptive, records actual adapter training metrics and exposes task-specific validation limitations. P06 aligns current native feature-selection screening, CV ranking and stopping with accepted objective semantics, complete availability and recorded search/resume evidence; historical paths remain unverified. P07 exposes failed/unusable attempts and curve gaps without invented spread; surrogate importance/range guidance is explicitly descriptive rather than causal. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P15 centers/scales native numeric auxiliary regressions explicitly and distinguishes finite, unbounded/precision-indistinguishable, constant, excluded, solver and compute-budget states. Exact category-derived output groups are excluded; fixed VIF severity/removal thresholds are removed. Grouped categorical methods and paired uncertainty remain open. P28 adds immutable grouped training-input subspace GVIF with nominal category-code invariance, exact one-hot provenance, dimensional adjustment and explicit rank/precision/budget states. Exact native replay uses no fitted state or final outcomes; current reviewers may inspect both numeric and grouped reports, with revocation checks and keyboard summaries. Lossy category encodings block the conditioning set. Independent reference, full metadata and browser checks pass; paired uncertainty, SQLite worker contention, expert isolation and release/customer gates remain open. P28 final hardening validates native NumPy format, bounded header, exact dtype/shape and payload length before allocating arrays; a retained failing-before/passing-after case confirms the boundary. The final complete matrices and browser/runtime image qualify this stronger source without changing prediction calculations or budgets. P186 adds effect size and a leave-one-validation-fold-out sensitivity range for the two native XGBoost depth candidates when the metric and ordered development partitions match. Random, grouped and out-of-time plans retain their sampling limitations. Invalid matches provide an unavailable reason. The comparison is exploratory, sampling uncertainty is unavailable from dependent fold scores, and clean replay verifies the diagnostic. D05-T02 covers remaining diagnostic and explanation qualification.
+**Progress:** Qualified diagnostic workflows distinguish numeric VIF from grouped categorical GVIF. Exact authenticated replay preserves their meaning under nominal recoding and exposes unavailable evidence for lossy or unverified inputs. P186 records effect size and leave-one-fold-out sensitivity for the two matched native candidates; sampling uncertainty is unavailable from dependent development folds. P187 verifies the archived matrix bounds, ranking limitations, model and feature support for interactive explanations, and associational sequential scans on verified training predictors. Broader branch comparisons remain in D10.
 
-**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P04 development validation and limits](DEVELOPMENT_VALIDATION_IMPLEMENTATION.md); [P04 source qualification](evidence/p04-qualification-2026-10-08.json); [P06 feature-selection implementation and limits](FEATURE_SELECTION_IMPLEMENTATION.md); [P06 source qualification](evidence/p06-qualification-2026-10-08.json); [P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md); [P07 source qualification](evidence/p07-qualification-2026-10-08.json); [P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md); [P09 source qualification](evidence/p09-qualification-2026-10-09.json); [Immutable numeric diagnostic implementation](COLLINEARITY_IMPLEMENTATION.md); [P15 source qualification](evidence/p15-qualification-2026-10-09.json); [Grouped input diagnostics](GROUPED_COLLINEARITY_IMPLEMENTATION.md); [P28 source qualification](evidence/p28-qualification-2026-10-11.json); [Matched development-fold diagnostic and limits](PAIRED_DIAGNOSTIC_UNCERTAINTY.md)
+**Evidence:** [P01 implementation and limitations](FOUNDATION_IMPLEMENTATION.md); [Local qualification record](evidence/foundation-2026-10-07.json); [P04 development validation and limits](DEVELOPMENT_VALIDATION_IMPLEMENTATION.md); [P04 source qualification](evidence/p04-qualification-2026-10-08.json); [P06 feature-selection implementation and limits](FEATURE_SELECTION_IMPLEMENTATION.md); [P06 source qualification](evidence/p06-qualification-2026-10-08.json); [P07 tuning implementation and limits](TUNING_EVIDENCE_IMPLEMENTATION.md); [P07 source qualification](evidence/p07-qualification-2026-10-08.json); [P09 declared early stopping and limits](EARLY_STOPPING_IMPLEMENTATION.md); [P09 source qualification](evidence/p09-qualification-2026-10-09.json); [Immutable numeric diagnostic implementation](COLLINEARITY_IMPLEMENTATION.md); [P15 source qualification](evidence/p15-qualification-2026-10-09.json); [Grouped input diagnostics](GROUPED_COLLINEARITY_IMPLEMENTATION.md); [P28 source qualification](evidence/p28-qualification-2026-10-11.json); [Matched development-fold diagnostic and limits](PAIRED_DIAGNOSTIC_UNCERTAINTY.md); [Diagnostic and explanation qualification](DIAGNOSTIC_EXPLANATION_QUALIFICATION.md)
 
 **Milestone gate:** Representative supported workflows pass cross-stage correctness tests; historical evidence remains inspectable and honestly qualified.
 

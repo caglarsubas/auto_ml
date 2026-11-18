@@ -85,6 +85,8 @@ def test_xgboost_iteration_zero_survives_model_replay(tmp_path):
     loaded = type(adapter).load(path, feature_names=adapter.feature_names, cat_features=adapter.cat_features)
     assert loaded.best_iteration == 0
     assert np.allclose(loaded.predict_proba(Xva), expected, atol=1e-9)
+    assert adapter.shap_model().num_boosted_rounds() == 1
+    assert adapter.gain_importance() == loaded.gain_importance()
 
 
 @pytest.mark.skipif(not available_boosting_algorithms().get('lightgbm'), reason='lightgbm not installed')

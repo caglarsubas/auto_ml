@@ -2970,6 +2970,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     try {
       if (!featureName || this.currentFileId == null) return;
       const fileId = String(this.currentFileId);
+      const executionId = this.modelingStatus?.execution_id;
       const processedFile = this.processedFilePath || undefined;
       const dateColumn =
         this.splitDateColumn || (this.dateColumns.length > 0 ? this.dateColumns[0] : undefined);
@@ -3039,6 +3040,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             width: '900px',
             data: {
               fileId: fileId,
+              executionId,
               columnName: featureName,
               features: features,
               processedFile: processedFile,
@@ -3057,6 +3059,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             width: '900px',
             data: {
               fileId: fileId,
+              executionId,
               columnName: featureName,
               features: [
                 { Feature_Name: featureName, Feature_Description: 'No description available' },
@@ -3088,6 +3091,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
     try {
       if (!featureName || this.currentFileId == null || !step) return;
       const fileId = String(this.currentFileId);
+      const executionId = this.modelingStatus?.execution_id;
       const processedFile = this.processedFilePath || undefined;
       const dateColumn =
         this.splitDateColumn || (this.dateColumns.length > 0 ? this.dateColumns[0] : undefined);
@@ -3183,6 +3187,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             width: '900px',
             data: {
               fileId: fileId,
+              executionId,
               columnName: featureName,
               features: features,
               processedFile: processedFile,
@@ -3199,6 +3204,7 @@ export class ModelingComponent implements OnInit, AfterViewInit, OnDestroy {
             width: '900px',
             data: {
               fileId: fileId,
+              executionId,
               columnName: featureName,
               features: [
                 { Feature_Name: featureName, Feature_Description: 'No description available' },

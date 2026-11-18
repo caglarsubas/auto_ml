@@ -1,7 +1,9 @@
 """Numeric diagnostics: affine invariance, explicit states and immutable inputs."""
+import io
 import json
 import pickle
 from unittest.mock import patch
+from zipfile import ZipFile
 
 import numpy as np
 import pandas as pd
@@ -172,6 +174,20 @@ def test_invalid_native_artifacts_fail_closed(archive, malformation):
         reseal(root, META)
     with pytest.raises(ValueError):
         load_snapshot(1, execution)
+
+
+def test_resealed_numeric_array_header_is_checked_before_payload_allocation(archive):
+    execution, root = archive()
+    header = io.BytesIO()
+    np.lib.format.write_array_header_1_0(
+        header, {'shape': (240, 5_000_000), 'fortran_order': False, 'descr': '<f8'}
+    )
+    with ZipFile(root / ARRAY, 'w') as artifact:
+        artifact.writestr('matrix.npy', header.getvalue())
+    reseal(root, ARRAY)
+    with patch('numpy.lib.format.read_array', side_effect=AssertionError('reject before array allocation')):
+        with pytest.raises(ValueError, match='header does not match'):
+            load_snapshot(1, execution)
 
 
 def test_legacy_archive_does_not_inherit_new_method(archive):

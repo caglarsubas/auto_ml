@@ -225,11 +225,30 @@ class TestFormatContext:
         assert 'Income' in result
         assert 'SHAP' in result
 
-    def test_selected_features_section(self):
-        ctx = {'features': [{'feature': 'Score', 'combined_score': 0.9, 'shap_percentile': 95, 'gain_percentile': 88, 'vif': 1.2, 'usage': 'keep'}]}
-        result = self._format(ctx, 'selected_features')
-        assert 'Score' in result
-        assert 'Selected Features' in result
+    def test_selected_features_section(self, monkeypatch):
+        from ai_assistant import tool_executor
+        from ai_assistant.views import SYSTEM_PROMPT
+        from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
+
+        features = [
+            {'feature': 'Score', 'combined_score': 0.9, 'shap_percentile': 95,
+             'gain_percentile': 88, 'vif': 1.2, 'usage': 'keep'},
+            {'feature': 'Zero', 'combined_score': 0.0},
+            {'feature': 'Missing', 'combined_score': None},
+        ]
+        monkeypatch.setattr(tool_executor, 'read_selected_features', lambda _: features)
+        outputs = (
+            self._format({'features': features}, 'selected_features'),
+            self._format({'selected_features': features}, 'general'),
+            tool_executor._handle_get_selected_features(1, {}),
+        )
+        for result in outputs:
+            assert 'Selected Features' in result and 'Score' in result
+            assert DIAGNOSTIC_LIMITATIONS['combined_score'] in result
+            for label, value in [('Zero', '0.0000'), ('Missing', 'unavailable')]:
+                line, = (line for line in result.splitlines() if f'{label}:' in line)
+                assert f'={value}' in line
+        assert 'geometric mean of SHAP and gain percentiles' in SYSTEM_PROMPT
 
     def test_sfs_section(self):
         ctx = {

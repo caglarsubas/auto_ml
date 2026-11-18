@@ -18,6 +18,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from modeling.diagnostics import DIAGNOSTIC_LIMITATIONS
+
 from .prometa_config import (
     workflow, agent, tool, flush as prometa_flush,
     set_span_attr, set_session_id, set_customer_id, set_request_model,
@@ -25,7 +27,7 @@ from .prometa_config import (
     prompt_render, stamp_codeline_capability,
 )
 from .tool_definitions import PIPELINE_TOOLS
-from .tool_executor import execute_tool_call, _load_skill_traced
+from .tool_executor import SHAP_DIRECTION_LIMITATION, execute_tool_call, format_combined_score, _load_skill_traced
 from .skill_registry import get_skill
 from .cache import cache_list_artifacts
 from .intent_classifier import resolve_intent_classification
@@ -246,7 +248,8 @@ results, ALWAYS check the actual configuration parameters provided in the contex
 ── 5. MODELING ──
 • Trains an XGBoost/LightGBM/CatBoost model with stratified K-fold cross-validation.
 • Reports: Train/CV/Test ROC-AUC and PR-AUC, SHAP beeswarm, feature importance (gain).
-• Selected features are ranked by a combined score of SHAP percentile + Gain percentile.
+• The combined score, where available, is the geometric mean of SHAP and gain percentiles.
+  Use it as a ranking heuristic. Effect estimates, statistical inference and validation decisions require separate evidence.
 • VIF (Variance Inflation Factor) is calculated for multicollinearity detection.
 
 ── 6. SEQUENTIAL FEATURE SELECTION (SFS) — DETAILED MECHANICS ──
@@ -1203,6 +1206,7 @@ def _build_slim_context(file_id: int, section: str) -> str:
         feat_list = sel_feats if isinstance(sel_feats, list) else sel_feats.get('features', [])
         names = [f.get('feature', '?') for f in feat_list[:40]]
         parts.append(f"Selected features ({len(feat_list)}): {', '.join(names)}")
+        parts.append(DIAGNOSTIC_LIMITATIONS['combined_score'])
         parts.append("VIF/GVIF are descriptive dependence diagnostics. Inspect exact method/state before interpretation; no universal cutoff or automatic removal rule.")
 
     # Available data (so the LLM knows which tools will return data).
@@ -3675,18 +3679,20 @@ def _format_context(context: dict, section: str) -> str:
         features = context.get('features', [])
         if features:
             parts.append(f'SHAP Beeswarm — top {len(features)} features by |impact|:')
+            parts.append(SHAP_DIRECTION_LIMITATION)
             for f in features[:20]:
                 parts.append(f"  - {f.get('feature', '?')}: "
                              f"|impact|={f.get('impact', '?')}, "
-                             f"signed_impact={f.get('signed_impact', '?')}")
+                             f"signed_impact={_fmt_val(f.get('signed_impact'))}")
 
     elif section == 'selected_features':
         features = context.get('features', [])
         if features:
-            parts.append(f'Selected Features ({len(features)} total, sorted by Combined Score):')
+            parts.append(f'Selected Features ({len(features)} total):')
+            parts.append(DIAGNOSTIC_LIMITATIONS['combined_score'])
             for f in features[:30]:
                 parts.append(f"  - {f.get('feature', '?')}: "
-                             f"combined_score={f.get('combined_score', '?')}, "
+                             f"combined_score={format_combined_score(f.get('combined_score'))}, "
                              f"SHAP_percentile={f.get('shap_percentile', '?')}, "
                              f"Gain_percentile={f.get('gain_percentile', '?')}, "
                              f"VIF={f.get('vif', '?')}, state={f.get('vif_status', 'historical_method_unverified')}, "
@@ -3798,8 +3804,9 @@ def _format_context(context: dict, section: str) -> str:
         sel_feats = context.get('selected_features', [])
         if sel_feats:
             parts.append(f"\nSelected Features ({len(sel_feats)} total):")
+            parts.append(DIAGNOSTIC_LIMITATIONS['combined_score'])
             for f in sel_feats[:15]:
-                parts.append(f"  {f.get('feature','?')}: combined={_fmt_val(f.get('combined_score'))}, VIF={_fmt_val(f.get('vif'))}")
+                parts.append(f"  {f.get('feature','?')}: combined={format_combined_score(f.get('combined_score'))}, VIF={_fmt_val(f.get('vif'))}")
         # ── VIF decomposition (pairwise correlations the user has inspected) ──
         vif_decomp = context.get('vif_decomposition', {})
         if vif_decomp:

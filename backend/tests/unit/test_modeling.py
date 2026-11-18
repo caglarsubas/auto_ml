@@ -409,20 +409,18 @@ class TestShapDetailsHandler:
     def test_handle_get_shap_details_renders_neutral_for_missing_signed(
         self, monkeypatch,
     ):
-        """If the cached item lacks ``signed_impact`` (e.g. legacy
-        cache from before the v2.36.0 FE fix landed), emit
-        direction=NEUTRAL with — for the signed value rather than
-        crashing on float-format of None."""
+        """Missing and nonfinite signed evidence are distinct from a measured zero."""
         from ai_assistant import tool_executor as te
         monkeypatch.setattr(te, 'read_shap_details', lambda fid: [
             {'feature': 'LegacyVar', 'impact': 0.1},
+            {'feature': 'NonfiniteVar', 'impact': 0.1, 'signed_impact': float('nan')},
+            {'feature': 'ZeroVar', 'impact': 0.1, 'signed_impact': 0.0},
         ])
         out = te._handle_get_shap_details(1, {})
-        assert 'direction=NEUTRAL' in out
-        assert 'signed=—' in out, (
-            "missing signed_impact must render as em-dash placeholder, "
-            "not crash on float-format(None)"
-        )
+        assert 'LegacyVar: direction=UNAVAILABLE, |impact|=0.1000, signed=—' in out
+        assert 'NonfiniteVar: direction=UNAVAILABLE, |impact|=0.1000, signed=—' in out
+        assert 'ZeroVar: direction=NEUTRAL, |impact|=0.1000, signed=+0.0000' in out
+        assert te.SHAP_DIRECTION_LIMITATION in out
 
     def test_handle_get_shap_details_omits_vif_when_absent(self, monkeypatch):
         """VIF tail is optional context — omit cleanly when the field
