@@ -16,6 +16,7 @@ import { Subscription } from 'rxjs';
 import { NativeCandidateComponent } from '../native-candidate/native-candidate.component';
 import { AuthService } from '../services/auth.service';
 import { NativeJobHistoryComponent } from '../native-job-history/native-job-history.component';
+import { jobKindLabel, jobNextStep } from './job-status';
 
 export interface NativeAssessmentReviewIdentity {
   assessment_job_id: string;
@@ -48,6 +49,9 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   showHistory = false;
   busy = false;
   error = '';
+  errorCode = '';
+  readonly jobKindLabel = jobKindLabel;
+  readonly jobNextStep = jobNextStep;
   inputFileId = 0;
   source: any = null;
   pending: { url: string; body: any } | null = null;
@@ -72,7 +76,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.showHistory = false;
     this.inputFileId = this.fileId;
     this.busy = false;
-    this.error = this.foldExportDigest = '';
+    this.error = this.errorCode = this.foldExportDigest = '';
     this.clearReproduction();
     this.refresh();
   }
@@ -93,7 +97,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   refresh(older = false): void {
     if (this.busy) return;
     this.busy = true;
-    this.error = '';
+    this.error = this.errorCode = '';
     const generation = ++this.generation;
     const selected = this.job?.id ?? this.retryOpenId;
     this.retryOpenId = selected;
@@ -128,7 +132,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     this.job = this.handoff = null;
     this.foldExportDigest = '';
     this.clearReproduction();
-    this.error = '';
+    this.error = this.errorCode = '';
     const generation = ++this.generation;
     this.requests.add(
       this.http.get<any>(this.url(id), { params: this.params, transferCache: false }).subscribe({
@@ -178,7 +182,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
       return;
     this.source = null;
     this.busy = true;
-    this.error = '';
+    this.error = this.errorCode = '';
     const generation = ++this.generation;
     this.requests.add(
       this.http
@@ -265,7 +269,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     const generation = this.generation;
     const { id, result_sha256 } = this.job;
     this.foldExportDigest = '';
-    this.error = '';
+    this.error = this.errorCode = '';
     this.requests.add(
       this.http
         .get(this.url(`${id}/fold-provenance`), {
@@ -311,7 +315,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
       this.job.result_sha256 === result_sha256 &&
       this.canDownloadReproduction;
     this.clearReproduction();
-    this.error = '';
+    this.error = this.errorCode = '';
     this.requests.add(
       this.http
         .get(this.url(`${id}/reproduction`), {
@@ -360,7 +364,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     if (!this.pending || this.busy) return;
     this.handoff = null;
     this.busy = true;
-    this.error = '';
+    this.error = this.errorCode = '';
     const action = this.pending,
       generation = ++this.generation;
     this.requests.add(
@@ -397,12 +401,22 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
       this.directory = null;
       this.source = null;
     }
+    this.errorCode = error.error?.error_code || 'unavailable';
     if (mutation && ![400, 404, 409].includes(error.status)) {
       this.error =
-        'The outcome could not be confirmed. Retry the same pending request after access or service recovery.';
+        error.status === 403
+          ? 'Project access could not be verified. Check your access with a project administrator, then retry the same pending request.'
+          : 'The request outcome could not be confirmed. Retry the same pending request after service recovery.';
     } else {
       if (mutation) this.pending = null;
-      this.error = `Job access or execution was blocked (${error.error?.error_code || 'unavailable'}). Refresh and retry.`;
+      this.error =
+        error.status === 403
+          ? 'Job evidence is unavailable with your current project access. Ask a project administrator to review your membership, then refresh jobs.'
+          : error.status === 409
+            ? 'The recorded inputs, authority or receipt changed. Refresh jobs and review the current evidence before preparing another request.'
+            : error.status === 400
+              ? 'The request could not be accepted. Review its inputs and execution limits before preparing it again.'
+              : 'Job evidence could not be checked. Refresh jobs after the installation operator confirms service recovery.';
     }
   }
   download(): void {
@@ -443,7 +457,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
       ...(download ? { sha256: this.handoff.sha256 } : {}),
     };
     this.busy = true;
-    this.error = '';
+    this.error = this.errorCode = '';
     this.requests.add(
       this.http
         .get<any>(this.url(`${id}/operational-handoff`), {

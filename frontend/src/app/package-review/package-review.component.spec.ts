@@ -291,4 +291,63 @@ describe('Package review receipts and context', () => {
     expect(fixture.nativeElement.textContent).toContain('<img src=x onerror=alert(1)>');
     expect(fixture.nativeElement.querySelector('img')).toBeNull();
   });
+  it('explains changed decisions and keeps attribution with expandable exact identity', () => {
+    component.review = {
+      ...nativeReview,
+      decision: { status: 'invalidated', reason_code: 'review_discussion_changed' },
+      events: [
+        {
+          id: 'event',
+          event_type: 'reopen',
+          actor: { username: 'reviewer' },
+          created_at: '2026-11-19T10:00:00Z',
+          authority: { role: 'reviewer' },
+        },
+      ],
+      findings: [{ id: 'finding', state: 'open', text: 'New finding', responses: 0 }],
+    };
+    fixture.detectChanges();
+    http
+      .expectOne('/api/jobs/datasets/1/?project_id=project-a')
+      .flush({ jobs_enabled: false, jobs: [], total: 0, next_offset: null });
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.querySelector('[aria-label="Review next step"]')?.textContent).toContain(
+      'Review the open findings',
+    );
+    expect(element.textContent).toContain('The discussion changed after approval');
+    expect(element.textContent).toContain('Last change: reopen · reviewer · 2026-11-19T10:00:00Z');
+    expect(element.querySelector('details')?.open).toBeFalse();
+    component.role = 'developer';
+    fixture.detectChanges();
+    http.expectOne('/api/jobs/datasets/1/?project_id=project-a').flush({
+      jobs_enabled: false,
+      jobs: [],
+      total: 0,
+      next_offset: null,
+    });
+    expect(element.querySelector('[aria-label="Review next step"]')?.textContent).toContain(
+      'record your response',
+    );
+  });
+  it('withdraws stale review controls when discussion download access is revoked', () => {
+    const save = spyOn(URL, 'createObjectURL');
+    component.review = review;
+    component.evidence = receipt;
+    component.text = 'Unsaved disposition';
+    component.downloadEvidence('late-event');
+    const delayed = http.expectOne(
+      '/api/reviews/case/events/late-event/receipt/?project_id=project-a',
+    );
+    component.download('discussion');
+    http
+      .expectOne('/api/reviews/case/?project_id=project-a')
+      .flush({}, { status: 403, statusText: 'Forbidden' });
+    expect(component.review).toBeNull();
+    expect(component.directory).toBeNull();
+    expect(component.evidence).toBeNull();
+    expect(component.text).toBe('');
+    expect(component.canSubmit).toBeFalse();
+    delayed.flush(new Blob(['previously started download']));
+    expect(save).not.toHaveBeenCalled();
+  });
 });

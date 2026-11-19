@@ -3,16 +3,20 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { HomeComponent } from './home.component';
+import { ProjectWorkspaceService } from '../services/project-workspace.service';
 
 describe('HomeComponent', () => {
   let component: HomeComponent;
   let fixture: ComponentFixture<HomeComponent>;
+  let workspace: { state: { governed: boolean; selected: any }; projectId?: string };
 
   beforeEach(async () => {
+    workspace = { state: { governed: false, selected: null } };
     await TestBed.configureTestingModule({
       imports: [RouterTestingModule],
       declarations: [HomeComponent],
       schemas: [CUSTOM_ELEMENTS_SCHEMA],
+      providers: [{ provide: ProjectWorkspaceService, useValue: workspace }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(HomeComponent);
@@ -29,7 +33,7 @@ describe('HomeComponent', () => {
   });
 
   it('sections should include Feature Store and Model Store', () => {
-    const names = component.sections.map(s => s.name);
+    const names = component.sections.map((s) => s.name);
     expect(names).toContain('Feature Store');
     expect(names).toContain('Model Store');
     expect(names).toContain('Deployments');
@@ -39,8 +43,8 @@ describe('HomeComponent', () => {
 
   it('Model Development should be live with a route', () => {
     const modelDev = component.sections
-      .flatMap(s => s.items)
-      .find(i => i.label === 'Model Development');
+      .flatMap((s) => s.items)
+      .find((i) => i.label === 'Model Development');
 
     expect(modelDev).toEqual({
       label: 'Model Development',
@@ -51,11 +55,11 @@ describe('HomeComponent', () => {
 
   it('non-live items should be unavailable without routes', () => {
     const unavailable = component.sections
-      .flatMap(s => s.items)
-      .filter(i => i.label !== 'Model Development');
+      .flatMap((s) => s.items)
+      .filter((i) => i.label !== 'Model Development');
 
     expect(unavailable.length).toBeGreaterThan(0);
-    unavailable.forEach(item => {
+    unavailable.forEach((item) => {
       expect(item.status).toBe('unavailable');
       expect(item.route).toBeUndefined();
     });
@@ -71,6 +75,27 @@ describe('HomeComponent', () => {
     const cta = fixture.debugElement.query(By.css('[data-testid="home-secondary-cta"]'));
     expect(cta).toBeTruthy();
     expect(cta.nativeElement.getAttribute('href')).toBe('/model-development/declaration');
+  });
+
+  it('guides reviewers to project records and keeps developer links in their selected project', () => {
+    workspace.state = { governed: true, selected: { role: 'reviewer' } };
+    workspace.projectId = 'review-project';
+    fixture.detectChanges();
+    const primary = fixture.nativeElement.querySelector('[data-testid="home-primary-cta"]');
+    expect(primary.textContent).toContain('Open project records');
+    expect(primary.getAttribute('href')).toBe('#workspace-title');
+    expect(fixture.nativeElement.querySelector('[data-testid="home-secondary-cta"]')).toBeNull();
+    workspace.state = { governed: true, selected: { role: 'developer' } };
+    workspace.projectId = 'development-project';
+    fixture.detectChanges();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="home-primary-cta"]').getAttribute('href'),
+    ).toBe('/model-development?project_id=development-project');
+    expect(
+      fixture.nativeElement
+        .querySelector('[data-testid="home-secondary-cta"]')
+        .getAttribute('href'),
+    ).toBe('/model-development/declaration?project_id=development-project');
   });
 
   it('should render evidence margin notes', () => {
@@ -89,7 +114,7 @@ describe('HomeComponent', () => {
   it('should render monoline section icons for each directory block', () => {
     const icons = fixture.debugElement.queryAll(By.css('[data-testid="home-section-icon"]'));
     expect(icons.length).toBe(5);
-    component.sections.forEach(section => {
+    component.sections.forEach((section) => {
       expect(section.icon).toBeTruthy();
     });
   });

@@ -86,6 +86,63 @@ describe('Durable package job receipts', () => {
     request.flush({ ...job, state: 'cancel_requested' });
     expect(component.canCancel).toBeFalse();
     expect(component.job.state).toBe('cancel_requested');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Cancellation is recorded.');
+    expect(fixture.nativeElement.textContent).not.toContain('Cancellation is complete.');
+    expect(
+      [...fixture.nativeElement.querySelectorAll('button')].map((b: any) => b.textContent.trim()),
+    ).not.toContain('Cancel job');
+    component.job = { ...job, state: 'cancelled' };
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Cancellation is complete.');
+    expect(fixture.nativeElement.textContent).not.toContain('Cancellation is recorded.');
+  });
+  it('explains the retained execution, attempt limits and blocked recovery without inventing progress', () => {
+    component.job = {
+      ...job,
+      state: 'blocked',
+      attempts: 2,
+      reason_code: 'native_inputs_changed',
+      specification: {
+        kind: 'native_numeric_training_search_v1',
+        limits: { attempts: 3, seconds: 120 },
+      },
+    };
+    fixture.detectChanges();
+    const root: HTMLElement = fixture.nativeElement;
+    expect(root.querySelector('[aria-live="polite"]')?.textContent).toContain(
+      'Development training search',
+    );
+    expect(root.textContent).toContain('Attempts started 2');
+    expect(root.textContent).toContain('Inspect operational handoff and ask the project owner');
+    expect(root.textContent).toContain('Submitted by reviewer');
+    const detail = [...root.querySelectorAll('details')].find(
+      (item) => item.querySelector('summary')?.textContent === 'Execution references and limits',
+    );
+    expect(detail?.textContent).toContain('native_inputs_changed');
+    expect(detail?.textContent).toContain('120 seconds');
+    expect(root.querySelector('[role="progressbar"]')).toBeNull();
+  });
+  it('gives access recovery instructions with expandable exact diagnostics and withdraws old evidence', () => {
+    component.job = { ...job, state: 'succeeded' };
+    component.open('job-1');
+    http
+      .expectOne('/api/jobs/job-1/?project_id=project-a')
+      .flush(
+        { error_code: 'project_membership_required' },
+        { status: 403, statusText: 'Forbidden' },
+      );
+    fixture.detectChanges();
+    const root: HTMLElement = fixture.nativeElement;
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain(
+      'Ask a project administrator',
+    );
+    const detail = [...root.querySelectorAll('details')].find(
+      (item) => item.querySelector('summary')?.textContent === 'Request failure detail',
+    );
+    expect(detail?.textContent).toContain('project_membership_required');
+    expect(root.textContent).not.toContain('Job state: succeeded');
+    expect(component.job).toBeNull();
   });
   it('cannot submit as admin or when the dedicated broker is disabled', () => {
     component.role = 'admin';

@@ -118,13 +118,24 @@ describe('Bounded native history observations', () => {
     fixture.detectChanges();
     request().flush({
       ...page,
-      jobs: [],
+      jobs: [
+        {
+          id: 'first',
+          kind: 'native_protected_assessment_v1',
+          state: 'cancel_requested',
+          attempts: 1,
+        },
+      ],
       page_size: 50,
       queue: { states: {}, signals: {}, installation_limits: {} },
     });
     fixture.detectChanges();
     const root: HTMLElement = fixture.nativeElement;
     expect(root.textContent).toContain('Live worker and broker health: not observed');
+    expect(root.textContent).toContain('Protected assessment · Cancellation requested');
+    expect(root.querySelector('option[value="cancel_requested"]')?.textContent).toBe(
+      'Cancellation requested',
+    );
     const buttons = [...root.querySelectorAll('nav button')];
     expect((buttons[0] as HTMLButtonElement).disabled).toBeTrue();
     expect((buttons[1] as HTMLButtonElement).disabled).toBeFalse();

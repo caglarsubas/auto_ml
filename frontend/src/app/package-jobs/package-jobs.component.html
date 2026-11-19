@@ -1,12 +1,16 @@
-<section aria-labelledby="package-jobs-title" [class.training-jobs]="mode === 'training'">
+<section
+  aria-labelledby="package-jobs-title"
+  [class.training-jobs]="mode === 'training'"
+  [attr.aria-busy]="busy"
+>
   <h4 id="package-jobs-title">
     {{ mode === 'training' ? 'Durable job history' : 'Queued package checks and scoring' }}
   </h4>
   @if (mode === 'training') {
     <p>
-      Refresh or reopen a job to inspect progress, cancellation and retained evidence. Jobs continue
-      after you leave this page. A completed development search does not adopt a model or approve
-      final assessment or production use.
+      Refresh or reopen a job to inspect its progress and evidence. Jobs continue after you leave
+      this page. Training, candidate adoption, protected assessment and review each retain their own
+      recorded decisions.
     </p>
   } @else {
     <p>
@@ -50,6 +54,14 @@
   }
   @if (error) {
     <p role="alert">{{ error }}</p>
+    @if (errorCode) {
+      <details>
+        <summary>Request failure detail</summary>
+        <p>
+          Reason <code>{{ errorCode }}</code>
+        </p>
+      </details>
+    }
   }
   @if (pending && !busy) {
     <button type="button" (click)="retry()">Retry pending job request</button>
@@ -115,10 +127,10 @@
             <button type="button" (click)="open(item.id)" [disabled]="busy">
               Open job {{ item.id }}
             </button>
-            · {{ item.kind }} · {{ item.state }} · {{ item.bundle_id }}
+            · {{ jobKindLabel(item.kind) }} · {{ item.state }} · {{ item.bundle_id }}
           </li>
         } @empty {
-          <li>No jobs recorded.</li>
+          <li>When a request is queued for this dataset, its progress and evidence appear here.</li>
         }
       </ul>
       @if (directory.next_offset !== null) {
@@ -127,20 +139,59 @@
     }
   }
   @if (job) {
-    <p role="status">
-      Job state: {{ job.state }} · Attempt {{ job.attempts }} · {{ job.reason_code }}
-    </p>
+    <div role="status" aria-live="polite" aria-atomic="true">
+      <p>
+        <strong>{{ jobKindLabel(job.specification.kind, job.result?.operation) }}</strong>
+      </p>
+      <p>Job state: {{ job.state }} · Attempts started {{ job.attempts }}</p>
+      <p>{{ jobNextStep(job.state) }}</p>
+    </div>
     <p>
-      Request <code>{{ job.id }}</code> · Submitted by {{ job.submitted_by.username }}
+      Request <code>{{ job.id }}</code> · Submitted by
+      {{ job.submitted_by.username || 'Recorded actor unavailable' }}
+      @if (job.created_at) {
+        · {{ job.created_at | date: 'medium' }}
+      }
     </p>
+    @if (job.replayed) {
+      <p>This receipt belongs to the previously recorded request.</p>
+    }
+    @if (job.attempts > 1) {
+      <p>
+        This request has started more than one attempt. See attributable job history for its
+        dispatch and recovery events.
+      </p>
+    }
+    @if (job.state === 'succeeded') {
+      @switch (job.specification.kind) {
+        @case ('native_numeric_training_search_v1') {
+          <p>
+            Inspect the candidate and development folds below. An independent reviewer can then
+            review adoption and protected assessment.
+          </p>
+        }
+        @case ('native_protected_assessment_v1') {
+          <p>
+            Inspect the assessment and its current applicability. An independent reviewer can
+            download the reproduction manifest and open a technical review.
+          </p>
+        }
+        @case ('native_csv_scoring_v1') {
+          <p>
+            Download the full scoring receipt to inspect every scored row and retain its exact
+            result digest.
+          </p>
+        }
+        @case ('native_training_scoring_v1') {
+          <p>
+            Download the full scoring receipt to inspect every scored row and retain its exact
+            result digest.
+          </p>
+        }
+      }
+    }
     @if (canCancel) {
       <button type="button" (click)="cancel()" [disabled]="busy || !!pending">Cancel job</button>
-    }
-    @if (job.state === 'cancel_requested') {
-      <p>
-        Cancellation is recorded. The worker must stop or its lease expire before cancellation
-        completes; completed reads are not undone.
-      </p>
     }
     <button type="button" (click)="inspectHandoff()" [disabled]="busy || !!pending">
       Inspect operational handoff
@@ -348,13 +399,13 @@
                 folds. Metric: {{ paired.metric }}.
               </p>
               <p>
-                Mean improvement: {{ paired.effect.improvement | number: '1.0-8' }}.
-                Positive values favor depth {{ paired.candidate_max_depth }}.
+                Mean improvement: {{ paired.effect.improvement | number: '1.0-8' }}. Positive values
+                favor depth {{ paired.candidate_max_depth }}.
               </p>
               <p>
-                Fold sensitivity: {{ paired.sensitivity.lower_improvement | number: '1.0-8' }}
-                to {{ paired.sensitivity.upper_improvement | number: '1.0-8' }}.
-                Sampling uncertainty is unavailable.
+                Fold sensitivity: {{ paired.sensitivity.lower_improvement | number: '1.0-8' }} to
+                {{ paired.sensitivity.upper_improvement | number: '1.0-8' }}. Sampling uncertainty
+                is unavailable.
               </p>
               <table aria-label="Paired development fold scores">
                 <thead>
@@ -410,6 +461,49 @@
         review remain separate.
       </p>
     }
+    <details>
+      <summary>Execution references and limits</summary>
+      <dl>
+        <dt>Job type</dt>
+        <dd>
+          <code>{{ job.specification.kind }}</code>
+        </dd>
+        <dt>Dataset</dt>
+        <dd>{{ job.file_id || fileId }}</dd>
+        @if (job.reason_code) {
+          <dt>Recorded reason</dt>
+          <dd>
+            <code>{{ job.reason_code }}</code>
+          </dd>
+        }
+        @if (job.specification.limits; as limits) {
+          <dt>Attempt limit</dt>
+          <dd>{{ limits.attempts }}</dd>
+          <dt>Work budget per attempt</dt>
+          <dd>{{ limits.seconds }} seconds</dd>
+        }
+        @if (job.expires_at) {
+          <dt>Request expiry</dt>
+          <dd>{{ job.expires_at | date: 'medium' }}</dd>
+        }
+        @if (job.finished_at) {
+          <dt>Finished</dt>
+          <dd>{{ job.finished_at | date: 'medium' }}</dd>
+        }
+        @if (job.specification.training_sha256; as digest) {
+          <dt>Training plan SHA-256</dt>
+          <dd>
+            <code>{{ digest }}</code>
+          </dd>
+        }
+        @if (job.specification.training_result_sha256; as digest) {
+          <dt>Source candidate result SHA-256</dt>
+          <dd>
+            <code>{{ digest }}</code>
+          </dd>
+        }
+      </dl>
+    </details>
     <details>
       <summary>Attributable job history</summary>
       <ol aria-label="Job events">

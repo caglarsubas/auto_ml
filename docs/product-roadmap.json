@@ -1039,9 +1039,10 @@
         "[Earlier qualified PR CI](https://github.com/caglarsubas/auto_ml/actions/runs/40803985127)",
         "[Retained failed independent main](https://github.com/caglarsubas/auto_ml/actions/runs/40807135390)",
         "[Retained failed corrective CI](https://github.com/caglarsubas/auto_ml/actions/runs/40817326245)",
-        "[Retained failed corrective CI](https://github.com/caglarsubas/auto_ml/actions/runs/40823708033)"
+        "[Retained failed corrective CI](https://github.com/caglarsubas/auto_ml/actions/runs/40823708033)",
+        "[Onboarding, navigation and progress qualification](WORKFLOW_GUIDANCE_QUALIFICATION.md)"
       ],
-      "progress": "Explicit declaration fields, session-aware navigation, clearer package-versus-production state and bounded keyboard/browser smoke checks are implemented. Full screen-reader and independent-review workflow qualification remains open. P02 makes the bounded keyboard/session/reload and authenticated API checks mandatory in CI; all legacy journeys and screen-reader review remain unqualified. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P15 adds expandable numeric diagnostic tables and keyboard/focus-managed dialogs with states, provenance and limitations, independent of SHAP availability. Late diagnostic/restore responses are rejected, and assistant cache forwarding retains current execution identity. Comprehensive accessibility remains open. P19 adds a server-backed project picker, role explanations and project-filtered dataset/pipeline records. Developer workspaces pin upload/checkpoint ownership and saved-pipeline operations to the selected project; reviewers/admins browse records and download existing reports. Fresh membership checks, canceled/stale response handling, explicit blocked states, visible selection after redirects and keyboard/browser workflows are qualified. This is partial D06/D12; full reviewer findings/approvals/reproduction, member/enrollment UI, SSO/MFA, egress/retention, durable jobs, expert isolation, comprehensive accessibility and release/customer gates remain open. P20 adds exact-package review discussion with attributable reviewer findings/dispositions and developer responses. Active project roles, exact retry receipts, optimistic revisions, concurrent publication, context/integrity freshness and retained historical events are qualified on both metadata engines. Browser keyboard handoff and exact package/discussion downloads pass. Finding closure never confers model or production approval; full independence rules, exceptions/approvals, clean-environment reproduction, full retention and comprehensive accessibility remain open. P21 adds input/runtime-bound full CSV scoring receipts, current-role exact downloads and installed offline native score-parity verification. Clean fixed runtimes without network or installation data reproduce 300-row XGBoost classification/regression exports across whole batches and chunk sizes 1/17/64; calibrated logistic replay and tamper/runtime/authority boundaries pass. Core modules and declared tolerances are recorded. Native serialized state requires explicit trust; full refit/assessment reproduction, independent approval and release qualification remain open. P22 adds one exact-package integrity job with durable request/event/result receipts, explicit dedicated Celery/Redis dispatch, database admission/lease bounds, cooperative cancellation, authority/runtime rechecks and fenced terminal publication. Actual prefork delivery, killed-worker recovery after injected lease expiry, duplicate/stale publication, active cancellation and failed broker connection recovery pass against TLS PostgreSQL metadata. Real native package keyboard queue/status/receipt handoff passes in the review workspace. This is partial D07/D12: training/search/scoring migration, private Redis TLS, complete private worker packaging, job backup/restore and production recovery, expert isolation, complete accessibility and release/customer gates remain open. P26 adds explicit keyboard receipt selection, removal and downloading in package review, preserves job context during writes, and retains exact references across ambiguous retries. Real browser workflows pass; comprehensive accessibility remains open. P28 adds immutable grouped training-input subspace GVIF with nominal category-code invariance, exact one-hot provenance, dimensional adjustment and explicit rank/precision/budget states. Exact native replay uses no fitted state or final outcomes; current reviewers may inspect both numeric and grouped reports, with revocation checks and keyboard summaries. Lossy category encodings block the conditioning set. Independent reference, full metadata and browser checks pass; paired uncertainty, SQLite worker contention, expert isolation and release/customer gates remain open. P28 final hardening validates native NumPy format, bounded header, exact dtype/shape and payload length before allocating arrays; a retained failing-before/passing-after case confirms the boundary. The final complete matrices and browser/runtime image qualify this stronger source without changing prediction calculations or budgets. P31 adds a recorded allowlisted Angular production/private build, exact immutable TLS asset packaging, same-origin API/media credentials and explicit static/app routes with local fonts/licenses and exact-bundle browser CSP with sandboxed media attachments. Actual private HTTPS developer sign-in/reload, project selection, creation/upload/download/logout and blocked fallback/egress checks pass. Complete multi-image restricted-network installation, supply authentication, production recovery, expert isolation, independent reproduction, comprehensive accessibility and all release/value/customer gates remain open. P161 inventories 66 remaining tasks across all 26 outcomes, with P0–P3 priorities, owner roles, acceptance, source rationale and explicit dependency/blocked-input records. Ready, active, waiting and blocked states derive from validated dependencies; done requires qualified packet evidence. Search, filters, focused dependency links and five-state/done-open-blocked counts and deltas keep remaining scope separate from historical packet delivery and release gates. Native detail polling now applies the shared five-second PostgreSQL statement ceiling or stricter caller limit to the serialized receipt read. Existing queue locking, initial HTTP authority/auditing, schema, evidence and private uncached failure behavior remain. Merged PR259 passed exact-head CI40803985127 (7,301 native/six skips/553.915s), but independent main40807135390 hit the unchanged900-second native cap after7,168 of7,307completed/noXML or successful exit. All62 published cases passed and remain byte-identical. Failed main, valid original PR and local source are separately sealed; no CI rerun. The corrective source uses a zero-copy homogeneous numeric view only in the qualified XGBoost2.1.4/pandas3.0.6/NumPy2.5.3 profile, preserves explicit feature types and native DMatrix validation, and retains the original route for other representations/versions. Fresh numeric category detection and receipt dtype reuse avoid unused column access; all data/index/category hashing, fitted budgets and independent public assessment checks remain. The earlier source added forty-two matrix/model/prediction/receipt parity, mutation and fallback cases to its62 originals (104total). Paired synthetic process-CPU observations show less preparation work, not supported capacity. Corrective PR260 earlier head 5b6bfb7d2102 also failed its unchanged900-second native cap in run40817326245: 7220/7349 finished, 104/104 published additions completed without failure, remaining additions unverified, no finalXML or successful exit. Its raw evidence and valid prior local source remain sealed; it was not rerun. Corrective PR260 earlier head b0c5c2d6b171 also failed its unchanged900-second native cap in run40823708033: 6843/7388 finished, 128/143 published additions completed without failure, remaining additions unverified, no finalXML or successful exit. Its raw evidence and valid prior local source remain sealed; it was not rerun. SFS screening calculates only its accepted metric, with the original public ROC integrator retained for exact score rounding/ties. Full top-K CV and final reports, all fit/fold/budget/row checks remain. 39 additive tests compare complete steps, fit budgets, rankings, fold reports, failures and ties; initial near-tie test caught and corrected roundoff before publication. All104 published cases remain byte-identical. New SFS/HPO checkpoints and newly generated score-package metadata use compact stdlib JSON with unchanged options, decoded values, complete staged publication, fsync, no-overwrite behavior and exact published-byte hashes. Historical checkpoint/package evidence is never reformatted. Thirteen additive cases cover numeric/Unicode/key parity, failures, strict duplicate-key rejection and legacy/new immutable archive retries. All143 previously published additions remain byte-identical. Local: 787 focused and 7,395 native passes/six original skips in 716.210s. All six exact-head CI checks (40831125128) and independent push-main checks (40834711368) passed on first attempts; source trees match. Native timings 629.218s / 635.582s. Both scoped tasks now done; downstream readiness recalculated. The initial remaining-task inventory is dated P161; no historical scope is invented. Counts are not effort or whole-product completion. Initial HTTP routing/authority SQL remains outside the receipt budget; individual statement limits do not promise total latency. Lock-free detail/download consistency, supported installation, upgrade/rollback, coordinated restore, legacy execution migration, capacity and customer acceptance remain open. Original tests, CI/resources/thread/coverage/skip/retry controls and the 900-second native cap remain unchanged. No customer installation modified. Generated-source/isolated-JS qualification does not establish rendered appearance or screen-reader acceptance."
+      "progress": "Explicit declaration fields, session-aware navigation, clearer package-versus-production state and bounded keyboard/browser smoke checks are implemented. Full screen-reader and independent-review workflow qualification remains open. P02 makes the bounded keyboard/session/reload and authenticated API checks mandatory in CI; all legacy journeys and screen-reader review remain unqualified. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P15 adds expandable numeric diagnostic tables and keyboard/focus-managed dialogs with states, provenance and limitations, independent of SHAP availability. Late diagnostic/restore responses are rejected, and assistant cache forwarding retains current execution identity. Comprehensive accessibility remains open. P19 adds a server-backed project picker, role explanations and project-filtered dataset/pipeline records. Developer workspaces pin upload/checkpoint ownership and saved-pipeline operations to the selected project; reviewers/admins browse records and download existing reports. Fresh membership checks, canceled/stale response handling, explicit blocked states, visible selection after redirects and keyboard/browser workflows are qualified. This is partial D06/D12; full reviewer findings/approvals/reproduction, member/enrollment UI, SSO/MFA, egress/retention, durable jobs, expert isolation, comprehensive accessibility and release/customer gates remain open. P20 adds exact-package review discussion with attributable reviewer findings/dispositions and developer responses. Active project roles, exact retry receipts, optimistic revisions, concurrent publication, context/integrity freshness and retained historical events are qualified on both metadata engines. Browser keyboard handoff and exact package/discussion downloads pass. Finding closure never confers model or production approval; full independence rules, exceptions/approvals, clean-environment reproduction, full retention and comprehensive accessibility remain open. P21 adds input/runtime-bound full CSV scoring receipts, current-role exact downloads and installed offline native score-parity verification. Clean fixed runtimes without network or installation data reproduce 300-row XGBoost classification/regression exports across whole batches and chunk sizes 1/17/64; calibrated logistic replay and tamper/runtime/authority boundaries pass. Core modules and declared tolerances are recorded. Native serialized state requires explicit trust; full refit/assessment reproduction, independent approval and release qualification remain open. P22 adds one exact-package integrity job with durable request/event/result receipts, explicit dedicated Celery/Redis dispatch, database admission/lease bounds, cooperative cancellation, authority/runtime rechecks and fenced terminal publication. Actual prefork delivery, killed-worker recovery after injected lease expiry, duplicate/stale publication, active cancellation and failed broker connection recovery pass against TLS PostgreSQL metadata. Real native package keyboard queue/status/receipt handoff passes in the review workspace. This is partial D07/D12: training/search/scoring migration, private Redis TLS, complete private worker packaging, job backup/restore and production recovery, expert isolation, complete accessibility and release/customer gates remain open. P26 adds explicit keyboard receipt selection, removal and downloading in package review, preserves job context during writes, and retains exact references across ambiguous retries. Real browser workflows pass; comprehensive accessibility remains open. P28 adds immutable grouped training-input subspace GVIF with nominal category-code invariance, exact one-hot provenance, dimensional adjustment and explicit rank/precision/budget states. Exact native replay uses no fitted state or final outcomes; current reviewers may inspect both numeric and grouped reports, with revocation checks and keyboard summaries. Lossy category encodings block the conditioning set. Independent reference, full metadata and browser checks pass; paired uncertainty, SQLite worker contention, expert isolation and release/customer gates remain open. P28 final hardening validates native NumPy format, bounded header, exact dtype/shape and payload length before allocating arrays; a retained failing-before/passing-after case confirms the boundary. The final complete matrices and browser/runtime image qualify this stronger source without changing prediction calculations or budgets. P31 adds a recorded allowlisted Angular production/private build, exact immutable TLS asset packaging, same-origin API/media credentials and explicit static/app routes with local fonts/licenses and exact-bundle browser CSP with sandboxed media attachments. Actual private HTTPS developer sign-in/reload, project selection, creation/upload/download/logout and blocked fallback/egress checks pass. Complete multi-image restricted-network installation, supply authentication, production recovery, expert isolation, independent reproduction, comprehensive accessibility and all release/value/customer gates remain open. P161 inventories 66 remaining tasks across all 26 outcomes, with P0–P3 priorities, owner roles, acceptance, source rationale and explicit dependency/blocked-input records. Ready, active, waiting and blocked states derive from validated dependencies; done requires qualified packet evidence. Search, filters, focused dependency links and five-state/done-open-blocked counts and deltas keep remaining scope separate from historical packet delivery and release gates. Native detail polling now applies the shared five-second PostgreSQL statement ceiling or stricter caller limit to the serialized receipt read. Existing queue locking, initial HTTP authority/auditing, schema, evidence and private uncached failure behavior remain. Merged PR259 passed exact-head CI40803985127 (7,301 native/six skips/553.915s), but independent main40807135390 hit the unchanged900-second native cap after7,168 of7,307completed/noXML or successful exit. All62 published cases passed and remain byte-identical. Failed main, valid original PR and local source are separately sealed; no CI rerun. The corrective source uses a zero-copy homogeneous numeric view only in the qualified XGBoost2.1.4/pandas3.0.6/NumPy2.5.3 profile, preserves explicit feature types and native DMatrix validation, and retains the original route for other representations/versions. Fresh numeric category detection and receipt dtype reuse avoid unused column access; all data/index/category hashing, fitted budgets and independent public assessment checks remain. The earlier source added forty-two matrix/model/prediction/receipt parity, mutation and fallback cases to its62 originals (104total). Paired synthetic process-CPU observations show less preparation work, not supported capacity. Corrective PR260 earlier head 5b6bfb7d2102 also failed its unchanged900-second native cap in run40817326245: 7220/7349 finished, 104/104 published additions completed without failure, remaining additions unverified, no finalXML or successful exit. Its raw evidence and valid prior local source remain sealed; it was not rerun. Corrective PR260 earlier head b0c5c2d6b171 also failed its unchanged900-second native cap in run40823708033: 6843/7388 finished, 128/143 published additions completed without failure, remaining additions unverified, no finalXML or successful exit. Its raw evidence and valid prior local source remain sealed; it was not rerun. SFS screening calculates only its accepted metric, with the original public ROC integrator retained for exact score rounding/ties. Full top-K CV and final reports, all fit/fold/budget/row checks remain. 39 additive tests compare complete steps, fit budgets, rankings, fold reports, failures and ties; initial near-tie test caught and corrected roundoff before publication. All104 published cases remain byte-identical. New SFS/HPO checkpoints and newly generated score-package metadata use compact stdlib JSON with unchanged options, decoded values, complete staged publication, fsync, no-overwrite behavior and exact published-byte hashes. Historical checkpoint/package evidence is never reformatted. Thirteen additive cases cover numeric/Unicode/key parity, failures, strict duplicate-key rejection and legacy/new immutable archive retries. All143 previously published additions remain byte-identical. Local: 787 focused and 7,395 native passes/six original skips in 716.210s. All six exact-head CI checks (40831125128) and independent push-main checks (40834711368) passed on first attempts; source trees match. Native timings 629.218s / 635.582s. Both scoped tasks now done; downstream readiness recalculated. The initial remaining-task inventory is dated P161; no historical scope is invented. Counts are not effort or whole-product completion. Initial HTTP routing/authority SQL remains outside the receipt budget; individual statement limits do not promise total latency. Lock-free detail/download consistency, supported installation, upgrade/rollback, coordinated restore, legacy execution migration, capacity and customer acceptance remain open. Original tests, CI/resources/thread/coverage/skip/retry controls and the 900-second native cap remain unchanged. No customer installation modified. Generated-source/isolated-JS qualification does not establish rendered appearance or screen-reader acceptance. P189 completes D12-T02 with role-aware entry, authorized URL-restored training/review panels, recorded job progress and cancellation/recovery guidance, attributable review changes and actionable invalidation explanations. Complete keyboard/screen-reader journeys remain in D12-T03."
     },
     {
       "id": "D13",
@@ -2295,6 +2296,10 @@
     {
       "date": "2026-11-19",
       "change": "Qualify D06-T03 for the sealed synthetic private profile. Backlog moves from 26/33/7 to 27/32/7 done/open/blocked across 66 tasks."
+    },
+    {
+      "date": "2026-11-19",
+      "change": "Complete D12-T02 onboarding, navigation and progress explanations. Backlog moves from 27/32/7 to 28/31/7 done/open/blocked across the same 66 tasks: done increases from 40.9% to 42.4% (+1.5 percentage points). D12-T03 becomes ready; D12 remains in progress."
     }
   ],
   "implementation_packets": [
@@ -5633,6 +5638,21 @@
         "[Sealed private deployment threat-model qualification](PRIVATE_THREAT_MODEL_QUALIFICATION.md)"
       ],
       "remaining": "Customer configuration and operational acceptance, the named independent reproduction exercise, and governed expert application workflows retain their own acceptance criteria."
+    },
+    {
+      "id": "P189",
+      "kind": "product_implementation",
+      "title": "Complete onboarding, navigation and progress explanations",
+      "items": [
+        "D12"
+      ],
+      "owner": "Frontend/Product",
+      "status": "tested",
+      "description": "Role-aware project entry, authorized panel navigation, readable durable job progress, recovery guidance and attributable review next steps.",
+      "evidence": [
+        "[Onboarding, navigation and progress qualification](WORKFLOW_GUIDANCE_QUALIFICATION.md)"
+      ],
+      "remaining": "D12-T03 retains complete accessible developer-to-reviewer journey qualification; customer usability and production acceptance remain separate."
     }
   ],
   "release_qualification": {
@@ -5794,20 +5814,20 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P187",
-    "source_commit": "9d434848f612ee3ecd06a2abc6e222b4de4d5c41",
+    "packet": "P188",
+    "source_commit": "2a56911629e70b19385aae6ace3b2a2c4248c44f",
     "outcomes": {
       "total": 26,
       "counts": {
-        "done": 2,
-        "open": 24,
+        "done": 3,
+        "open": 23,
         "blocked": 0
       }
     },
     "packets": {
-      "total": 187,
+      "total": 188,
       "counts": {
-        "done": 186,
+        "done": 187,
         "open": 0,
         "blocked": 1
       }
@@ -6844,7 +6864,7 @@
         ],
         "priority": "P0",
         "owner": "Frontend/Product",
-        "phase": "queued",
+        "phase": "done",
         "dependencies": [
           "D07-T05",
           "D09-T01"
@@ -6854,8 +6874,12 @@
           "Progress, cancellation and technical details remain accessible and attributable."
         ],
         "blockers": [],
-        "evidence": [],
-        "packet_refs": [],
+        "evidence": [
+          "[Onboarding, navigation and progress qualification](WORKFLOW_GUIDANCE_QUALIFICATION.md)"
+        ],
+        "packet_refs": [
+          "P189"
+        ],
         "order": 35,
         "basis": "Remaining acceptance scope from D12; existing tested foundation is reused, not rebuilt."
       },
@@ -7673,16 +7697,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P188 private deployment threat-model qualification",
+      "label": "Before P189 onboarding, navigation and progress explanations",
       "recorded_on": "2026-11-19",
-      "inventory_source_commit": "9d434848f612ee3ecd06a2abc6e222b4de4d5c41",
+      "inventory_source_commit": "2a56911629e70b19385aae6ace3b2a2c4248c44f",
       "total": 66,
       "counts": {
-        "ready": 4,
+        "ready": 3,
         "in_progress": 0,
         "waiting": 29,
         "blocked": 7,
-        "done": 26
+        "done": 27
       }
     },
     "baseline_history": [
@@ -8034,6 +8058,20 @@
           "waiting": 30,
           "blocked": 7,
           "done": 25
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P188 private deployment threat-model qualification",
+        "recorded_on": "2026-11-19",
+        "inventory_source_commit": "9d434848f612ee3ecd06a2abc6e222b4de4d5c41",
+        "total": 66,
+        "counts": {
+          "ready": 4,
+          "in_progress": 0,
+          "waiting": 29,
+          "blocked": 7,
+          "done": 26
         }
       }
     ]

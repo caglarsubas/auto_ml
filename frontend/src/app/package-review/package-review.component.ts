@@ -52,6 +52,57 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
   get params() {
     return { project_id: this.projectId };
   }
+  get nextStep(): string {
+    if (this.pending)
+      return 'An action has an unconfirmed outcome. Retry the pending action with its original receipt before making another change.';
+    if (!this.review)
+      return this.role === 'reviewer'
+        ? 'Open a current package review or select a completed assessment to begin independent review.'
+        : 'Open a review to inspect findings and the recorded evidence. Developers can respond to current findings.';
+    if (this.review.freshness !== 'current')
+      return 'This evidence is historical or unverified. Open a current package or assessment before recording further review actions.';
+    if (this.role === 'developer')
+      return 'Read the findings, select an open finding and record your response. An independent reviewer records its disposition.';
+    if (this.role !== 'reviewer')
+      return 'Inspect the evidence and attributable history. Review actions require the current project reviewer role.';
+    if (this.review.decision?.status === 'approved')
+      return 'Technical review is approved for this exact evidence. Further discussion or upstream changes require the decision to be checked again. Production use requires separate approval.';
+    if ((this.review.findings ?? []).some((finding: any) => finding.state === 'open'))
+      return 'Review the open findings and developer responses. Resolve each finding or record an eligible time-bound exception before technical approval.';
+    return this.review.assessment_job_id
+      ? 'Inspect the assessment and independently reproduce its manifest. Attach the reproduction report when recording technical approval. The server checks evidence and reviewer independence.'
+      : 'Inspect the exact package and record findings or dispositions. Package discussion does not grant production-use approval.';
+  }
+  get decisionExplanation(): string {
+    const explanations: Record<string, string> = {
+      review_upstream_evidence_changed:
+        'The underlying evidence changed. Open the current assessment and reproduce it before requesting a new approval.',
+      review_approval_evidence_changed:
+        'The approval evidence could not be verified. Refresh the review and check the exact reproduction report.',
+      review_policy_changed:
+        'The applicable review policy changed. Recheck the evidence against the current policy before requesting approval.',
+      review_approver_authority_changed:
+        'The approving reviewer’s authority changed. A currently authorized independent reviewer must reassess the evidence.',
+      review_discussion_changed:
+        'The discussion changed after approval. Review the latest findings and dispositions, then record a new decision.',
+      review_exception_unavailable:
+        'A required exception is no longer available. Resolve the finding or record an eligible current exception before requesting approval.',
+      review_approval_revoked:
+        'A reviewer revoked technical approval. Read the recorded reason and address it before requesting a new decision.',
+    };
+    return (
+      explanations[this.review?.decision?.reason_code] ??
+      'Refresh the review and inspect the recorded reason before requesting a new decision.'
+    );
+  }
+  get lastEvent(): any {
+    return this.review?.events?.at(-1);
+  }
+  private clearAccess(): void {
+    this.generation++;
+    this.review = this.directory = this.nativeCandidate = null;
+    this.clearDraft();
+  }
   get hasCurrentReview(): boolean {
     return !!this.directory?.reviews.some(
       (review: any) => review.bundle_id === this.directory.current_package?.bundle_id,
@@ -116,8 +167,9 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
             this.directory = { ...page, reviews: [...this.directory.reviews, ...page.reviews] };
             this.busy = false;
           },
-          error: () => {
+          error: (error) => {
             if (generation === this.generation) {
+              if (error.status === 403) this.clearAccess();
               this.busy = false;
               this.error = 'Older reviews could not be loaded. Refresh access and retry.';
             }
@@ -172,9 +224,10 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
           this.review = review;
           this.busy = false;
         },
-        error: () => {
+        error: (error) => {
           if (generation !== this.generation) return;
           this.busy = false;
+          if (error.status === 403) this.clearAccess();
           this.error = 'Review access or evidence could not be checked. Refresh access and retry.';
         },
       }),
@@ -291,15 +344,23 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
             this.pending = null;
             this.review = null;
             this.clearDraft();
-            this.error = `Action was blocked (${error.error?.error_code || 'invalid request'}). Refresh the review before making another change.`;
+            const code = error.error?.error_code || 'invalid request';
+            const guidance: Record<string, string> = {
+              review_findings_unaddressed:
+                'Resolve open findings or record eligible time-bound exceptions before approval.',
+              review_reproduction_report_mismatch:
+                'Reproduce the exact current manifest and attach its matching report.',
+            };
+            this.error = `Action was blocked (${code}). ${guidance[code] ?? 'The evidence, discussion or request may have changed.'} Refresh the review before making another change.`;
           } else {
             if (error.status === 403) {
-              this.review = this.directory = null;
-              this.nativeCandidate = null;
-              this.clearDraft();
+              this.clearAccess();
             }
-            this.error =
-              'The outcome could not be confirmed. Retry the pending action with the same receipt.';
+            const authority =
+              error.status === 403
+                ? 'Project authority could not be verified. Ask an administrator to check your current role and reviewer independence. '
+                : '';
+            this.error = `${authority}The outcome could not be confirmed. Retry the pending action with the same receipt.`;
           }
         },
       }),
@@ -342,8 +403,7 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
           error: (error) => {
             if (generation !== this.generation) return;
             if (error.status === 403) {
-              this.review = this.directory = this.nativeCandidate = null;
-              this.clearDraft();
+              this.clearAccess();
             }
             this.error =
               'Linked receipt access or integrity could not be checked. Refresh and retry.';
@@ -359,9 +419,10 @@ export class PackageReviewComponent implements OnChanges, OnDestroy {
       if (generation !== this.generation) return;
       downloadBlob(blob, filename);
     };
-    const fail = () => {
-      if (generation === this.generation)
-        this.error = 'Evidence download could not be verified. Refresh access and retry.';
+    const fail = (error: { status: number }) => {
+      if (generation !== this.generation) return;
+      if (error.status === 403) this.clearAccess();
+      this.error = 'Evidence download could not be verified. Refresh access and retry.';
     };
     if (kind === 'discussion') {
       this.requests.add(
