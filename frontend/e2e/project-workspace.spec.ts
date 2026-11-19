@@ -99,9 +99,16 @@ for (const [name, role] of [
     ).toHaveCount(0);
     const reportButton = page.getByRole('button', { name: `Download report for ${name} pipeline` });
     await expect(reportButton).toBeEnabled();
+    const reportResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        /\/api\/pipeline\/\d+\/report\/$/.test(url.pathname) &&
+        url.searchParams.get('project_id') === id
+      );
+    });
     const download = page.waitForEvent('download');
-    await reportButton.focus();
-    await page.keyboard.press('Enter');
+    await reportButton.press('Enter');
+    expect((await reportResponse).status()).toBe(200);
     expect((await download).suggestedFilename()).toMatch(/^pipeline-\d+-report.html$/);
     await page.goto('/model-development?project_id=' + id);
     await expect(page).toHaveURL(/\/home\?project_id=/);
@@ -157,7 +164,10 @@ test('directory failure leaves no stale project records or development authority
   await expect(page.getByRole('alert')).toContainText('Retry to load');
 });
 
-test('project administrator reviews, grants and revokes an enrolled account', async ({ page, browser }) => {
+test('project administrator reviews, grants and revokes an enrolled account', async ({
+  page,
+  browser,
+}) => {
   const credentials = requireTestCredentials();
   const subject = credentials.username + '-review-developer';
   await signIn(page);
@@ -192,7 +202,9 @@ test('project administrator reviews, grants and revokes an enrolled account', as
     await membership.getByRole('button', { name: 'Apply membership change' }).click();
     await expect(membership.getByRole('status')).toContainText('Membership change recorded.');
     await subjectPage.getByRole('button', { name: 'Refresh access', exact: true }).click();
-    await expect(subjectPicker.getByRole('option', { name: 'Workspace Admin — reviewer' })).toHaveCount(0);
+    await expect(
+      subjectPicker.getByRole('option', { name: 'Workspace Admin — reviewer' }),
+    ).toHaveCount(0);
     await expect(subjectPage.getByLabel('Project datasets')).toHaveCount(0);
   } finally {
     await subjectContext.close();

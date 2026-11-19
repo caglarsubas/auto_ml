@@ -51,6 +51,14 @@ case identities, coverage controls, worker limits and 900-second PostgreSQL cap
 remain unchanged. Exact PR and independent push-main receipts are publication
 gates and remain separate from local checks.
 
+Qualification also corrects the resource observer's cgroup-removal race. It
+discards incomplete ENOENT/ENODEV samples and requires at least one complete
+zero-swap observation before accepting a peak. Eleven regressions retain the
+original deadlines, memory-pressure threshold, terminal failure and cleanup
+checks, and reject invalid limits or unexpected read errors. Browser report
+activation targets the exact keyboard locator and verifies the project-bound
+HTTP response as well as the downloaded file.
+
 D12-T03 retains complete keyboard/screen-reader journey qualification. This
 packet does not establish assistive-technology acceptance, customer usability
 acceptance or production-use approval. The roadmap's 66-task denominator is
