@@ -12,6 +12,9 @@ LEDGER = ROOT / 'docs/product-roadmap.json'
 OUTPUT = ROOT / 'docs/PRODUCT_DEVELOPMENT_ROADMAP.md'
 STATES = {'planned', 'in_progress', 'implemented', 'tested', 'released', 'customer_accepted'}
 EVIDENCE_STATES = {'implemented', 'tested', 'released', 'customer_accepted'}
+metrics_spec = importlib.util.spec_from_file_location('roadmap_progress', ROOT / 'docs/roadmap-tracker/metrics.py')
+metrics = importlib.util.module_from_spec(metrics_spec)
+metrics_spec.loader.exec_module(metrics)
 
 
 def required_text(record, fields, label):
@@ -62,6 +65,8 @@ def validate(data):
     for item in by_id.values():
         key = item['id']
         required_text(item, ['title', 'description', 'acceptance', 'owner', 'status', 'milestone'], key)
+        if 'closure_evidence' in item:
+            required_text(item, ['closure_evidence'], key)
         if item['status'] not in STATES or item['milestone'] not in milestones:
             raise ValueError(f'Invalid state/milestone for {key}')
         text_list(item, 'sources', key, nonempty=True)
@@ -131,10 +136,9 @@ def validate(data):
         if not queue:
             raise ValueError('Reconciliation requires the canonical implementation queue.')
     if 'backlog' in data or 'progress_baseline' in data or any('blocked_reason' in record for record in [*by_id.values(), *packet_map.values()]):
-        spec = importlib.util.spec_from_file_location('roadmap_progress', ROOT / 'docs/roadmap-tracker/metrics.py')
-        metrics = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(metrics)
         metrics.status_metrics(data)
+    elif 'handoff_observations' in qualification:
+        metrics.review_handoffs(qualification['handoff_observations'])
     return by_id
 
 
@@ -167,6 +171,21 @@ def render(data):
         for group in data['implementation_queue']:
             lines.append(f'| {group["order"]} | {group["title"]} | {", ".join(group["items"])} | {group["owner"]} | {group["exit_requirement"]} |')
         lines += ['', 'Compatible work may run concurrently only under explicit packet ownership; all release prerequisites still apply.', '']
+    observations = data.get('release_qualification', {}).get('handoff_observations')
+    if observations is not None:
+        handoffs = metrics.review_handoffs(observations)
+        lines += ['## Observed developer-to-reviewer handoffs', '',
+                  '[Exercise plan, measures and decision criteria](REVIEW_HANDOFF_PLAN.md).', '']
+        if not handoffs['observations']:
+            lines += ['Unmeasured. Awaiting the first attributable handoff. '
+                      'Active effort, waiting, review iterations, help requests and validation defects have no recorded values.', '']
+        for row in handoffs['observations']:
+            lines += [f"### {row['id']} — {row['case']}", '',
+                      f"{row['team']} · {row['scope']} · {row['method']} · {row['status']}", '']
+            numbers = {**row['measures'], 'combined_minutes': row['combined_minutes']}
+            for key, label in {**handoffs['labels'], 'combined_minutes': 'Combined active minutes'}.items():
+                lines.append(f"- {label} — {numbers[key] if numbers[key] is not None else 'Unmeasured'}")
+            lines += ['', row['finding'], '', f"Evidence — {row['evidence']}", '']
     if data.get('backlog'):
         spec = importlib.util.spec_from_file_location('roadmap_backlog', ROOT / 'docs/roadmap-tracker/backlog.py')
         module = importlib.util.module_from_spec(spec)
@@ -225,6 +244,8 @@ def render(data):
                       '**Source mapping:** ' + '; '.join(item['sources']) + '.', '']
             if item.get('progress'):
                 lines += ['**Progress:** ' + item['progress'], '']
+            if item.get('closure_evidence'):
+                lines += ['**Evidence needed to close this outcome**', '', item['closure_evidence'], '']
             if item['evidence']:
                 lines += ['**Evidence:** ' + '; '.join(item['evidence']), '']
         lines += ['**Milestone gate:** ' + milestone['gate'], '']

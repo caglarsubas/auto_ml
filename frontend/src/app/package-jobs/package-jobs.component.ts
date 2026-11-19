@@ -1,6 +1,9 @@
 import { downloadBlob } from '../utils/download-blob';
 import {
+  AfterViewChecked,
   Component,
+  ElementRef,
+  ViewChild,
   Input,
   Output,
   EventEmitter,
@@ -32,7 +35,7 @@ export interface NativeAssessmentReviewIdentity {
   styleUrl: './package-jobs.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,
 })
-export class PackageJobsComponent implements OnChanges, OnDestroy {
+export class PackageJobsComponent implements OnChanges, OnDestroy, AfterViewChecked {
   @Input() mode: 'package' | 'training' = 'package';
   @Input({ required: true }) fileId!: number;
   @Input({ required: true }) projectId!: string;
@@ -55,6 +58,8 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
   inputFileId = 0;
   source: any = null;
   pending: { url: string; body: any } | null = null;
+  @ViewChild('receiptSummary') private receiptSummary?: ElementRef<HTMLElement>;
+  private focusReceipt?: string;
   private retryOpenId: string | null = null;
   private generation = 0;
   private receiptRequest = 0;
@@ -69,6 +74,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
     // Avoid resetting selection and issuing an audit-writing read at that point.
     if (changes && Object.keys(changes).every((key) => key === 'evidenceEnabled')) return;
     this.generation++;
+    this.focusReceipt = undefined;
     this.requests.unsubscribe();
     this.requests = new Subscription();
     this.directory = this.job = this.handoff = this.pending = this.source = null;
@@ -125,7 +131,13 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
         }),
     );
   }
-  open(id: string): void {
+  ngAfterViewChecked(): void {
+    if (this.focusReceipt && this.job?.id === this.focusReceipt && this.receiptSummary) {
+      this.focusReceipt = undefined;
+      this.receiptSummary.nativeElement.focus();
+    }
+  }
+  open(id: string, focusReceipt = false): void {
     if (this.busy) return;
     this.busy = true;
     this.retryOpenId = id;
@@ -139,6 +151,7 @@ export class PackageJobsComponent implements OnChanges, OnDestroy {
         next: (job) => {
           if (generation === this.generation) {
             this.job = job;
+            this.focusReceipt = focusReceipt ? id : undefined;
             this.retryOpenId = null;
             this.busy = false;
           }

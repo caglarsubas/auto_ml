@@ -11,13 +11,21 @@ async function signIn(page: Page, suffix = '-training') {
   await expect(page).toHaveURL(/\/home$/);
 }
 async function open(page: Page, name: string) {
-  await page.getByRole('button', { name: 'Training jobs for ' + name, exact: true }).focus();
+  const trigger = page.getByRole('button', { name: 'Training jobs for ' + name, exact: true });
+  await trigger.press('Enter');
+  const panel = page.getByRole('region', { name: 'Dataset training jobs', exact: true });
+  await expect(panel).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Close training panel' })).toBeFocused();
   await page.keyboard.press('Enter');
+  await expect(trigger).toBeFocused();
+  await trigger.press('Enter');
   await expect(page.getByRole('heading', { name: 'Development training · ' + name })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Refresh jobs', exact: true })).toBeEnabled();
   await expect(page).toHaveURL(/dataset_id=\d+.*view=training/);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Development training · ' + name })).toBeVisible();
+  await expect(panel).not.toBeFocused();
 }
 async function fill(page: Page, regression = false) {
   await page

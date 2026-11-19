@@ -1,7 +1,48 @@
 """Pure snapshot counts; delivery order is not time, effort or scope completion."""
+import math
+
 STATES = ('planned', 'in_progress', 'implemented', 'tested', 'released', 'customer_accepted')
 TESTED = {'tested', 'released', 'customer_accepted'}
 PROGRESS = ('done', 'open', 'blocked')
+
+HANDOFF_MEASURES = {
+    'developer_minutes': 'Developer active minutes', 'reviewer_minutes': 'Reviewer active minutes',
+    'wait_minutes': 'Waiting minutes', 'review_iterations': 'Review iterations',
+    'help_requests': 'Help requests', 'validation_defects': 'Validation defects',
+}
+
+
+def review_handoffs(observations):
+    """Project recorded human observations without imputing missing effort or defects."""
+    if not isinstance(observations, list):
+        raise ValueError('Handoff observations must be a list')
+    rows = []
+    seen = set()
+    for record in observations:
+        if not isinstance(record, dict):
+            raise ValueError('Invalid handoff observation')
+        for field in ('id', 'case', 'team', 'evidence', 'finding'):
+            if not isinstance(record.get(field), str) or not record[field].strip():
+                raise ValueError(f'Missing handoff {field}')
+        if record['id'] in seen:
+            raise ValueError('Duplicate handoff observation ID')
+        seen.add(record['id'])
+        if (record.get('scope') not in ('Independent exercise', 'Design partner')
+                or record.get('method') not in ('Guided', 'Single agent', 'Agentic')
+                or record.get('status') not in ('Completed', 'Partial', 'Failed')):
+            raise ValueError('Invalid handoff scope, method or status')
+        measures = record.get('measures')
+        if not isinstance(measures, dict) or measures.keys() != HANDOFF_MEASURES.keys():
+            raise ValueError('Record every handoff measure with a number or null')
+        for key, value in measures.items():
+            if value is None:
+                continue
+            if (type(value) not in (int, float) or not math.isfinite(value) or value < 0
+                    or (not key.endswith('_minutes') and type(value) is not int)):
+                raise ValueError(f'Invalid handoff measure: {key}')
+        dev, reviewer = measures['developer_minutes'], measures['reviewer_minutes']
+        rows.append({**record, 'combined_minutes': (dev + reviewer if dev is not None and reviewer is not None else None)})
+    return {'labels': HANDOFF_MEASURES, 'observations': rows}
 
 
 def progress_distribution(items, baseline=None):
@@ -91,4 +132,7 @@ def status_metrics(ledger):
                        if task['status'] == 'blocked' else {})} for task in backlog['tasks']]
         result['progress']['backlog'] = progress_distribution(records, old)
         result['progress']['backlog_comparison'] = backlog['comparison']
+    qualification = ledger.get('release_qualification', {})
+    if 'handoff_observations' in qualification:
+        result['handoffs'] = review_handoffs(qualification['handoff_observations'])
     return result
