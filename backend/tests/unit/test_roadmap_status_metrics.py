@@ -73,3 +73,34 @@ def test_unknown_status_is_rejected_instead_of_disappearing_from_the_denominator
     value['implementation_packets'][0]['status'] = 'unknown'
     with pytest.raises(ValueError, match='Unknown roadmap state'):
         metrics.status_metrics(value)
+
+
+def test_handoff_preserves_zero_missing_and_partial_observations():
+    measures = dict.fromkeys(metrics.HANDOFF_MEASURES)
+    measures.update(developer_minutes=12.5, help_requests=0)
+    row = dict(id='exercise-1', case='Binary credit fixture', team='Review team A',
+               evidence='Synthetic receipt 1', finding='Population challenge under review',
+               scope='Independent exercise', method='Guided', status='Partial', measures=measures)
+    data = ledger()
+    data['release_qualification'] = {'handoff_observations': [row]}
+    observed, = metrics.status_metrics(data)['handoffs']['observations']
+    assert observed['combined_minutes'] is None and observed['measures']['help_requests'] == 0
+    assert observed['measures']['validation_defects'] is None
+    measures.update(reviewer_minutes=0, validation_defects=0)
+    assert metrics.review_handoffs([row])['observations'][0]['combined_minutes'] == 12.5
+    assert metrics.review_handoffs([])['observations'] == []
+
+
+def test_handoff_requires_attributable_evidence_and_valid_counts():
+    row = dict(id='exercise-1', case='Regression fixture', team='Review team B',
+               evidence='Synthetic receipt 2', finding='Stopped at evidence handoff',
+               scope='Design partner', method='Single agent', status='Failed',
+               measures=dict.fromkeys(metrics.HANDOFF_MEASURES))
+    for bad in (dict(evidence=''), dict(scope='CI'), dict(measures={}),
+                dict(measures={**row['measures'], 'help_requests': False}),
+                dict(measures={**row['measures'], 'validation_defects': .5}),
+                dict(measures={**row['measures'], 'wait_minutes': float('nan')})):
+        with pytest.raises(ValueError):
+            metrics.review_handoffs([{**row, **bad}])
+    with pytest.raises(ValueError, match='Duplicate'):
+        metrics.review_handoffs([row, row])

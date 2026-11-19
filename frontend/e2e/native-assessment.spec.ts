@@ -60,11 +60,13 @@ async function exerciseNativeReview(
     .getByRole('button', { name: 'Review package for ' + datasetName, exact: true })
     .click();
   const panel = page.locator('app-package-review');
+  await expect(page.getByRole('region', { name: 'Dataset review evidence' })).toBeFocused();
   const reviewButton = panel.getByRole('button', {
     name: 'Open native assessment review',
     exact: true,
   });
   await panel.getByRole('button', { name: 'Open job ' + assessment.job_id, exact: true }).click();
+  await expect(panel.getByRole('status', { name: /Job state: succeeded/ })).toBeFocused();
   await expect(reviewButton).toHaveCount(0);
   const downloaded = page.waitForEvent('download');
   await panel.getByRole('button', { name: 'Download reproduction manifest', exact: true }).focus();

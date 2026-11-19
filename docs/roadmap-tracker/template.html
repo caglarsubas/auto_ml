@@ -88,6 +88,7 @@
         </div>
       </div>
       <div id="progress-summary" aria-live="polite" aria-atomic="true"></div>
+      <section id="handoff-measures" class="progress-rollup" aria-labelledby="handoff-title" hidden></section>
       <div id="distribution-content" aria-live="polite" aria-atomic="true"></div>
       <p class="distribution-note">Each percentage uses the selected record count. New deliveries can increase the count while its status share stays the same. Outcome and release acceptance require their own evidence.</p>
     </div>
@@ -209,6 +210,23 @@ function renderDistribution(){
 $$('[data-distribution]').forEach(button=>button.addEventListener('click',()=>{distributionType=button.dataset.distribution;renderDistribution();}));
 renderDistribution();
 if(V.errors.length||!V.main?.matches_source||!META.editorial_current){$('#verification-notice').innerHTML=`<div class="note"><strong>${META.ledger_dirty?'Work in progress snapshot.':SNAPSHOT.starter?.checkpoint.pr?'PR qualification snapshot.':'Snapshot limitations.'}</strong> ${!META.editorial_current?'Editorial summaries were not re-reviewed for this source and are hidden. ':''}${META.ledger_dirty?'Includes uncommitted roadmap updates; the latest qualified merged delivery is shown separately. ':!V.main?.matches_source?(SNAPSHOT.starter?.checkpoint.pr?'This source is under PR/main qualification; the latest independently qualified delivery is shown separately. ':'The source commit is not confirmed as current main. '):''}${V.errors.map(esc).join(' ')} Full source records are retained.</div>`;}
+const handoffs = SNAPSHOT.status_metrics.handoffs;
+if (handoffs) {
+ const panel = $('#handoff-measures');
+ const measure = value => value == null ? 'Unmeasured' : esc(value);
+ const observations = handoffs.observations.map(row => {
+   const measures = Object.entries(handoffs.labels).map(([key,label]) =>
+     `<div><dt>${esc(label)}</dt><dd>${measure(row.measures[key])}</dd></div>`).join('');
+   return `<details><summary>${esc(row.case)} · ${esc(row.method)} · ${esc(row.status)}</summary>
+     <p>${esc(row.team)} · ${esc(row.scope)} · ${esc(row.id)}</p>
+     <dl>${measures}<div><dt>Combined active minutes</dt><dd>${measure(row.combined_minutes)}</dd></div></dl>
+     <p>${esc(row.finding)}</p><p>Evidence · ${esc(row.evidence)}</p></details>`;
+ }).join('');
+ panel.innerHTML = `<h3 id="handoff-title">Observed developer-to-reviewer handoffs</h3>
+   ${observations || '<p><strong>Unmeasured.</strong> Awaiting the first attributable handoff. Active effort, waiting, review iterations, help requests and validation defects have no recorded values.</p>'}
+   <p>${evidenceLink('[Exercise plan and measurement definitions](REVIEW_HANDOFF_PLAN.md)')} · <a href="#backlog/D09-T03">Independent exercise</a> · <a href="#backlog/D22-T02">Partner comparison</a></p>`;
+ panel.hidden = false;
+}
 const last=V.latest_delivery, starter=SNAPSHOT.starter, operatorCheckpoint=SNAPSHOT.operator_checkpoint;
 const focusPacket=L.implementation_packets.find(packet=>packet.id===starter?.id) ?? L.implementation_packets.at(-1);
 const focusOutcome=L.items.find(item=>item.id===focusPacket?.items[0]);
@@ -223,7 +241,7 @@ function renderChips(){$('#status-filters').innerHTML=filters.map(([key,label,n]
 function outcomeHTML(i){
  const n=SNAPSHOT.editorial[i.id], ps=packetsFor(i.id), product=ps.filter(p=>p.kind!=='roadmap_reconciliation'), docs=ps.filter(p=>p.kind==='roadmap_reconciliation');
  const deliverySummary=['tested','in_progress','planned','implemented','released','customer_accepted'].map(key=>{const count=product.filter(p=>p.status===key).length;return count?count+' '+({in_progress:'active',customer_accepted:'accepted'}[key]||key):'';}).filter(Boolean).join(' · ');
- const remaining=n?.remaining||[i.acceptance];
+ const remaining=i.closure_evidence ? [i.closure_evidence] : n?.remaining||[i.acceptance];
  const preview=remaining[0], phase=phaseFor(i.id);
  const deps=i.dependencies.filter(id=>!closed(byID.get(id)));
  const pilot=L.release_qualification.pilot_required_outcomes.includes(i.id);

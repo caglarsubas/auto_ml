@@ -90,7 +90,18 @@ for (const [name, role] of [
     await picker.selectOption({ label: `${name} — ${role}` });
     const id = await picker.inputValue();
     await expect(page.locator('#workspace-role')).toContainText(`Your role: ${role}`);
-    await page.getByRole('button', { name: 'Refresh access', exact: true }).click();
+    await expect(page.getByLabel('Project pipelines')).toContainText(`${name} pipeline`);
+    await expect(page.getByLabel('Project datasets')).toContainText(`${name}.csv`);
+    const freshRead = (path: string) =>
+      page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return url.pathname === path && url.searchParams.get('project_id') === id && response.ok();
+      });
+    await Promise.all([
+      freshRead('/api/declaration/'),
+      freshRead('/api/pipeline/'),
+      page.getByRole('button', { name: 'Refresh access', exact: true }).click(),
+    ]);
     await expect(picker).toHaveValue(id);
     await expect(page.getByLabel('Project datasets')).toContainText(`${name}.csv`);
     await expect(page.getByLabel('Project pipelines')).not.toContainText('Workspace A pipeline');

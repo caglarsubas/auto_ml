@@ -46,7 +46,7 @@
     <app-native-job-history
       [fileId]="fileId"
       [projectId]="projectId"
-      (jobSelected)="open($event)"
+      (jobSelected)="open($event, true)"
     />
   }
   @if (busy) {
@@ -124,7 +124,7 @@
       <ul [attr.aria-label]="mode === 'training' ? 'Dataset jobs' : 'Package jobs'">
         @for (item of directory.jobs; track item.id) {
           <li>
-            <button type="button" (click)="open(item.id)" [disabled]="busy">
+            <button type="button" (click)="open(item.id, true)" [disabled]="busy">
               Open job {{ item.id }}
             </button>
             · {{ jobKindLabel(item.kind) }} · {{ item.state }} · {{ item.bundle_id }}
@@ -138,14 +138,26 @@
       }
     }
   }
-  @if (job) {
-    <div role="status" aria-live="polite" aria-atomic="true">
+  <div
+    #receiptSummary
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+    tabindex="-1"
+    [attr.aria-labelledby]="job ? 'job-state-' + job.id : null"
+    [attr.aria-describedby]="job ? 'job-guidance-' + job.id : null"
+  >
+    @if (job) {
       <p>
         <strong>{{ jobKindLabel(job.specification.kind, job.result?.operation) }}</strong>
       </p>
-      <p>Job state: {{ job.state }} · Attempts started {{ job.attempts }}</p>
-      <p>{{ jobNextStep(job.state) }}</p>
-    </div>
+      <p [id]="'job-state-' + job.id">
+        Job state: {{ job.state }} · Attempts started {{ job.attempts }}
+      </p>
+      <p [id]="'job-guidance-' + job.id">{{ jobNextStep(job.state) }}</p>
+    }
+  </div>
+  @if (job) {
     <p>
       Request <code>{{ job.id }}</code> · Submitted by
       {{ job.submitted_by.username || 'Recorded actor unavailable' }}

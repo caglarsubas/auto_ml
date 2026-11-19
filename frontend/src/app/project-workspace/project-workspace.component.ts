@@ -1,5 +1,13 @@
 import { downloadBlob } from '../utils/download-blob';
-import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  AfterViewChecked,
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
@@ -25,7 +33,7 @@ import { TrainingLaunchComponent } from '../training-launch/training-launch.comp
   styleUrl: './project-workspace.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,
 })
-export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
+export class ProjectWorkspaceComponent implements OnInit, OnDestroy, AfterViewChecked {
   datasets: any[] = [];
   pipelines: any[] = [];
   loading = false;
@@ -34,6 +42,8 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
   panelError = '';
   reviewDataset: number | null = null;
   trainingDataset: any = null;
+  @ViewChild('openPanel') private panel?: ElementRef<HTMLElement>;
+  private requestedFocus?: { dataset: number; view: 'training' | 'review'; project: string };
   private preferredProject: string | null = null;
   private navigation: ParamMap | null = null;
   private readonly subscriptions = new Subscription();
@@ -105,6 +115,7 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
     this.subscriptions.add(this.workspace.refresh(this.preferredProject).subscribe());
   }
   select(projectId: string): void {
+    this.requestedFocus = undefined;
     this.preferredProject = projectId;
     this.reviewDataset = null;
     this.trainingDataset = null;
@@ -119,6 +130,7 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
       !this.datasets.some((row) => row.id === dataset.id)
     )
       return;
+    this.requestedFocus = { dataset: dataset.id, view, project: this.workspace.projectId };
     this.navigate({
       project_id: this.workspace.projectId,
       dataset_id: dataset.id,
@@ -126,9 +138,22 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
     });
   }
   closePanel(): void {
+    const trigger = this.trainingDataset
+      ? 'workspace-training-' + this.trainingDataset.id
+      : 'workspace-review-' + this.reviewDataset;
+    this.requestedFocus = undefined;
+    document.getElementById(trigger)?.focus();
     this.reviewDataset = null;
     this.trainingDataset = null;
     this.navigate({ dataset_id: null, view: null });
+  }
+  ngAfterViewChecked(): void {
+    const request = this.requestedFocus;
+    if (!request || !this.panel || this.workspace.projectId !== request.project) return;
+    const current = request.view === 'training' ? this.trainingDataset?.id : this.reviewDataset;
+    if (current !== request.dataset) return;
+    this.requestedFocus = undefined;
+    this.panel.nativeElement.focus();
   }
   private navigate(queryParams: Record<string, string | number | null>): void {
     this.router
@@ -138,6 +163,7 @@ export class ProjectWorkspaceComponent implements OnInit, OnDestroy {
         queryParamsHandling: 'merge',
       })
       .catch(() => {
+        this.requestedFocus = undefined;
         this.panelError =
           'Workspace navigation could not be updated. Refresh access and try again.';
       });

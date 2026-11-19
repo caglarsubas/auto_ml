@@ -94,6 +94,7 @@
                   <button
                     type="button"
                     (click)="showPanel(dataset, 'training')"
+                    [id]="'workspace-training-' + dataset.id"
                     [attr.aria-expanded]="trainingDataset?.id === dataset.id"
                     [attr.aria-controls]="
                       trainingDataset?.id === dataset.id ? 'workspace-training-panel' : null
@@ -111,6 +112,7 @@
                   <button
                     type="button"
                     (click)="showPanel(dataset, 'review')"
+                    [id]="'workspace-review-' + dataset.id"
                     [attr.aria-expanded]="reviewDataset === dataset.id"
                     [attr.aria-controls]="
                       reviewDataset === dataset.id ? 'workspace-review-panel' : null
@@ -155,7 +157,13 @@
         <p role="alert">{{ reportError }}</p>
       }
       @if (reviewDataset !== null && !loading && !recordsError) {
-        <div id="workspace-review-panel">
+        <div
+          #openPanel
+          id="workspace-review-panel"
+          role="region"
+          aria-label="Dataset review evidence"
+          tabindex="-1"
+        >
           <button type="button" (click)="closePanel()">Close review panel</button>
           <app-package-review
             [fileId]="reviewDataset"
@@ -165,7 +173,13 @@
         </div>
       }
       @if (trainingDataset && !loading && !recordsError) {
-        <div id="workspace-training-panel">
+        <div
+          #openPanel
+          id="workspace-training-panel"
+          role="region"
+          aria-label="Dataset training jobs"
+          tabindex="-1"
+        >
           <button type="button" (click)="closePanel()">Close training panel</button>
           <app-training-launch
             [fileId]="trainingDataset.id"
