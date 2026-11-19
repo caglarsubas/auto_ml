@@ -316,7 +316,7 @@ def main():
 
                     prefix, native_receipt = prepare(
                         args.private_api_image, root=ROOT, fixture=fixture,
-                        name=runner, environment=current,
+                        name=runner, environment=current, fixture_network=network,
                     )
                     # The controller retains the original 900-second child cap.
                     # Every selected case, branch measurement, fit and fold runs
@@ -326,6 +326,13 @@ def main():
                         timeout=60,
                     )
                     (reports / "native-suite-dependency-profile.json").write_bytes(native_dependencies)
+                    scratch_address = command([
+                        "docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", test_db
+                    ]).decode().strip()
+                    native_receipt["database_session"] = json.loads(command(
+                        [*prefix, str(ROOT / "scripts/private_native_suite.py"), "--verify-database", scratch_address],
+                        timeout=60,
+                    ))
                     (reports / "native-suite-runtime.json").write_text(json.dumps(native_receipt, indent=2) + "\n")
                     argv = [*prefix, *arguments]
                     cwd = ROOT
@@ -635,6 +642,10 @@ def main():
                 command(["docker", "exec", "-i", test_db, "pg_restore", "--exit-on-error",
                          "-U", "declarai_fixture_admin", "-d", "declarai_fixture_tests"], data=test_dump)
                 run_python(query, test_env, report="postgresql-suite-tls.log")
+                # The native test container joins the owned bridge. Its credentials
+                # and verify-full policy apply on the direct PostgreSQL listener.
+                test_env.update(DECLARAI_DB_HOST="postgres", DECLARAI_DB_PORT="5432",
+                                REDIS_URL=f"redis://{redis}:6379/0")
                 suite_database_report.write_text(json.dumps({
                     "schema": "private_native_postgresql_fixture_v1",
                     "postgresql_image_id": postgres_image,

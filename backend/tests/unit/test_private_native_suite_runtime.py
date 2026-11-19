@@ -99,6 +99,20 @@ def test_host_credentials_and_python_paths_are_excluded_from_the_controller(worl
     assert (world.fixture / "native-suite.env").stat().st_mode & 0o777 == 0o600
 
 
+def test_scratch_qualification_joins_the_owned_private_bridge(world):
+    network = "declarai-fixture-12ab12ab12ab-net"
+    environment = {"DECLARAI_DB_HOST": "postgres", "DECLARAI_DB_PORT": "5432",
+                   "DECLARAI_DB_SSLMODE": "verify-full", "REDIS_URL": "redis://fixture-cache:6379/0"}
+    argv, receipt = world.module.prepare(IMAGE, root=world.root, fixture=world.fixture,
+                                         name="owned-native-suite", environment=environment,
+                                         fixture_network=network)
+    assert argv[argv.index("--network") + 1] == network
+    assert receipt["database_transport"] == "private_fixture_bridge"
+    assert receipt["workers"] == 2 and receipt["timeout_seconds"] == 900
+    lines = (world.fixture / "native-suite.env").read_text().splitlines()
+    assert all(f"{key}={value}" in lines for key, value in environment.items())
+
+
 @pytest.mark.parametrize("fault", ["changed", "empty"])
 def test_tests_cannot_run_against_different_or_unverified_application_sources(world, fault):
     if fault == "changed":

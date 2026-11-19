@@ -10,6 +10,8 @@ import importlib.metadata as metadata
 import json
 import os
 import platform
+import sys
+from ipaddress import ip_address
 from pathlib import Path
 
 from private_api_package import allowed_source, inspect_image, native_manifest, read_source
@@ -58,7 +60,7 @@ def stage_tools(destination, lookup=None):
     return {"versions": versions, "files_sha256": dict(sorted(hashes.items()))}
 
 
-def prepare(image, *, root, fixture, name, environment):
+def prepare(image, *, root, fixture, name, environment, fixture_network=None):
     if platform.system() != "Linux":
         raise ValueError("native_suite_linux_required")
     info = inspect_image(image)
@@ -85,7 +87,8 @@ def prepare(image, *, root, fixture, name, environment):
         raise ValueError("native_suite_cpu_affinity")
     argv = [
         "docker", "run", "--rm", "--pull", "never", "--name", name,
-        "--network", "host", "--user", f"{os.getuid()}:{os.getgid()}",
+        "--network", "host" if fixture_network is None else fixture_network,
+        "--user", f"{os.getuid()}:{os.getgid()}",
         "--cpuset-cpus", ",".join(map(str, affinity)),
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
         "--env-file", str(env_file),
@@ -102,9 +105,55 @@ def prepare(image, *, root, fixture, name, environment):
         "qualification_tools": tools, "cpu_affinity": affinity,
         "workers": 2, "scheduling": "loadfile", "worker_restarts": 0,
         "timeout_seconds": 900, "application_dependencies_replaced": False,
+        "database_transport": "host_published_port" if fixture_network is None else "private_fixture_bridge",
         "host_site_packages_mounted": False, "credentials_in_receipt": False,
         "application_source_files_verified": len(sources),
         "application_source_sha256": hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest(),
         "installed_service_or_customer_qualification": False,
     }
     return argv, receipt
+
+
+def verify_database_session(expected_server):
+    """Check the same private bridge, Django profile and credentials pytest uses."""
+    import django
+    import psycopg
+
+    if os.environ.get("DECLARAI_TEST_INSTALLATION") != "1":
+        raise ValueError("native_suite_requires_test_installation")
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
+    django.setup()
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT inet_client_addr(), inet_server_addr(), inet_server_port(), "
+            "current_database(), current_user, ssl FROM pg_catalog.pg_stat_ssl WHERE pid = pg_backend_pid()"
+        )
+        client, server, port, database, role, encrypted = cursor.fetchone()
+    if (ip_address(server) != ip_address(expected_server) or client == server or ip_address(client).is_loopback
+            or port != 5432 or database != "declarai_fixture_tests" or role != database or not encrypted
+            or connection.settings_dict["OPTIONS"]["sslmode"] != "verify-full"):
+        raise RuntimeError("Native suite did not reach the expected encrypted scratch database")
+
+    parameters = connection.get_connection_params()
+    parameters["password"] = "invalid-fixture-password"
+    try:
+        with psycopg.connect(**parameters):
+            pass
+    except psycopg.OperationalError as exc:
+        if "password authentication failed" not in str(exc):
+            raise RuntimeError("Unexpected scratch authentication failure") from None
+    else:
+        raise RuntimeError("Scratch database accepted the wrong password")
+    return {"matched_scratch_container": True, "server_port": port, "sslmode": "verify-full",
+            "encrypted": True, "incorrect_password_rejected": True}
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Verify the disposable native suite database session.")
+    parser.add_argument("--verify-database", required=True, type=ip_address)
+    print(json.dumps(verify_database_session(parser.parse_args().verify_database)))
