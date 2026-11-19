@@ -73,6 +73,9 @@ test('developer navigates bounded queue history and filters by keyboard without 
   await panel.getByLabel('Job type', { exact: true }).selectOption('native_csv_scoring_v1');
   expect((await (await response).json()).jobs).toHaveLength(0);
   await expect(panel.getByText('No jobs match this history view.', { exact: true })).toBeVisible();
+  await expect(
+    panel.getByText('Select All states and All types to widen the view.', { exact: true }),
+  ).toBeVisible();
   response = page.waitForResponse((r) => r.url().includes('/history/'));
   await panel.getByLabel('Job type', { exact: true }).selectOption('');
   await response;

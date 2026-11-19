@@ -1,6 +1,6 @@
 <section class="workspace" aria-labelledby="workspace-title">
   <div class="workspace-heading">
-    <h2 id="workspace-title">Project workspace</h2>
+    <h2 id="workspace-title" tabindex="-1">Project workspace</h2>
     <button type="button" (click)="refresh()" [disabled]="workspace.state.loading">
       Refresh access
     </button>
@@ -34,12 +34,18 @@
       @if (workspace.state.selected; as project) {
         Your role: {{ project.role }}.
         @if (project.role === 'developer') {
-          You can develop models in this project.
+          Declare the task and develop models. Use queued training for an existing development
+          dataset.
+        } @else if (project.role === 'reviewer') {
+          Open a dataset's review package to inspect an assessment, reproduce its evidence and
+          record findings.
         } @else {
-          You can browse records and download reports. Model development requires a developer role.
+          Manage enrolled accounts below. Open dataset evidence and pipeline reports to inspect
+          project work.
         }
       } @else if (!workspace.state.projects.length) {
-        No active project memberships. Ask a project administrator to grant access.
+        Your account has no active project memberships. Ask a project administrator to add your
+        enrolled username, then refresh access.
       } @else {
         Choose the project you want to work in.
       }
@@ -62,12 +68,24 @@
       @if (recordsError) {
         <p role="alert">{{ recordsError }}</p>
       }
+      @if (panelError) {
+        <p role="status">{{ panelError }}</p>
+      }
       @if (!loading && !recordsError) {
-        <div class="workspace-records">
+        <div class="workspace-records" id="workspace-records">
           <div>
             <h3>Datasets</h3>
             @if (!datasets.length) {
-              <p>No datasets in this project.</p>
+              @if (project.role === 'developer') {
+                <p>
+                  Open the development workspace to declare a task and import the project's first
+                  dataset.
+                </p>
+              } @else {
+                <p>
+                  A developer must import a dataset before training or review evidence appears here.
+                </p>
+              }
             }
             <ul aria-label="Project datasets">
               @for (dataset of datasets; track dataset.id) {
@@ -75,7 +93,11 @@
                   {{ dataset.original_name || dataset.name }} <span>Dataset {{ dataset.id }}</span>
                   <button
                     type="button"
-                    (click)="trainingDataset = dataset; reviewDataset = null"
+                    (click)="showPanel(dataset, 'training')"
+                    [attr.aria-expanded]="trainingDataset?.id === dataset.id"
+                    [attr.aria-controls]="
+                      trainingDataset?.id === dataset.id ? 'workspace-training-panel' : null
+                    "
                     [attr.aria-label]="
                       'Training jobs for ' + (dataset.original_name || dataset.name)
                     "
@@ -88,7 +110,11 @@
                   </button>
                   <button
                     type="button"
-                    (click)="reviewDataset = dataset.id; trainingDataset = null"
+                    (click)="showPanel(dataset, 'review')"
+                    [attr.aria-expanded]="reviewDataset === dataset.id"
+                    [attr.aria-controls]="
+                      reviewDataset === dataset.id ? 'workspace-review-panel' : null
+                    "
                     [attr.aria-label]="
                       'Review package for ' + (dataset.original_name || dataset.name)
                     "
@@ -102,7 +128,10 @@
           <div>
             <h3>Pipeline records</h3>
             @if (!pipelines.length) {
-              <p>No pipeline records in this project.</p>
+              <p>
+                Pipeline records appear after a developer starts a guided model workflow. Queued
+                training and review evidence are available from each dataset.
+              </p>
             }
             <ul aria-label="Project pipelines">
               @for (pipeline of pipelines; track pipeline.id) {
@@ -126,21 +155,25 @@
         <p role="alert">{{ reportError }}</p>
       }
       @if (reviewDataset !== null && !loading && !recordsError) {
-        <button type="button" (click)="reviewDataset = null">Close review panel</button>
-        <app-package-review
-          [fileId]="reviewDataset"
-          [projectId]="project.id"
-          [role]="project.role"
-        />
+        <div id="workspace-review-panel">
+          <button type="button" (click)="closePanel()">Close review panel</button>
+          <app-package-review
+            [fileId]="reviewDataset"
+            [projectId]="project.id"
+            [role]="project.role"
+          />
+        </div>
       }
       @if (trainingDataset && !loading && !recordsError) {
-        <button type="button" (click)="trainingDataset = null">Close training panel</button>
-        <app-training-launch
-          [fileId]="trainingDataset.id"
-          [datasetName]="trainingDataset.original_name || trainingDataset.name"
-          [projectId]="project.id"
-          [role]="project.role"
-        />
+        <div id="workspace-training-panel">
+          <button type="button" (click)="closePanel()">Close training panel</button>
+          <app-training-launch
+            [fileId]="trainingDataset.id"
+            [datasetName]="trainingDataset.original_name || trainingDataset.name"
+            [projectId]="project.id"
+            [role]="project.role"
+          />
+        </div>
       }
     }
   }

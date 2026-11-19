@@ -4,6 +4,7 @@
     Review an exact package or completed native assessment. Production use requires separate
     approval.
   </p>
+  <p role="status" aria-label="Review next step">{{ nextStep }}</p>
   <button type="button" (click)="refresh()" [disabled]="busy">Refresh review</button>
   @if (busy) {
     <p role="status">Checking review evidence…</p>
@@ -12,6 +13,13 @@
     <p role="alert">{{ error }}</p>
   }
   @if (pending && !busy) {
+    <details>
+      <summary>Pending review action</summary>
+      <p>
+        Request <code>{{ pending.body.request_id }}</code> ·
+        {{ pending.body.event_type ?? 'Open review' }}
+      </p>
+    </details>
     <button type="button" (click)="retry()">Retry pending action</button>
   }
   @if (directory) {
@@ -72,30 +80,38 @@
   }
   @if (review; as case) {
     <h4>Discussion revision {{ case.revision }}</h4>
-    <dl>
-      @if (case.assessment_job_id) {
-        <dt>Protected assessment job</dt>
+    @if (lastEvent; as event) {
+      <p>
+        Last change: {{ event.event_type }} · {{ event.actor?.username }} · {{ event.created_at }}
+      </p>
+    }
+    <details>
+      <summary>Assessment and package identity</summary>
+      <dl>
+        @if (case.assessment_job_id) {
+          <dt>Protected assessment job</dt>
+          <dd>
+            <code>{{ case.assessment_job_id }}</code>
+          </dd>
+          <dt>Assessment result SHA-256</dt>
+          <dd>
+            <code>{{ case.assessment_result_sha256 }}</code>
+          </dd>
+          <dt>Reproduction manifest SHA-256</dt>
+        } @else {
+          <dt>Package</dt>
+          <dd>
+            <code>{{ case.bundle_id }}</code>
+          </dd>
+          <dt>Manifest SHA-256</dt>
+        }
         <dd>
-          <code>{{ case.assessment_job_id }}</code>
+          <code>{{ case.manifest_sha256 }}</code>
         </dd>
-        <dt>Assessment result SHA-256</dt>
-        <dd>
-          <code>{{ case.assessment_result_sha256 }}</code>
-        </dd>
-        <dt>Reproduction manifest SHA-256</dt>
-      } @else {
-        <dt>Package</dt>
-        <dd>
-          <code>{{ case.bundle_id }}</code>
-        </dd>
-        <dt>Manifest SHA-256</dt>
-      }
-      <dd>
-        <code>{{ case.manifest_sha256 }}</code>
-      </dd>
-      <dt>Evidence status</dt>
-      <dd>{{ case.freshness }}</dd>
-    </dl>
+        <dt>Evidence status</dt>
+        <dd>{{ case.freshness }}</dd>
+      </dl>
+    </details>
     @if (case.bundle_id) {
       <button type="button" (click)="download('package')" [disabled]="busy">
         Download exact package
@@ -118,6 +134,7 @@
         </p>
         <p>Production-use approval: {{ case.production_use_approved === true }}</p>
         @if (case.decision?.reason_code; as reason) {
+          <p>{{ decisionExplanation }}</p>
           <p>
             Decision reason <code>{{ reason }}</code>
           </p>
@@ -270,6 +287,10 @@
           />
         }
         @if (eventType === 'approve') {
+          <p>
+            Attach the report produced by independently reproducing this exact assessment manifest.
+            Approval also checks current findings, exceptions and reviewer independence.
+          </p>
           <label for="reproduction-report">Reproduction report JSON</label>
           <textarea
             id="reproduction-report"

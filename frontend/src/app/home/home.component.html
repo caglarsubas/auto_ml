@@ -213,27 +213,40 @@
         <p class="home-kicker">Case file · workspace</p>
         <h1 class="home-brand">declar.ai</h1>
         <p class="home-thesis">{{ thesis }}</p>
-        <div class="home-actions">
-          <a
-            routerLink="/model-development"
-            class="home-cta-primary"
-            data-testid="home-primary-cta"
-          >
-            <svg class="home-cta-icon" aria-hidden="true"><use href="#hi-model"></use></svg>
-            Model Development
-            <svg class="home-cta-icon home-cta-icon--trail" aria-hidden="true">
-              <use href="#hi-arrow"></use>
-            </svg>
-          </a>
-          <a
-            routerLink="/model-development/declaration"
-            class="home-cta-secondary"
-            data-testid="home-secondary-cta"
-          >
-            <svg class="home-cta-icon" aria-hidden="true"><use href="#hi-declare"></use></svg>
-            Start Declaration
-          </a>
-        </div>
+        @if (canDevelop) {
+          <div class="home-actions">
+            <a
+              routerLink="/model-development"
+              [queryParams]="projectParams"
+              class="home-cta-primary"
+              data-testid="home-primary-cta"
+            >
+              <svg class="home-cta-icon" aria-hidden="true"><use href="#hi-model"></use></svg>
+              Model Development
+              <svg class="home-cta-icon home-cta-icon--trail" aria-hidden="true">
+                <use href="#hi-arrow"></use>
+              </svg>
+            </a>
+            <a
+              routerLink="/model-development/declaration"
+              [queryParams]="projectParams"
+              class="home-cta-secondary"
+              data-testid="home-secondary-cta"
+            >
+              <svg class="home-cta-icon" aria-hidden="true"><use href="#hi-declare"></use></svg>
+              Start Declaration
+            </a>
+          </div>
+        } @else {
+          <div class="home-actions">
+            <a href="#workspace-title" class="home-cta-primary" data-testid="home-primary-cta">
+              {{ workspace.state.selected ? 'Open project records' : 'Choose a project' }}
+              <svg class="home-cta-icon home-cta-icon--trail" aria-hidden="true">
+                <use href="#hi-arrow"></use>
+              </svg>
+            </a>
+          </div>
+        }
       </header>
 
       <app-project-workspace></app-project-workspace>
@@ -259,8 +272,12 @@
               <ul class="home-section-list">
                 @for (item of section.items; track item) {
                   <li class="home-row">
-                    @if (item.status === 'live' && item.route) {
-                      <a [routerLink]="item.route" class="home-entry home-entry--live">
+                    @if (item.status === 'live' && item.route && canDevelop) {
+                      <a
+                        [routerLink]="item.route"
+                        [queryParams]="projectParams"
+                        class="home-entry home-entry--live"
+                      >
                         <span class="home-entry-main">
                           <svg class="home-entry-icon" aria-hidden="true">
                             <use href="#hi-arrow"></use>
@@ -268,6 +285,12 @@
                           <span class="home-entry-label">{{ item.label }}</span>
                         </span>
                         <span class="home-entry-meta">Open</span>
+                      </a>
+                    }
+                    @if (item.status === 'live' && !canDevelop) {
+                      <a href="#workspace-title" class="home-entry home-entry--live">
+                        <span class="home-entry-label">{{ item.label }}</span>
+                        <span class="home-entry-meta">Choose developer project</span>
                       </a>
                     }
                     @if (item.status === 'unavailable') {

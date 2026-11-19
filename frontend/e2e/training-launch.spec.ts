@@ -15,6 +15,9 @@ async function open(page: Page, name: string) {
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Development training · ' + name })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Refresh jobs', exact: true })).toBeEnabled();
+  await expect(page).toHaveURL(/dataset_id=\d+.*view=training/);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Development training · ' + name })).toBeVisible();
 }
 async function fill(page: Page, regression = false) {
   await page

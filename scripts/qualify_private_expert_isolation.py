@@ -2,6 +2,7 @@
 """Qualify hostile synthetic requests and cancellation on the pinned Linux worker."""
 
 import argparse
+import errno
 import json
 import socket
 import subprocess
@@ -154,6 +155,30 @@ def isolation_probes(home):
             "rootfs_and_privilege_escalation_denied"]
 
 
+def observe_memory_pressure(cgroup, process):
+    peak = 0
+    samples = 0
+    until = time.monotonic() + 15
+    while process.poll() is None and time.monotonic() < until:
+        try:
+            current = int((cgroup / "memory.current").read_text())
+            assert current >= 0, current
+            swap_max = (cgroup / "memory.swap.max").read_text().strip()
+        except OSError as exc:
+            # runsc removes the cgroup before the controller publishes its
+            # terminal receipt. An opened kernfs file can become inactive
+            # between these reads and report ENODEV rather than ENOENT.
+            if exc.errno not in (errno.ENOENT, errno.ENODEV):
+                raise
+        else:
+            assert swap_max == "0", swap_max
+            peak = max(peak, current)
+            samples += 1
+        time.sleep(0.01)
+    assert samples > 0, "no complete memory and zero-swap observation"
+    return peak
+
+
 def resource_and_output_probes(home):
     request = foundation.create(home, "transform", SCRATCH_PROBE + foundation.TRANSFORM)
     foundation.approve(home, request)
@@ -163,16 +188,8 @@ def resource_and_output_probes(home):
     request = foundation.create(home, "transform", MEMORY_PROBE + foundation.TRANSFORM)
     approval = foundation.approve(home, request)
     _, cgroup = job_paths(home, request)
-    peak = 0
     with subprocess.Popen(foundation.command(home, "execute", request), stdout=subprocess.PIPE) as process:
-        until = time.monotonic() + 15
-        while process.poll() is None and time.monotonic() < until:
-            try:
-                peak = max(peak, int((cgroup / "memory.current").read_text()))
-                assert (cgroup / "memory.swap.max").read_text().strip() == "0"
-            except FileNotFoundError:
-                pass
-            time.sleep(0.01)
+        peak = observe_memory_pressure(cgroup, process)
         stdout, _ = process.communicate(timeout=15)
         assert process.returncode == 1
     assert peak >= worker.LIMITS["memory_bytes"] * 3 // 4, peak

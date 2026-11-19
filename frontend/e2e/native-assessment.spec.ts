@@ -87,6 +87,14 @@ async function exerciseNativeReview(
   await expect(panel.getByLabel('Technical review decision')).toContainText(
     'Technical review: pending',
   );
+  await expect(panel.getByLabel('Review next step')).toContainText('independently reproduce');
+  const identityDetails = panel
+    .locator('details')
+    .filter({ has: page.getByText('Assessment and package identity', { exact: true }) });
+  await identityDetails.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(identityDetails).toHaveAttribute('open', '');
+  await expect(identityDetails).toContainText(assessment.job_id);
 
   async function record(
     action: string,
@@ -154,6 +162,10 @@ async function exerciseNativeReview(
   await expect(panel.getByLabel('Technical review decision')).toContainText(
     'Technical review: invalidated',
   );
+  await expect(panel.getByLabel('Technical review decision')).toContainText(
+    'The discussion changed after approval',
+  );
+  await expect(panel.getByLabel('Review next step')).toContainText('Review the open findings');
   const resolved = await record('resolve', 'The new observation is addressed.', findingId);
   expect(resolved.review_approved).toBe(false);
   await record('approve', 'Record a new independent decision after resolution.', undefined, {

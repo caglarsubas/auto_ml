@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy } from '@angular/core';
+import { ProjectWorkspaceService } from '../services/project-workspace.service';
 
 export type HomeLinkStatus = 'live' | 'unavailable';
 export type HomeIcon =
@@ -41,18 +42,30 @@ export interface EvidenceNote {
   standalone: false,
 })
 export class HomeComponent {
+  constructor(public workspace: ProjectWorkspaceService) {}
+
+  get canDevelop(): boolean {
+    return (
+      this.workspace.state.governed === false || this.workspace.state.selected?.role === 'developer'
+    );
+  }
+
+  get projectParams(): { project_id?: string } {
+    return this.workspace.projectId ? { project_id: this.workspace.projectId } : {};
+  }
+
   readonly thesis = 'Declared tabular model work for regulated teams.';
 
   readonly evidenceNotes: EvidenceNote[] = [
     {
       label: 'Declared',
-      body: 'Every modeling choice is explicit — not magic.',
+      body: 'The accepted declaration records the task, population and objective.',
       tone: 'declared',
       icon: 'seal',
     },
     {
       label: 'Live routes',
-      body: 'Model Development',
+      body: 'Choose a project, then open its datasets, training jobs or review evidence.',
       tone: 'live',
       icon: 'route',
     },

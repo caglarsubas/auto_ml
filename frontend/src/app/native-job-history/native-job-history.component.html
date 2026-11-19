@@ -1,5 +1,5 @@
 <section aria-labelledby="native-history-title" [attr.aria-busy]="busy">
-  <h5 id="native-history-title">Queue observation and bounded history</h5>
+  <h5 id="native-history-title">Queue and job history</h5>
   <p>
     Read stored job metadata for this dataset. Each page replaces the previous page and contains at
     most 50 jobs. Opening a job rechecks current access.
@@ -10,7 +10,7 @@
       <select id="history-state" [(ngModel)]="state" (ngModelChange)="load()" [disabled]="busy">
         <option value="">All states</option>
         @for (value of states; track value) {
-          <option [value]="value">{{ value }}</option>
+          <option [value]="value">{{ jobStateLabel(value) }}</option>
         }
       </select>
     </div>
@@ -45,7 +45,7 @@
       <dl class="queue-counts">
         @for (value of states; track value) {
           <div>
-            <dt>{{ value }}</dt>
+            <dt>{{ jobStateLabel(value) }}</dt>
             <dd>{{ p.queue.states[value] }}</dd>
           </div>
         }
@@ -101,12 +101,16 @@
             Inspect history job {{ item.id }}
           </button>
           <span
-            >{{ item.kind }} · {{ item.state }} · {{ item.created_at | date: 'medium' }} · Attempt
-            {{ item.attempts }} · {{ item.reason_code }}</span
+            >{{ jobKindLabel(item.kind) }} · {{ jobStateLabel(item.state) }} ·
+            {{ item.created_at | date: 'medium' }} · Attempts started {{ item.attempts }} ·
+            {{ item.reason_code }}</span
           >
         </li>
       } @empty {
-        <li>No jobs match this history view.</li>
+        <li>
+          <span>No jobs match this history view.</span>
+          <span> Select All states and All types to widen the view.</span>
+        </li>
       }
     </ul>
   }
