@@ -1,6 +1,6 @@
 # DeclarAI product development roadmap
 
-Updated 2026-11-19. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
+Updated 2026-11-23. Generated from `product-roadmap.json`; edit the ledger and run `python3 scripts/render_product_roadmap.py`.
 
 Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.
 
@@ -54,7 +54,21 @@ Compatible work may run concurrently only under explicit packet ownership; all r
 
 [Exercise plan, measures and decision criteria](REVIEW_HANDOFF_PLAN.md).
 
-Unmeasured. Awaiting the first attributable handoff. Active effort, waiting, review iterations, help requests and validation defects have no recorded values.
+### D09-classification-01 — Synthetic binary classification
+
+Independent review · Independent exercise · Guided · Partial
+
+- Developer active minutes — Unmeasured
+- Reviewer active minutes — Unmeasured
+- Waiting minutes — Unmeasured
+- Review iterations — Unmeasured
+- Help requests — Unmeasured
+- Validation defects — Unmeasured
+- Combined active minutes — Unmeasured
+
+The named reviewer signed in. The classification evidence was sealed and a protected exploratory assessment was recorded on 60 synthetic rows. The launcher stopped while displaying the saved assessment because the older record lacked chronology metadata. Independent replay and disposition were pending. The regression case had yet to begin.
+
+Evidence — [Classification checkpoint on 23 November 2026](REVIEW_HANDOFF_PLAN.md#classification-checkpoint-on-23-november-2026)
 
 ## Remaining roadmap backlog
 
@@ -514,7 +528,7 @@ Have an assigned independent reviewer execute the clean package and review mater
 
 **Source / rationale:** Remaining acceptance scope from D09; existing tested foundation is reused, not rebuilt.
 
-**Blocked (external_input):** The Independent Review Owner approved both synthetic cases and declared independence from their fits and adoption proposals. The exact exercise handoff, human replays and dispositions are outstanding. **Owner:** Independent review owner. **Unblock:** Provision the scoped reviewer account and exact cases, hand over the verified bindings, and record the named reviewer’s own replay reports and dispositions.
+**Blocked (external_input):** The named reviewer signed in for the approved exercise. The classification session paused at the saved protected assessment before independent replay or disposition. The regression case and the scope owner's decision are pending. **Owner:** Independent review owner. **Unblock:** Resume the saved classification assessment with the missing chronology disclosed. The reviewer decides whether to authorize replay and records the disposition for each case. The scope owner then records the exercise decision against both case records.
 
 **Packet / evidence:** [Observed handoff plan and measures](REVIEW_HANDOFF_PLAN.md); [Automated two-case terminal UX regression](../scripts/tests/test_reviewer_terminal_journey.py)
 

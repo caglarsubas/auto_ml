@@ -22,6 +22,12 @@ Steps 1 and 2 can proceed with engineering fixtures. Reviewer scheduling and bas
 
 The project owner approved both synthetic cases and declared independence from their training and adoption proposals. The operator prepares the isolated project, reviewer account, pinned runtime, two sealed cases, clean replay environment and evidence handoff. The scope owner or named delegate confirms the exact case bindings at handoff. The reviewer starts each prepared replay, inspects the result, explains the population and evidence limits, records a finding or disposition under their own account, and decides whether the evidence merits technical approval. The observer handles timekeeping and records requests for help. The controlled exercise record holds the identity and scope declaration.
 
+### Classification checkpoint on 23 November 2026
+
+In the first guided session, the named reviewer signed in. The classification evidence was sealed and the protected exploratory assessment was recorded on 60 synthetic rows. The launcher stopped while displaying the saved assessment because the older record lacked chronology metadata. The session paused before independent replay or a reviewer disposition. The regression case had yet to begin.
+
+Resume from the saved classification assessment, show the missing chronology to the reviewer, and let the reviewer decide whether to proceed with replay. Both case dispositions and the scope owner's exercise decision are pending. Effort, waiting time, review iterations, help requests and validation defects were unmeasured at this checkpoint.
+
 ### Running the reviewer journey regression
 
 From `backend/`, run `python -m pytest -q -c pytest.ini ../scripts/tests/test_reviewer_terminal_journey.py` on Linux with the backend test dependencies installed. The test starts a temporary loopback API, creates two synthetic candidates, and drives the participant launcher through a real pseudo-terminal. It exercises local and server passphrase rejections, pause and sign-in, both protected assessments, a technical approval, an open finding, and withheld exercise acceptance. A fresh Python process reproduces each assessment from the manifest and the two CSV files. The test checks the persisted decisions against the replay reports and original assessment digests.
