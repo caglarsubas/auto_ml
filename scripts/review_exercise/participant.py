@@ -302,7 +302,34 @@ def accept_and_seal(site, s, project, directory, task, ids):
     return ad, sealed["id"]
 
 
-def assess(site, s, project, directory, ad, protected_id, task, ids):
+def assessment_job(s, project, directory, ad, protected_id, ids):
+    receipt = directory / "assessment-receipt.json"
+    if receipt.exists():
+        saved = load(receipt)
+        identifier = ids["assessment"]
+        job = call(s, project, "GET", f"jobs/{identifier}/").json()
+        spec = job["specification"]
+        original_request = {
+            "request_id": identifier,
+            "kind": spec["kind"],
+            "protected_input_id": protected_id,
+            "assessment_sha256": spec["assessment_sha256"],
+        }
+        verify(
+            load(directory / "assessment-request.json") == original_request
+            and job["id"] == saved["id"] == identifier
+            and job["state"] == saved["state"] == "succeeded"
+            and job["project_id"] == saved["project_id"] == project
+            and job["file_id"] == saved["file_id"] == ad["file_id"]
+            and spec["protected_input_id"] == protected_id
+            and spec["adoption_id"] == ad["id"]
+            and spec == saved["specification"]
+            and job["result_sha256"] == saved["result_sha256"]
+            and job["result"] == saved["result"],
+            "The saved assessment differs from the project record. Contact the exercise operator.",
+        )
+        print("Resuming your completed assessment from its verified receipt.")
+        return job
     plan = call(
         s,
         project,
@@ -335,7 +362,26 @@ def assess(site, s, project, directory, ad, protected_id, task, ids):
         job["state"] == "succeeded",
         "The job did not succeed. Preserve its receipt for the operator.",
     )
-    save(directory / "assessment-receipt.json", job)
+    save(receipt, job)
+    return job
+
+
+def print_assessment_design(checks):
+    # Older prediction contracts recorded an outcome-window flag but no separate chronology flag.
+    print(
+        "Assessment design:",
+        checks["strategy"],
+        "• temporal ordering checked:",
+        checks.get("chronology_checked", "not recorded"),
+        "• outcome window checked:",
+        checks.get("outcome_window_checked", "not recorded"),
+        "• entity separation checked:",
+        checks["entity_separation_checked"],
+    )
+
+
+def assess(site, s, project, directory, ad, protected_id, task, ids):
+    job = assessment_job(s, project, directory, ad, protected_id, ids)
     response = call(
         s,
         project,
@@ -401,15 +447,7 @@ def assess(site, s, project, directory, ad, protected_id, task, ids):
         "Development split and preprocessing: inspect training/specification and training/fit in",
         approved / "reproduction-manifest.json",
     )
-    checks = res["population_checks"]
-    print(
-        "Assessment design:",
-        checks["strategy"],
-        "• temporal ordering checked:",
-        checks["chronology_checked"],
-        "• entity separation checked:",
-        checks["entity_separation_checked"],
-    )
+    print_assessment_design(res["population_checks"])
     return {
         "manifest_sha256": manifest_hash,
         "assessment_job_id": job["id"],

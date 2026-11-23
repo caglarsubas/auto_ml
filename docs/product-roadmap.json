@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-11-19",
+  "updated": "2026-11-23",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -5734,7 +5734,26 @@
     ],
     "pilot_scope": "A bounded agentic pilot is separate from completing all milestone outcomes or authorizing production use. D10/D11/D23 deeper experiments follow it; D24 production autonomy stays disabled.",
     "value_target": "Proposed acceptance target: >=30% lower combined development/review effort across two partner workflows, comparing guided and single-agent baselines under equal data/policy/budgets without increased validation defects; not an achieved result.",
-    "handoff_observations": []
+    "handoff_observations": [
+      {
+        "id": "D09-classification-01",
+        "case": "Synthetic binary classification",
+        "team": "Independent review",
+        "scope": "Independent exercise",
+        "method": "Guided",
+        "status": "Partial",
+        "finding": "The named reviewer signed in. The classification evidence was sealed and a protected exploratory assessment was recorded on 60 synthetic rows. The launcher stopped while displaying the saved assessment because the older record lacked chronology metadata. Independent replay and disposition were pending. The regression case had yet to begin.",
+        "evidence": "[Classification checkpoint on 23 November 2026](REVIEW_HANDOFF_PLAN.md#classification-checkpoint-on-23-november-2026)",
+        "measures": {
+          "developer_minutes": null,
+          "reviewer_minutes": null,
+          "wait_minutes": null,
+          "review_iterations": null,
+          "help_requests": null,
+          "validation_defects": null
+        }
+      }
+    ]
   },
   "reconciliation": {
     "date": "2026-10-08",
@@ -6740,9 +6759,9 @@
         "blockers": [
           {
             "kind": "external_input",
-            "reason": "The Independent Review Owner approved both synthetic cases and declared independence from their fits and adoption proposals. The exact exercise handoff, human replays and dispositions are outstanding.",
+            "reason": "The named reviewer signed in for the approved exercise. The classification session paused at the saved protected assessment before independent replay or disposition. The regression case and the scope owner's decision are pending.",
             "owner": "Independent review owner",
-            "resolution": "Provision the scoped reviewer account and exact cases, hand over the verified bindings, and record the named reviewer’s own replay reports and dispositions."
+            "resolution": "Resume the saved classification assessment with the missing chronology disclosed. The reviewer decides whether to authorize replay and records the disposition for each case. The scope owner then records the exercise decision against both case records."
           }
         ],
         "evidence": [
