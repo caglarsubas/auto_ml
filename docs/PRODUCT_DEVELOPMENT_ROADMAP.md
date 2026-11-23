@@ -516,7 +516,7 @@ Have an assigned independent reviewer execute the clean package and review mater
 
 **Blocked (external_input):** The Independent Review Owner approved both synthetic cases and declared independence from their fits and adoption proposals. The exact exercise handoff, human replays and dispositions are outstanding. **Owner:** Independent review owner. **Unblock:** Provision the scoped reviewer account and exact cases, hand over the verified bindings, and record the named reviewer’s own replay reports and dispositions.
 
-**Packet / evidence:** [Observed handoff plan and measures](REVIEW_HANDOFF_PLAN.md)
+**Packet / evidence:** [Observed handoff plan and measures](REVIEW_HANDOFF_PLAN.md); [Automated two-case terminal UX regression](../scripts/tests/test_reviewer_terminal_journey.py)
 
 ### D10-T01 — Deliver R3 matched before/after comparisons
 

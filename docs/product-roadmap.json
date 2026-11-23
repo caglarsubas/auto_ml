@@ -6746,7 +6746,8 @@
           }
         ],
         "evidence": [
-          "[Observed handoff plan and measures](REVIEW_HANDOFF_PLAN.md)"
+          "[Observed handoff plan and measures](REVIEW_HANDOFF_PLAN.md)",
+          "[Automated two-case terminal UX regression](../scripts/tests/test_reviewer_terminal_journey.py)"
         ],
         "packet_refs": [],
         "order": 29,
