@@ -91,6 +91,10 @@ jobs:
             echo "covfail=--cov-fail-under=50" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Exercise the two-case reviewer terminal against a disposable SQLite installation
+        working-directory: backend
+        run: python -m pytest -q -c pytest.ini ../scripts/tests/test_reviewer_terminal_journey.py
+
       - name: Run pytest
         working-directory: backend
         run: |

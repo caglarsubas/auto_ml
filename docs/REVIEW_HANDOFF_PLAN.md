@@ -22,6 +22,12 @@ Steps 1 and 2 can proceed with engineering fixtures. Reviewer scheduling and bas
 
 The project owner approved both synthetic cases and declared independence from their training and adoption proposals. The operator prepares the isolated project, reviewer account, pinned runtime, two sealed cases, clean replay environment and evidence handoff. The scope owner or named delegate confirms the exact case bindings at handoff. The reviewer starts each prepared replay, inspects the result, explains the population and evidence limits, records a finding or disposition under their own account, and decides whether the evidence merits technical approval. The observer handles timekeeping and records requests for help. The controlled exercise record holds the identity and scope declaration.
 
+### Running the reviewer journey regression
+
+From `backend/`, run `python -m pytest -q -c pytest.ini ../scripts/tests/test_reviewer_terminal_journey.py` on Linux with the backend test dependencies installed. The test starts a temporary loopback API, creates two synthetic candidates, and drives the participant launcher through a real pseudo-terminal. It exercises local and server passphrase rejections, pause and sign-in, both protected assessments, a technical approval, an open finding, and withheld exercise acceptance. A fresh Python process reproduces each assessment from the manifest and the two CSV files. The test checks the persisted decisions against the replay reports and original assessment digests.
+
+Both an operator-provisioned bundle and the test start with `scripts/review_exercise/Start Review.command` and `participant.py`. The Mac adapter, `review_installation.py`, reads `API`, `INSTALLATION` and `REPLAY_SHA` from the approved bundle's `case_inputs.py`, alongside `ROOT`, `EXPECTED` and `payload`. The bundle supplies `clean_guest.py` for the separate Linux VM replay. The test supplies its own installation and fixture account. Its decisions are synthetic regression evidence. D09-T03 completion requires the assigned reviewer's exercise records and the scope owner's decision.
+
 ## Observation method
 
 1. The observer records the method, case, application revision, supported model profile, team or synthetic scope, and a sanitized evidence reference. Agree the task, allowable materials, finish condition and defect definitions before starting. Keep named identities and protected inputs in the authorized review record.
