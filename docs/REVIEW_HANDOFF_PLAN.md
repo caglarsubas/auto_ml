@@ -26,7 +26,20 @@ The project owner approved both synthetic cases and declared independence from t
 
 In the first guided session, the named reviewer signed in. The classification evidence was sealed and the protected exploratory assessment was recorded on 60 synthetic rows. The launcher stopped while displaying the saved assessment because the older record lacked chronology metadata. The session paused before independent replay or a reviewer disposition. The regression case had yet to begin.
 
-Resume from the saved classification assessment, show the missing chronology to the reviewer, and let the reviewer decide whether to proceed with replay. Both case dispositions and the scope owner's exercise decision are pending. Effort, waiting time, review iterations, help requests and validation defects were unmeasured at this checkpoint.
+At that checkpoint, both case dispositions and the scope owner's exercise decision were pending. Effort, waiting time, review iterations, help requests and validation defects were unmeasured.
+
+### Synthetic exercise acceptance on 26 November 2026
+
+The assigned reviewer independently reproduced each frozen model, its protected assessment result and its ordered scores in a separate Linux VM. The reviewer approved each technical review under their named account. The scope owner then accepted the two linked case records for D09-T03. The operator verified the recorded decisions against the countersigned inputs, runtime, replay reports and assessment digests.
+
+| Case | Reserved synthetic cases | Exploratory result | Technical review |
+| --- | ---: | --- | --- |
+| Binary classification | 60 | ROC AUC 0.48333 | Approved, revision 2 |
+| Regression | 60 | RMSE 1.21544 | Approved, revision 2 |
+
+The reviewer resumed classification from its saved assessment. During regression, the review session expired before the inputs could be sealed. After signing in again, the reviewer confirmed the identical saved request and completed the replay. The three guided sessions are recorded in the roadmap. At owner acceptance, active effort, waiting time, returns for revision, help requests and verified defect counts remained unmeasured.
+
+This acceptance covers reproducibility of the synthetic review workflow. Applicant separation and completed follow-up rely on the fixture declaration. Predictive usefulness remains unproven. Partner effort comparisons and production approval require separate evidence. The controlled exercise record retains identities, full decisions and original artifacts.
 
 ### Running the reviewer journey regression
 
