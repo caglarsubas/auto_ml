@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-11-23",
+  "updated": "2026-11-26",
   "baseline_commit": "dac05741",
   "vision": "Build a developer-first, declarative tabular-ML platform that executes bounded modeling missions through specialized workers and independent confirmers. Accepted business and oversight declarations govern execution; every consequential decision and model carries attributable, reproducible evidence. Credit risk is first; classification and regression remain reusable.",
   "direction": [
@@ -233,7 +233,7 @@
         "[Implementation PR #301](https://github.com/caglarsubas/auto_ml/pull/301)",
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43861877702)"
       ],
-      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P13 prevents upload and encoded CSV collisions with UUID names/exclusive creation, blocks success when required encoding metadata fails, and removes arbitrary legacy fallback selection. Full immutable legacy stages and distributed publication/recovery remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P15 archives native training-only numeric diagnostic matrices and method/state metadata for each execution and selected candidate subset. Detail inspection and saved-run refresh use exact execution identity with integrity checks; latest projections cannot silently replace saved evidence. Historical inputs remain unverified. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open. P26 pins optional review references to exact successful native job results and specifications. Job retention, complete scoring receipts, digest/snapshot validation and exact request replay are tested; references do not certify independent reproduction or authenticity. P27 adds method-named support-weighted rank AUC for requested multiclass stopping, retaining independent sklearn full assessment, input validation and unavailable-objective blocking. Reference callback histories, selected models and replay match across all three native boosters; private/full workflow qualification passes with unchanged budgets. No full reproduction, capacity or release claim. P28 adds immutable grouped training-input subspace GVIF with nominal category-code invariance, exact one-hot provenance, dimensional adjustment and explicit rank/precision/budget states. Exact native replay uses no fitted state or final outcomes; current reviewers may inspect both numeric and grouped reports, with revocation checks and keyboard summaries. Lossy category encodings block the conditioning set. Independent reference, full metadata and browser checks pass; paired uncertainty, SQLite worker contention, expert isolation and release/customer gates remain open. P28 final hardening validates native NumPy format, bounded header, exact dtype/shape and payload length before allocating arrays; a retained failing-before/passing-after case confirms the boundary. The final complete matrices and browser/runtime image qualify this stronger source without changing prediction calculations or budgets. P180 qualifies concurrent immutable stages, exact lineage and retry-safe publication and adoption on the supported profile. P181 qualifies assessed and exported score parity for the supported native models and fitted transforms. D04 retains its D01 outcome dependency. P182 qualifies clean refit and protected assessment reproduction for native numeric XGBoost binary classification and regression. D09-T03 still requires a named independent reviewer and an approved exercise.",
+      "progress": "Immutable native executions, assessment receipts, candidate refits, unique bundles/batch outputs and hash verification are implemented. P03 adds UUID preprocessing versions, raw/recipe snapshots, fitted purifier replay and feature-subset raw dependencies. Focused XGBoost raw scoring/calibration, category, alignment and chunk parity are tested. Complete immutable stages/jobs, independent reproduction and concurrency/recovery qualification remain open. P05 adds input/configuration-bound native fit receipts and candidate-specific selected-feature CV with explicit post-selection limitations; exact-version acceptance preserves prior model evidence. P07 preserves tuning selection inside immutable candidate manifests and uses unique legacy refit paths; failed/stopped tuning cannot publish completion. Per-file search/job projections remain mutable. P09 binds current native early stopping to the accepted metric across initial training, fold fitting, selection/tuning and candidate refits. Per-round values, selected scoring rounds and separate surrogate loss/weights are retained; undefined criteria block without fallback. Disabled stopping excludes validation data from fitting. Historical paths, protected confirmatory protocols and full milestone qualification remain open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P13 prevents upload and encoded CSV collisions with UUID names/exclusive creation, blocks success when required encoding metadata fails, and removes arbitrary legacy fallback selection. Full immutable legacy stages and distributed publication/recovery remain open. P14 binds one native typed assistant dispatch to an active actor, exact prepared payload, recorded inputs/dispatcher environment, expiry and bounded payload budget. Stale/altered/missing approvals stop; consumed receipts are replayed without redispatch. UI review/approve/cancel and keyboard receipt inspection are qualified, and automatic code repair execution is removed. Downstream jobs, immutable full input/partition authority, expert isolation, project roles, independent review/reproduction and release/customer gates remain open. P15 archives native training-only numeric diagnostic matrices and method/state metadata for each execution and selected candidate subset. Detail inspection and saved-run refresh use exact execution identity with integrity checks; latest projections cannot silently replace saved evidence. Historical inputs remain unverified. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open. P26 pins optional review references to exact successful native job results and specifications. Job retention, complete scoring receipts, digest/snapshot validation and exact request replay are tested; references do not certify independent reproduction or authenticity. P27 adds method-named support-weighted rank AUC for requested multiclass stopping, retaining independent sklearn full assessment, input validation and unavailable-objective blocking. Reference callback histories, selected models and replay match across all three native boosters; private/full workflow qualification passes with unchanged budgets. No full reproduction, capacity or release claim. P28 adds immutable grouped training-input subspace GVIF with nominal category-code invariance, exact one-hot provenance, dimensional adjustment and explicit rank/precision/budget states. Exact native replay uses no fitted state or final outcomes; current reviewers may inspect both numeric and grouped reports, with revocation checks and keyboard summaries. Lossy category encodings block the conditioning set. Independent reference, full metadata and browser checks pass; paired uncertainty, SQLite worker contention, expert isolation and release/customer gates remain open. P28 final hardening validates native NumPy format, bounded header, exact dtype/shape and payload length before allocating arrays; a retained failing-before/passing-after case confirms the boundary. The final complete matrices and browser/runtime image qualify this stronger source without changing prediction calculations or budgets. P180 qualifies concurrent immutable stages, exact lineage and retry-safe publication and adoption on the supported profile. P181 qualifies assessed and exported score parity for the supported native models and fitted transforms. D04 retains its D01 outcome dependency. P182 qualifies clean refit and protected assessment reproduction for native numeric XGBoost binary classification and regression.",
       "closure_evidence": "Backend/ML must reconcile the immutable publication and scoring-parity matrices against the supported run and bundle profiles. Document the boundary between current verified receipts and earlier artifacts with incomplete provenance."
     },
     {
@@ -331,7 +331,7 @@
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/42192200496)",
         "[Sealed private deployment threat-model qualification](PRIVATE_THREAT_MODEL_QUALIFICATION.md)"
       ],
-      "progress": "The sealed private profile qualifies server-side sessions, current project and role authority, scoped MCP, managed storage, and controlled local data custody. P170 qualifies membership administration and P171 qualifies the local-only policy, reviewed unused-upload purge, and audit checkpoints. P188 combines the installed HTTPS, native job, artifact, egress, retention and audit checks with independent review and clean refit, actual MCP bypass probes, and the current dedicated gVisor worker exercise. Customer-specific provider, identity, retention and operational acceptance remain separately scoped, as do the governed expert application workflow and named reviewer exercise."
+      "progress": "The sealed private profile qualifies server-side sessions, current project and role authority, scoped MCP, managed storage, and controlled local data custody. P170 qualifies membership administration and P171 qualifies the local-only policy, reviewed unused-upload purge, and audit checkpoints. P188 combines the installed HTTPS, native job, artifact, egress, retention and audit checks with independent review and clean refit, actual MCP bypass probes, and the current dedicated gVisor worker exercise. Customer-specific provider, identity, retention and operational acceptance remain separately scoped, as does the governed expert application workflow."
     },
     {
       "id": "D07",
@@ -940,9 +940,11 @@
         "[P183 independent review qualification](evidence/p183-independent-review-qualification.json)",
         "[Implementation PR #303](https://github.com/caglarsubas/auto_ml/pull/303)",
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/44154649624)",
-        "[Test-fixture corrective PR #304](https://github.com/caglarsubas/auto_ml/pull/304)"
+        "[Test-fixture corrective PR #304](https://github.com/caglarsubas/auto_ml/pull/304)",
+        "[Synthetic exercise acceptance on 26 November 2026](REVIEW_HANDOFF_PLAN.md#synthetic-exercise-acceptance-on-26-november-2026)"
       ],
-      "progress": "Environment manifests and independently hashed assessment/model-card artifacts provide evidence foundations. P01-P11 left reviewer findings/responses/approvals and clean-environment reproduction open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P20 adds exact-package review discussion with attributable reviewer findings/dispositions and developer responses. Active project roles, exact retry receipts, optimistic revisions, concurrent publication, context/integrity freshness and retained historical events are qualified on both metadata engines. Browser keyboard handoff and exact package/discussion downloads pass. Finding closure never confers model or production approval; full independence rules, exceptions/approvals, clean-environment reproduction, full retention and comprehensive accessibility remain open. P21 adds input/runtime-bound full CSV scoring receipts, current-role exact downloads and installed offline native score-parity verification. Clean fixed runtimes without network or installation data reproduce 300-row XGBoost classification/regression exports across whole batches and chunk sizes 1/17/64; calibrated logistic replay and tamper/runtime/authority boundaries pass. Core modules and declared tolerances are recorded. Native serialized state requires explicit trust; full refit/assessment reproduction, independent approval and release qualification remain open. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open. P26 connects findings, responses and dispositions to successful native integrity/scoring receipts from the exact package, with separate review and execution actors and full result downloads. Independent refit/assessment reproduction and organizational approval remain open. P182 qualifies clean refit and protected assessment reproduction for native numeric XGBoost binary classification and regression. D09-T03 still requires a named independent reviewer and an approved exercise. P183 qualifies scoped independent approval, exception disposition and invalidation for exact native protected assessments. Production authorization stays separate. D09-T03 still requires a named independent reviewer and an approved exercise."
+      "progress": "Environment manifests and independently hashed assessment/model-card artifacts provide evidence foundations. P01-P11 left reviewer findings/responses/approvals and clean-environment reproduction open. P10 adds source/target/final-row identity, receipt-before-read accounting and exact/overlapping/unknown reuse across executions. Failed/interrupted attempts and actor snapshots remain attributable; history reads do not deserialize outcomes. Exact assessment exports and a resumed, keyboard-operated history panel are qualified locally. All evidence remains exploratory; confirmatory protocols and complete milestone qualification remain open. P11 pins package readiness/builds to verified execution/assessment evidence and scoring/export to immutable bundle IDs. Publication is staged and current-version checked; receipts bind manifest metadata, required native artifacts and original review evidence. Historical versions remain usable; UI exposes blocked states and keyboard-accessible package/score receipts. Full distributed durability, independent reproduction and release qualification remain open. P20 adds exact-package review discussion with attributable reviewer findings/dispositions and developer responses. Active project roles, exact retry receipts, optimistic revisions, concurrent publication, context/integrity freshness and retained historical events are qualified on both metadata engines. Browser keyboard handoff and exact package/discussion downloads pass. Finding closure never confers model or production approval; full independence rules, exceptions/approvals, clean-environment reproduction, full retention and comprehensive accessibility remain open. P21 adds input/runtime-bound full CSV scoring receipts, current-role exact downloads and installed offline native score-parity verification. Clean fixed runtimes without network or installation data reproduce 300-row XGBoost classification/regression exports across whole batches and chunk sizes 1/17/64; calibrated logistic replay and tamper/runtime/authority boundaries pass. Core modules and declared tolerances are recorded. Native serialized state requires explicit trust; full refit/assessment reproduction, independent approval and release qualification remain open. P25 adds synthetic private TLS scoring recovery qualification: exact quiescent metadata/input/package/full-result restore, natural orphan leases, actual duplicate completions, changed/missing-input and current-authority blocking, plus recovered-score exports. Native application behavior and budgets are unchanged; production interrupted-scoring/live-backup/machine-loss recovery and full reproduction/release gates remain open. P26 connects findings, responses and dispositions to successful native integrity/scoring receipts from the exact package, with separate review and execution actors and full result downloads. Independent refit/assessment reproduction and organizational approval remain open. P182 qualifies clean refit and protected assessment reproduction for native numeric XGBoost binary classification and regression. P183 qualifies scoped independent approval, exception disposition and invalidation for exact native protected assessments. Production authorization stays separate. On 26 November the named reviewer had technically approved both synthetic cases after independent replay. The scope owner accepted the two-case exercise, completing D09-T03.",
+      "closure_evidence": "All three D09 delivery tasks are done for the supported synthetic profile. D03 and D04 are still in progress. Their outcome owners must reconcile protected assessment custody and immutable run and scoring evidence for the supported profiles."
     },
     {
       "id": "D10",
@@ -2310,6 +2312,10 @@
     {
       "date": "2026-11-19",
       "change": "D12-T03 qualifies the representative keyboard and Orca journeys. Of the same 66 delivery tasks, done rises from 28 to 29 (42.4% to 43.9%), open falls from 31 to 30 (47.0% to 45.5%) and blocked stays at seven (10.6%). The named reviewer approved the D09 synthetic scope. Actual independent decisions and partner value measurements remain pending."
+    },
+    {
+      "date": "2026-11-26",
+      "change": "The independent reviewer recorded technical approvals for synthetic classification and regression. The scope owner accepted the exercise, completing D09-T03. Of 66 delivery tasks, done rose from 29 to 30 (43.9% to 45.5%), open held at 30 (45.5%) and blocked fell from seven to six (10.6% to 9.1%). D22-T02 still requires two partner workflows and comparable effort and defect measurements."
     }
   ],
   "implementation_packets": [
@@ -5553,7 +5559,7 @@
         "[Implementation PR #301](https://github.com/caglarsubas/auto_ml/pull/301)",
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/43861877702)"
       ],
-      "remaining": "D09-T02 independent approvals and invalidation can proceed. D09-T03 still requires a named independent reviewer and an approved exercise."
+      "remaining": "P183 qualified the independent approval and invalidation workflow. P190 records the subsequent named reviewer exercise for the two synthetic cases."
     },
     {
       "id": "P183",
@@ -5572,7 +5578,7 @@
         "[Independent main qualification](https://github.com/caglarsubas/auto_ml/actions/runs/44154649624)",
         "[Test-fixture corrective PR #304](https://github.com/caglarsubas/auto_ml/pull/304)"
       ],
-      "remaining": "D09-T03 still requires a named independent reviewer and an approved exercise."
+      "remaining": "P190 records the named reviewer’s technical approvals and the scope owner’s acceptance of the two synthetic cases. Production authorization has its own gate."
     },
     {
       "id": "P184",
@@ -5647,7 +5653,7 @@
       "evidence": [
         "[Sealed private deployment threat-model qualification](PRIVATE_THREAT_MODEL_QUALIFICATION.md)"
       ],
-      "remaining": "Customer configuration and operational acceptance, the named independent reproduction exercise, and governed expert application workflows retain their own acceptance criteria."
+      "remaining": "Customer-specific configuration, operational acceptance and governed expert application workflows retain their own acceptance criteria."
     },
     {
       "id": "P189",
@@ -5677,9 +5683,10 @@
       "status": "tested",
       "description": "Named focus targets, receipt state and recovery announcements, representative keyboard and Orca journeys and evidence-linked human handoff measurements.",
       "evidence": [
-        "[Observed developer-to-reviewer handoff and assistive qualification](REVIEW_HANDOFF_PLAN.md)"
+        "[Observed developer-to-reviewer handoff and assistive qualification](REVIEW_HANDOFF_PLAN.md)",
+        "[Synthetic exercise acceptance on 26 November 2026](REVIEW_HANDOFF_PLAN.md#synthetic-exercise-acceptance-on-26-november-2026)"
       ],
-      "remaining": "The independent owner must run and dispose the two approved synthetic cases. Two design partners must supply comparable value measurements."
+      "remaining": "The scope owner accepted both synthetic cases. D22-T02 still requires two design partners and comparable effort and defect measurements."
     }
   ],
   "release_qualification": {
@@ -5744,6 +5751,42 @@
         "status": "Partial",
         "finding": "The named reviewer signed in. The classification evidence was sealed and a protected exploratory assessment was recorded on 60 synthetic rows. The launcher stopped while displaying the saved assessment because the older record lacked chronology metadata. Independent replay and disposition were pending. The regression case had yet to begin.",
         "evidence": "[Classification checkpoint on 23 November 2026](REVIEW_HANDOFF_PLAN.md#classification-checkpoint-on-23-november-2026)",
+        "measures": {
+          "developer_minutes": null,
+          "reviewer_minutes": null,
+          "wait_minutes": null,
+          "review_iterations": null,
+          "help_requests": null,
+          "validation_defects": null
+        }
+      },
+      {
+        "id": "D09-classification-regression-02",
+        "case": "Classification replay and regression candidate review",
+        "team": "Independent review",
+        "scope": "Independent exercise",
+        "method": "Guided",
+        "status": "Partial",
+        "finding": "On 25–26 November the reviewer resumed classification, reproduced the model, assessment and ordered scores for 60 protected synthetic rows, and recorded technical approval. The reviewer accepted the regression candidate. The sign-in expired before the regression evidence was sealed.",
+        "evidence": "[Synthetic exercise acceptance on 26 November 2026](REVIEW_HANDOFF_PLAN.md#synthetic-exercise-acceptance-on-26-november-2026)",
+        "measures": {
+          "developer_minutes": null,
+          "reviewer_minutes": null,
+          "wait_minutes": null,
+          "review_iterations": null,
+          "help_requests": null,
+          "validation_defects": null
+        }
+      },
+      {
+        "id": "D09-regression-owner-03",
+        "case": "Regression replay and two-case owner decision",
+        "team": "Independent review",
+        "scope": "Independent exercise",
+        "method": "Guided",
+        "status": "Completed",
+        "finding": "On 26 November the reviewer signed in again, sealed the regression case, reproduced its model, assessment and ordered scores for 60 protected synthetic rows, and recorded technical approval. With both case approvals recorded, the scope owner accepted the two-case synthetic exercise.",
+        "evidence": "[Synthetic exercise acceptance on 26 November 2026](REVIEW_HANDOFF_PLAN.md#synthetic-exercise-acceptance-on-26-november-2026)",
         "measures": {
           "developer_minutes": null,
           "reviewer_minutes": null,
@@ -5861,8 +5904,8 @@
   ],
   "progress_baseline": {
     "schema": "roadmap_progress_baseline_v1",
-    "packet": "P189",
-    "source_commit": "4caf6ba22537e0edce75be150c2be222f1f6c778",
+    "packet": "P190",
+    "source_commit": "43276b9ef2a070a5e6ad6e79f2135893cea74039",
     "outcomes": {
       "total": 26,
       "counts": {
@@ -5872,9 +5915,9 @@
       }
     },
     "packets": {
-      "total": 189,
+      "total": 190,
       "counts": {
-        "done": 188,
+        "done": 189,
         "open": 0,
         "blocked": 1
       }
@@ -6747,7 +6790,7 @@
         ],
         "priority": "P1",
         "owner": "Backend/Review UX",
-        "phase": "queued",
+        "phase": "done",
         "dependencies": [
           "D09-T01",
           "D09-T02"
@@ -6756,19 +6799,15 @@
           "A named reviewer records reproduction findings and dispositions.",
           "Unverified or exceptional evidence remains explicit."
         ],
-        "blockers": [
-          {
-            "kind": "external_input",
-            "reason": "The named reviewer signed in for the approved exercise. The classification session paused at the saved protected assessment before independent replay or disposition. The regression case and the scope owner's decision are pending.",
-            "owner": "Independent review owner",
-            "resolution": "Resume the saved classification assessment with the missing chronology disclosed. The reviewer decides whether to authorize replay and records the disposition for each case. The scope owner then records the exercise decision against both case records."
-          }
-        ],
+        "blockers": [],
         "evidence": [
+          "[Synthetic exercise acceptance on 26 November 2026](REVIEW_HANDOFF_PLAN.md#synthetic-exercise-acceptance-on-26-november-2026)",
           "[Observed handoff plan and measures](REVIEW_HANDOFF_PLAN.md)",
           "[Automated two-case terminal UX regression](../scripts/tests/test_reviewer_terminal_journey.py)"
         ],
-        "packet_refs": [],
+        "packet_refs": [
+          "P190"
+        ],
         "order": 29,
         "basis": "Remaining acceptance scope from D09; existing tested foundation is reused, not rebuilt."
       },
@@ -7753,16 +7792,16 @@
     ],
     "baseline": {
       "schema": "roadmap_backlog_baseline_v1",
-      "label": "Before P190 accessible developer-to-reviewer handoff qualification",
-      "recorded_on": "2026-11-19",
-      "inventory_source_commit": "4caf6ba22537e0edce75be150c2be222f1f6c778",
+      "label": "Before D09-T03 synthetic exercise acceptance",
+      "recorded_on": "2026-11-26",
+      "inventory_source_commit": "43276b9ef2a070a5e6ad6e79f2135893cea74039",
       "total": 66,
       "counts": {
-        "ready": 3,
+        "ready": 2,
         "in_progress": 0,
         "waiting": 28,
         "blocked": 7,
-        "done": 28
+        "done": 29
       }
     },
     "baseline_history": [
@@ -8142,6 +8181,20 @@
           "waiting": 29,
           "blocked": 7,
           "done": 27
+        }
+      },
+      {
+        "schema": "roadmap_backlog_baseline_v1",
+        "label": "Before P190 accessible developer-to-reviewer handoff qualification",
+        "recorded_on": "2026-11-19",
+        "inventory_source_commit": "4caf6ba22537e0edce75be150c2be222f1f6c778",
+        "total": 66,
+        "counts": {
+          "ready": 3,
+          "in_progress": 0,
+          "waiting": 28,
+          "blocked": 7,
+          "done": 28
         }
       }
     ]
